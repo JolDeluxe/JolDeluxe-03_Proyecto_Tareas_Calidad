@@ -1,0 +1,49 @@
+services:
+  # --- Servicio de Base de Datos (MySQL) ---
+  db:
+    image: mysql:8.0
+    container_name: mi_app_db
+    restart: unless-stopped
+    environment:
+      # Lee las variables desde el archivo .env raíz
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      # <-- CORRECCIÓN: Puerto 3307 para no chocar con tu MySQL local
+      - "3307:3306"
+    volumes:
+      # Persistencia de datos de MySQL
+      - mysql_data:/var/lib/mysql
+
+  # --- Servicio de Backend (Node.js/Express) ---
+  backend:
+    build: ./backend
+    container_name: mi_app_backend
+    restart: unless-stopped
+    ports:
+      # <-- CORRECCIÓN: El 8080 de tu PC se conecta al 3000 del contenedor
+      - "8080:3000"
+    environment:
+      # Lee las variables desde el archivo .env raíz
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES: ${JWT_EXPIRES}
+    depends_on:
+      - db # Le dice a Docker que inicie 'db' primero
+
+  # --- Servicio de Frontend (React/Nginx) ---
+  frontend:
+    build: ./frontend
+    container_name: mi_app_frontend
+    restart: unless-stopped
+    ports:
+      # El puerto 80 de tu PC (http) se conecta al 80 de Nginx
+      - "80:80"
+    depends_on:
+      - backend # Buena práctica, espera al backend
+
+# Define el volumen nombrado para persistir los datos
+volumes:
+  mysql_data:

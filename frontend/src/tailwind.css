@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* Aquí defines tus fuentes y colores personalizados */
+@theme {
+  --font-work: "Work Sans", sans-serif;
+  --font-saira: "Saira Extra Condensed", sans-serif;
+
+  --color-negro: #171616;
+  --color-brand: #92400e;
+}
+
+/* Y tus estilos personalizados adicionales */
+.subrayado {
+  position: relative;
+  overflow: hidden;
+}
+.subrayado::before {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 1px;
+  background-color: var(--color-negro);
+  transition: width 0.5s;
+}
+.subrayado:hover::before {
+  width: 100%;
+}
+
+body,
+html {
+  /* Esto evita el menú de copiar/pegar en iOS */
+  -webkit-touch-callout: none;
+
+  /* Esto (que ya hace Tailwind con select-none) evita la selección de texto */
+  -webkit-user-select: none;
+  user-select: none;
+}

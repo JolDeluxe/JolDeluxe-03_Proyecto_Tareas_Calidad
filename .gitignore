@@ -1,0 +1,16 @@
+# 📦 Dependencias (Node)
+/node_modules
+
+# 🔑 Variables de Entorno y Secretos
+.env
+
+# ⚙️ Archivos Generados (Backend - Prisma/TypeScript)
+/generated/prisma  # De tu listado
+/dist              # Donde TypeScript compila el JS (si usas un script 'build')
+*.tsbuildinfo      # Archivos de caché de TypeScript
+*.js.map           # Archivos de mapa de origen (Source Maps)
+
+# 🛠️ Archivos Generados (Frontend - Vite/Builds)
+/dist-front          # O el nombre de la carpeta de build de tu frontend
+.vite
+.cache
