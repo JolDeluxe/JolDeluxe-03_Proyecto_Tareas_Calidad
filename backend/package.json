@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/server.ts",
+    "build": "tsc",
     "test": "echo \"No hay tests configurados aún\" && exit 0"
   },
   "keywords": [],

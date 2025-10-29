@@ -1,0 +1,29 @@
+{
+  "name": "03_proyecto_tareas_calidad",
+  "version": "1.0.0",
+  "description": "Configuración de scripts para build y despliegue unificado con Cloudflare Tunnel.",
+  "main": "index.js",
+  "scripts": {
+    "build:frontend": "npm run build --prefix frontend",
+    "build:backend": "npm run build --prefix backend",
+    "build:all": "npm run build:frontend && npm run build:backend",
+    "start:prod": "npm run build:all && node backend/dist/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JolDeluxe/JolDeluxe-03_Proyecto_Tareas_Calidad.git"
+  },
+  "keywords": [
+    "react",
+    "express",
+    "prisma",
+    "cloudflare-tunnel"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JolDeluxe/JolDeluxe-03_Proyecto_Tareas_Calidad/issues"
+  },
+  "homepage": "https://github.com/JolDeluxe/JolDeluxe-03_Proyecto_Tareas_Calidad#readme"
+}
