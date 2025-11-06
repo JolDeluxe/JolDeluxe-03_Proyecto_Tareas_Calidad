@@ -1,4 +1,4 @@
-// src/components/PrivateRoute.tsx
+// 📍 src/components/PrivateRoute.tsx (CORREGIDO)
 import React from "react";
 import { Navigate } from "react-router-dom";
 
@@ -11,8 +11,8 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
   const token = localStorage.getItem("token");
 
   if (!token) {
-    // 🚫 Si no hay token, redirige al login (ruta raíz)
-    return <Navigate to="/" replace />;
+    // 🚫 Si no hay token, redirige a la página de login
+    return <Navigate to="/login" replace />; // 👈 CORRECCIÓN (antes era "/")
   }
 
   // ✅ Si hay token, muestra el contenido protegido

@@ -2,7 +2,12 @@ import React, { useState } from "react";
 import { api } from "../data/api"; // 👈 Asegúrate que la ruta sea correcta
 import { toast } from "react-toastify";
 // 👇 Asegúrate que la ruta a tus tipos sea correcta
-import type { Tarea, HistorialFecha, Urgencia } from "../../types/tarea";
+import type {
+  Tarea,
+  HistorialFecha,
+  Urgencia,
+  ImagenTarea,
+} from "../../types/tarea";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -65,6 +70,14 @@ const MOTIVOS_CAMBIO_FECHA = [
   "Otro", // Opción genérica
 ];
 
+const getBaseURL = () => {
+  if (import.meta.env.MODE === "development") {
+    return "http://localhost:3000";
+  }
+  return "";
+};
+const API_BASE_URL = getBaseURL();
+
 // --- Componente ModalEditar ---
 const ModalEditar: React.FC<ModalEditarProps> = ({
   onClose,
@@ -93,6 +106,14 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
 
   const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
 
+  const [imagenesExistentes, setImagenesExistentes] = useState<ImagenTarea[]>(
+    tarea.imagenes || []
+  );
+  const [archivosNuevos, setArchivosNuevos] = useState<File[]>([]);
+
+  const [idsParaBorrar, setIdsParaBorrar] = useState<number[]>([]);
+  const [loadingDelete, setLoadingDelete] = useState<number | null>(null);
+
   // 1. Convierte tu string 'DD-MM-YYYY' (estado) a un Date (para el picker)
   const getSelectedDate = () => {
     if (!fechaInput) return null;
@@ -107,6 +128,29 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   const handleDateChange = (date: Date | null) => {
     // Reutiliza tu propia función 'formatDateToInput' que ya tienes
     setFechaInput(formatDateToInput(date));
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const nuevos = Array.from(e.target.files);
+      setArchivosNuevos((prev) => [...prev, ...nuevos]);
+      e.target.value = ""; // Limpia el input
+    }
+  };
+
+  const handleRemoveNuevoArchivo = (indexToRemove: number) => {
+    setArchivosNuevos((prev) =>
+      prev.filter((_, index) => index !== indexToRemove)
+    );
+  };
+
+  const handleDeleteImagenExistente = (
+    imagenABorrar: ImagenTarea,
+    index: number
+  ) => {
+    setIdsParaBorrar((prevIds) => [...prevIds, imagenABorrar.id]);
+
+    setImagenesExistentes((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -125,8 +169,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       setLoading(false);
       return;
     }
-
-    // Convierte YYYY-MM-DD a objeto Date (UTC 00:00:00)
     const nuevaFechaLimiteObj = fechaInput
       ? new Date(`${fechaInput}T00:00:00.000Z`)
       : null;
@@ -135,11 +177,7 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       setLoading(false);
       return;
     }
-
-    // Compara directamente los strings 'YYYY-MM-DD'
     const fechaCambiada = fechaInput !== fechaOriginalFormateada;
-
-    // Requiere motivo si la fecha cambió
     if (fechaCambiada && !motivoCambio.trim()) {
       toast.warning("⚠️ Debes indicar el motivo del cambio de fecha.");
       setLoading(false);
@@ -187,14 +225,31 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         console.error("Error decodificando token para obtener usuario:", error);
       }
 
-      console.log(`📨 Enviando actualización para tarea ${tarea.id}:`, payload);
+      // 🔽 --- LÓGICA DE GUARDADO ACTUALIZADA --- 🔽
 
-      // 1️⃣ Actualiza la tarea (PUT)
+      // 1️⃣ (NUEVO) Borrar las imágenes marcadas
+      if (idsParaBorrar.length > 0) {
+        console.log(`Borrando ${idsParaBorrar.length} imágenes...`);
+        setLoadingDelete(1); // Activa el estado 'Borrando...' en el botón
+
+        const promesasDeBorrado = idsParaBorrar.map((id) =>
+          api.delete(`/tareas/imagen/${id}`)
+        );
+
+        // Esperamos a que TODAS se completen
+        await Promise.all(promesasDeBorrado);
+
+        console.log("Imágenes borradas.");
+        setLoadingDelete(null); // Desactiva 'Borrando...'
+      }
+
+      // 2️⃣ Actualiza la tarea (PUT)
+      console.log(`📨 Enviando actualización para tarea ${tarea.id}:`, payload);
       await api.put(`/tareas/${tarea.id}`, payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // 2️⃣ Si cambió la fecha, registra el historial (POST)
+      // 3️⃣ Si cambió la fecha, registra el historial (POST)
       if (fechaCambiada) {
         const historialPayload = {
           fechaAnterior: tarea.fechaLimite,
@@ -213,6 +268,19 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         });
       }
 
+      // 4️⃣ Si hay archivos nuevos, los subimos
+      if (archivosNuevos.length > 0) {
+        console.log(`Subiendo ${archivosNuevos.length} imágenes nuevas...`);
+        const formData = new FormData();
+        archivosNuevos.forEach((file) => {
+          formData.append("imagenes", file);
+        });
+
+        // El ID de la TAREA se usa para el upload
+        await api.post(`/tareas/${tarea.id}/upload`, formData);
+      }
+      // --- Fin del bloque añadido ---
+
       toast.success("Tarea actualizada correctamente.");
 
       // Forzar la recarga de la tabla
@@ -223,11 +291,30 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         "❌ Error al actualizar tarea:",
         error.response?.data || error.message
       );
-      const mensajeError =
-        error.response?.data?.error || "No se pudo actualizar la tarea.";
-      toast.error(`❌ ${mensajeError}`);
+
+      // Manejo de errores mejorado
+      const isUploadError = error.config?.url.includes("/upload");
+      const isDeleteError = error.config?.method === "delete";
+
+      if (isUploadError) {
+        toast.error(`❌ Datos guardados, pero falló la subida de imágenes.`);
+        // Igualmente refrescamos porque los datos de texto sí se guardaron
+        onTareaAgregada();
+        onClose();
+      } else if (isDeleteError) {
+        toast.error(
+          `❌ Falló al borrar las imágenes antiguas. Intente de nuevo.`
+        );
+        // No cerramos, para que el usuario vea qué falló
+      } else {
+        // Error principal (al guardar datos de la tarea o historial)
+        const mensajeError =
+          error.response?.data?.error || "No se pudo guardar la tarea.";
+        toast.error(`❌ ${mensajeError}`);
+      }
     } finally {
       setLoading(false);
+      setLoadingDelete(null); // Siempre resetea el estado de borrado
     }
   };
 
@@ -442,6 +529,163 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                 )}
               </div>
 
+              {/* 🔽 6. SECCIÓN DE EVIDENCIA (NUEVA) */}
+              <div className="border-t border-b border-gray-200 py-4">
+                <label className="block text-sm font-semibold mb-2">
+                  Evidencia
+                </label>
+
+                {/* --- Lista de Imágenes Existentes --- */}
+                {imagenesExistentes.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-gray-600 mb-2">
+                      Imágenes actuales:
+                    </p>
+                    <ul className="space-y-2">
+                      {imagenesExistentes.map((img, index) => (
+                        <li
+                          key={img.id}
+                          className="flex items-center justify-between 
+                         bg-gray-100 p-2 rounded-md"
+                        >
+                          <img
+                            src={`${API_BASE_URL}/${img.url}`}
+                            alt={`Evidencia ${index + 1}`}
+                            className="w-10 h-10 object-cover rounded-md"
+                          />
+                          <span className="flex-1 text-sm text-gray-700 mx-3 truncate">
+                            {img.url.split("/").pop()}
+                          </span>
+
+                          {/* ESTE BOTÓN AHORA USA LA LÓGICA DE "MARCAR PARA BORRAR" */}
+                          <button
+                            type="button"
+                            onClick={
+                              () => handleDeleteImagenExistente(img, index) // 👈 Llama a la función actualizada
+                            }
+                            disabled={loading} // 👈 Deshabilitado solo si el modal entero está guardando
+                            className="flex-shrink-0 p-1 text-red-600 
+                           hover:bg-red-100 rounded-full
+                           disabled:opacity-50"
+                            aria-label="Marcar para eliminar"
+                          >
+                            {/* Ya no necesita el spinner individual, 
+                    el botón "Guardar" mostrará "Borrando..." */}
+                            <svg // Icono de basura
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                              className="w-5 h-5"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* --- Sección para Añadir Nuevas Imágenes --- */}
+                <div>
+                  <label
+                    htmlFor="file-upload-edit"
+                    onClick={(e) => {
+                      if (loading || loadingDelete) e.preventDefault(); // 👈 Bloquea si está guardando o borrando
+                    }}
+                    className={`w-full flex items-center justify-center gap-2 
+                   bg-amber-100 text-amber-900 font-semibold 
+                   px-4 py-2 rounded-md transition-all duration-200
+                   ${
+                     loading || loadingDelete
+                       ? "opacity-50 cursor-not-allowed"
+                       : "cursor-pointer hover:bg-amber-200"
+                   }`}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      className="w-5 h-5"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10.5 3.5a.5.5 0 00-1 0V9H4a.5.5 0 000 1h5.5v5.5a.5.5 0 001 0V10H16a.5.5 0 000-1h-5.5V3.5z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <span>Agregar Nuevas Imágenes</span>
+                  </label>
+                  <input
+                    id="file-upload-edit"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    capture="environment"
+                    disabled={loading} // 👈 Bloquea si está guardando o borrando
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </div>
+
+                {/* --- Lista de Nuevas Imágenes (para subir) --- */}
+                {archivosNuevos.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs font-medium text-gray-600 mb-2">
+                      Nuevas para subir:
+                    </p>
+                    <ul className="space-y-2 max-h-32 overflow-y-auto pr-2">
+                      {archivosNuevos.map((file, index) => (
+                        <li
+                          key={index}
+                          className="flex items-center justify-between 
+                         bg-gray-100 p-2 rounded-md"
+                        >
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={file.name}
+                            className="w-10 h-10 object-cover rounded-md"
+                            onLoad={(e) =>
+                              URL.revokeObjectURL(e.currentTarget.src)
+                            }
+                          />
+                          <span className="flex-1 text-sm text-gray-700 mx-3 truncate">
+                            {file.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveNuevoArchivo(index)}
+                            disabled={loading}
+                            className="flex-shrink-0 p-1 text-red-600 
+                           hover:bg-red-100 rounded-full
+                           disabled:opacity-50"
+                            aria-label="Quitar archivo"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                              className="w-5 h-5"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              {/* --- FIN SECCIÓN EVIDENCIA --- */}
+
               {/* Responsable */}
               <div className="mb-3">
                 {" "}
@@ -555,14 +799,11 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                       dateFormat="dd/MM/yyyy"
                       required
                       disabled={loading}
-                      // 👇 IMPLEMENTACIÓN CLAVE: Bloquea la selección de fechas pasadas
                       minDate={new Date()}
+                      readOnly // Previene que se abra el teclado
+                      onFocus={(e) => e.target.blur()} // Previene el foco en el input
                       className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
-                  ${
-                    submitted && !getSelectedDate()
-                      ? "border-red-500"
-                      : "border-gray-300"
-                  }`}
+${submitted && !getSelectedDate() ? "border-red-500" : "border-gray-300"}`}
                       withPortal
                       showYearDropdown
                       showMonthDropdown
@@ -633,12 +874,18 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading} // 🔽 7. DESHABILITA SI ESTÁ SUBIENDO O BORRANDO
               className={` ${
-                loading ? "opacity-70 cursor-not-allowed" : "hover:bg-blue-700"
+                loading || loadingDelete
+                  ? "opacity-70 cursor-not-allowed"
+                  : "hover:bg-blue-700"
               } bg-blue-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
             >
-              {loading ? "Guardando..." : "Guardar cambios"}
+              {loading
+                ? "Guardando..."
+                : loadingDelete
+                ? "Borrando..."
+                : "Guardar cambios"}
             </button>
           </div>
         </form>

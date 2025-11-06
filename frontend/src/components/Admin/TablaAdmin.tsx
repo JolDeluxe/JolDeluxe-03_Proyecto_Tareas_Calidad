@@ -1,7 +1,12 @@
-import React, { useState } from "react"; // 👈 Se quitó useEffect
+import React, { useState } from "react";
 import { api } from "../data/api";
-// 💡 1. Importa tus tipos reales y componentes necesarios
-import type { Tarea, HistorialFecha, Estatus } from "../../types/tarea";
+import type {
+  Tarea,
+  HistorialFecha,
+  Estatus,
+  ImagenTarea,
+} from "../../types/tarea";
+import ModalGaleria from "../Principal/ModalGaleria"; // Reutilizamos el modal
 import Acciones from "./Acciones";
 import ModalEditar from "./ModalEditar";
 import ModalEliminar from "./ModalEliminar";
@@ -99,6 +104,10 @@ const TablaAdmin: React.FC<TablaProps> = ({
   );
 
   const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
+
+  const [modalImagenes, setModalImagenes] = useState<ImagenTarea[] | null>(
+    null
+  );
 
   // ❌ PASO 2.4: QUITAR TODO EL useEffect DE fetchTareas
   // useEffect(() => {
@@ -724,6 +733,27 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     )}
                   </div>
 
+                  {/* 🔽 3. BOTÓN DE IMAGEN (Móvil) */}
+                  {row.imagenes && row.imagenes.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <button
+                        onClick={() => setModalImagenes(row.imagenes)}
+                        className="inline-flex items-center gap-1.5 text-xs
+                                   font-semibold text-blue-600 hover:text-blue-800"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 -960 960 960"
+                          fill="currentColor"
+                          className="w-4 h-4"
+                        >
+                          <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm40-80h480L570-480 450-320l-90-120-120 160Zm-40 80v-560 560Z" />
+                        </svg>
+                        Ver Imágenes ({row.imagenes.length})
+                      </button>
+                    </div>
+                  )}
+
                   {/* ⚙️ Acciones */}
                   <div className="flex justify-around items-center mt-4 pt-2 border-t border-gray-200 h-[46px]">
                     {row.estatus === "PENDIENTE" && (
@@ -850,6 +880,12 @@ const TablaAdmin: React.FC<TablaProps> = ({
               onClose={() => setOpenModalAceptar(false)}
               onConfirm={confirmarFinalizacion}
               tareaNombre={tareaSeleccionada.tarea}
+            />
+          )}
+          {modalImagenes && (
+            <ModalGaleria
+              imagenes={modalImagenes}
+              onClose={() => setModalImagenes(null)}
             />
           )}
         </>

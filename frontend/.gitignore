@@ -28,3 +28,5 @@ dist
 .vite
 .cache
 .env
+# Archivos de usuario
+/uploads/

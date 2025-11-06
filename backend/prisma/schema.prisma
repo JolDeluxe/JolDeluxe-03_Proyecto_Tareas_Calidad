@@ -7,6 +7,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// --- ENUMS ---
 enum Estatus {
   PENDIENTE
   CONCLUIDA
@@ -20,42 +21,119 @@ enum Urgencia {
 }
 
 enum Rol {
+  SUPER_ADMIN
   ADMIN
+  ENCARGADO
   USUARIO
+  INVITADO
 }
 
-model Tarea {
-  id              Int              @id @default(autoincrement())
-  tarea           String
-  asignador       String
-  responsable     String
-  fechaRegistro   DateTime
-  fechaLimite     DateTime           
-  fechaConclusion DateTime?          
-  estatus         Estatus
-  urgencia        Urgencia
-  observaciones   String?
-  historialFechas HistorialFecha[]  
+enum Tipo {
+  ADMINISTRATIVO
+  OPERATIVO
 }
 
-model HistorialFecha {
-  id            Int       @id @default(autoincrement())
-  fechaAnterior DateTime
-  nuevaFecha    DateTime
-  modificadoPor String
-  motivo        String?
-  fechaCambio   DateTime   @default(now())
+enum EstatusUsuario {
+  ACTIVO
+  INACTIVO
+}
 
-  tareaId       Int
-  tarea         Tarea      @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  endpoint  String   @unique 
+  p256dh    String
+  auth      String
+
+  usuarioId Int
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+}
+
+
+// --- MODELOS DE DATOS ---
+
+model Departamento {
+  id     Int    @id @default(autoincrement())
+  tipo   Tipo
+  nombre String @unique
+  fechaCreacion DateTime @default(now())
+  fechaEdicion  DateTime @default(now())
+
+  usuarios Usuario[]
+  tareas   Tarea[]
 }
 
 model Usuario {
-  id           Int      @id @default(autoincrement())
-  nombre       String
-  username     String   @unique
-  password     String
-  rol          Rol      @default(USUARIO)
+  id            Int      @id @default(autoincrement())
+  nombre        String
+  username      String   @unique
+  password      String
+  rol           Rol      @default(USUARIO)
+  estatus       EstatusUsuario @default(ACTIVO)
   fechaCreacion DateTime @default(now())
+  fechaEdicion  DateTime @default(now())
+
+  departamentoId Int?
+  departamento   Departamento? @relation(fields: [departamentoId], references: [id], onDelete: Restrict)
+
+  // Relaciones
+  tareasAsignadas          Tarea[]               @relation("Asignador")
+  tareasDondeEsResponsable ResponsablesEnTarea[]
+  historialModificado      HistorialFecha[]
+  suscripciones            PushSubscription[]
 }
 
+model Tarea {
+  id              Int       @id @default(autoincrement())
+  tarea           String
+  fechaRegistro   DateTime
+  fechaLimite     DateTime
+  fechaConclusion DateTime?
+  estatus         Estatus
+  urgencia        Urgencia
+  observaciones   String?
+
+  departamentoId Int
+  departamento   Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
+
+  asignadorId   Int
+  asignador     Usuario   @relation("Asignador", fields: [asignadorId], references: [id], onDelete: Restrict)
+  
+  responsables    ResponsablesEnTarea[]  
+  historialFechas HistorialFecha[]
+  imagenes        ImagenTarea[]
+}
+
+// --- TABLA PIVOTE ---
+model ResponsablesEnTarea {
+  usuarioId Int
+  tareaId   Int
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tarea   Tarea   @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, tareaId])
+}
+
+// --- MODELOS DE SOPORTE  ---
+
+model ImagenTarea {
+  id          Int      @id @default(autoincrement())
+  url         String
+  fechaSubida DateTime @default(now())
+  tareaId Int
+  tarea   Tarea @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+}
+
+model HistorialFecha {
+  id              Int       @id @default(autoincrement())
+  fechaAnterior   DateTime
+  nuevaFecha      DateTime
+  motivo          String?
+  fechaCambio     DateTime  @default(now())
+  modificadoPorId Int
+  modificadoPor   Usuario   @relation(fields: [modificadoPorId], references: [id], onDelete: Cascade)
+  tareaId         Int
+  tarea           Tarea     @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+}

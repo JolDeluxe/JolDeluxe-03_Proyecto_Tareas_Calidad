@@ -4,6 +4,8 @@ import path from "path"; // 👈 Importante para las rutas de archivos
 import { fileURLToPath } from "url"; // 👈 Importante para el fix de __dirname
 import tareasRouter from "./routes/tareas.js";
 import authRouter from "./routes/auth.js";
+import usuariosRouter from "./routes/usuarios.js";
+import departamentosRouter from "./routes/departamentos.js";
 
 // ----------------------------------------------------
 // 💡 CORRECCIÓN ESM: Definir __dirname en el ámbito de ES Modules
@@ -68,6 +70,12 @@ app.use((req, res, next) => {
 // 🔹 Middleware para JSON
 app.use(express.json());
 
+// 🔽 =================== LÍNEA AÑADIDA =================== 🔽
+// 🔹 Servir la carpeta de 'uploads' estáticamente
+// Esto permite que /uploads/imagen.png sea accesible desde el frontend
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// 🔼 ======================================================== 🔼
+
 // ----------------------------------------------------------------------
 // 🚀 BLOQUE CLAVE: UNIFICACIÓN DE PRODUCCIÓN (Sirve el Frontend)
 // ----------------------------------------------------------------------
@@ -114,6 +122,8 @@ app.get("/api/auth/test", (req, res) => {
 // 🔹 Rutas principales
 app.use("/api/auth", authRouter);
 app.use("/api/tareas", tareasRouter);
+app.use("/api/usuarios", usuariosRouter);
+app.use("/api/departamentos", departamentosRouter);
 
 // 🔹 Manejo de errores global
 app.use((err: any, req: any, res: any, next: any) => {
@@ -127,9 +137,9 @@ app.use((err: any, req: any, res: any, next: any) => {
 // 🔹 Levantar servidor en todas las interfaces de red
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🎯 Servidor de PRODUCCIÓN corriendo en:`);
-  console.log(`   → http://localhost:${PORT}`);
-  console.log(`   → http://127.0.0.1:${PORT}`);
-  console.log(`   → http://200.1.0.72:${PORT}`);
-  console.log(`   → Y accesible desde cualquier IP de la red`);
+  console.log(`    → http://localhost:${PORT}`);
+  console.log(`    → http://127.0.0.1:${PORT}`);
+  console.log(`    → http://200.1.0.72:${PORT}`);
+  console.log(`    → Y accesible desde cualquier IP de la red`);
   console.log(`📊 Base de datos: Producción - Servidor`);
 });

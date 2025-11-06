@@ -1,13 +1,14 @@
+// 📍 src/components/Login.tsx (NUEVO ARCHIVO)
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "./data/api";
+import { authService } from "../api/auth.service";
 import { toast } from "react-toastify";
 
 interface LoginProps {
-  onClose?: () => void;
+  onShowRegister: () => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onClose }) => {
+const Login: React.FC<LoginProps> = ({ onShowRegister }) => {
   const navigate = useNavigate();
   const [form, setForm] = useState({ username: "", password: "" });
   const [loading, setLoading] = useState(false);
@@ -15,30 +16,18 @@ const Login: React.FC<LoginProps> = ({ onClose }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      const res = await api.post("/auth/login", form);
-      const { token, usuario } = res.data;
+      const { token, usuario } = await authService.login(form);
 
-      // 🔐 Guarda sesión
       localStorage.setItem("token", token);
       localStorage.setItem("usuario", JSON.stringify(usuario));
-
-      // 🧠 Actualiza el Header sin recargar
       window.dispatchEvent(new Event("storage"));
 
-      // 🪟 Cierra el modal **de inmediato**
-      if (onClose) onClose();
-
-      // ✅ Toast de éxito (fuera del modal)
       toast.success(`Bienvenido ${usuario.nombre}`, {
         autoClose: 2000,
       });
 
-      // 🔄 Luego redirige suavemente al panel
-      setTimeout(() => {
-        navigate("/admin");
-      }, 1000);
+      navigate("/");
     } catch (error: any) {
       console.error(error.response?.data || error.message);
       toast.error("Usuario o contraseña incorrectos", {
@@ -50,7 +39,7 @@ const Login: React.FC<LoginProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="p-6 text-gray-800">
+    <>
       <div className="flex justify-center mb-4">
         <img
           src="/img/01_Cuadra.webp"
@@ -59,7 +48,7 @@ const Login: React.FC<LoginProps> = ({ onClose }) => {
         />
       </div>
 
-      <h2 className="text-xl font-bold mb-4 text-center text-amber-950">
+      <h2 className="text-xl font-bold mb-5 text-center text-amber-950">
         Iniciar Sesión
       </h2>
 
@@ -96,7 +85,17 @@ const Login: React.FC<LoginProps> = ({ onClose }) => {
           {loading ? "Conectando..." : "Entrar"}
         </button>
       </form>
-    </div>
+
+      <div className="text-center mt-6">
+        <button
+          type="button"
+          onClick={onShowRegister}
+          className="text-sm font-medium text-amber-950 hover:text-amber-800 hover:underline focus:outline-none"
+        >
+          ¿No tienes una cuenta? Solicítala aquí
+        </button>
+      </div>
+    </>
   );
 };
 

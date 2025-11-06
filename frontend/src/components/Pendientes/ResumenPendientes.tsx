@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from "react";
-import { api } from "../data/api"; // 👈 Asegúrate que esta ruta sea correcta
+// src/components/Pendientes/ResumenPendientes.tsx
 
-// 🔹 Puntero redondo como SVG (toma el color de currentColor)
+import React, { useState, useEffect } from "react";
+// 1. Importa tu NUEVO servicio
+import { tareasService } from "../../api/tareas.service";
+// 2. Importa el tipo (ajusta la ruta si es necesario)
+import type { Tarea } from "../../types/tarea";
+
+// ... (El componente Dot SVG se queda igual) ...
 const Dot: React.FC<{ className?: string; title?: string }> = ({
   className = "",
   title,
@@ -20,28 +25,26 @@ const ResumenPendientes: React.FC = () => {
   const [totalPendientes, setTotalPendientes] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // 🔹 FUNCIÓN CENTRAL DE CARGA DE DATOS
-  // 💡 Mantenemos la función separada para llamarla en el intervalo
+  // 🔹 FUNCIÓN CENTRAL DE CARGA DE DATOS (MODIFICADA)
   const fetchPendientes = async () => {
     try {
-      // ❌ No usamos setLoading(true) aquí para evitar parpadeo en cada intervalo.
-      const res = await api.get("/tareas");
+      // 3. Llama al método del servicio
+      const todasLasTareas = await tareasService.getAll();
 
-      // Filtra por estatus exactamente "PENDIENTE"
-      const pendientes = res.data.filter(
-        (t: any) => t.estatus?.toUpperCase() === "PENDIENTE"
+      // 4. Filtra por estatus "PENDIENTE"
+      // (Usamos el tipo Tarea, por lo que comparamos directamente)
+      const pendientes = todasLasTareas.filter(
+        (t: Tarea) => t.estatus === "PENDIENTE"
       );
 
       setTotalPendientes(pendientes.length);
     } catch (error) {
       console.error("Error al cargar tareas pendientes:", error);
     }
-    // ❌ No usamos finally aquí para no interferir con el loading inicial.
   };
 
-  // 🔄 POLLING: Cargar tareas inicialmente y luego cada 30 segundos
+  // 🔄 POLLING: (Sin cambios)
   useEffect(() => {
-    // 1. Carga inicial (con indicador de carga)
     const initialFetch = async () => {
       setLoading(true);
       await fetchPendientes();
@@ -50,20 +53,18 @@ const ResumenPendientes: React.FC = () => {
 
     initialFetch();
 
-    // 2. Configurar el intervalo de recarga (Polling)
     const intervalId = setInterval(() => {
       console.log("🔄 Recargando resumen de pendientes automáticamente...");
       fetchPendientes();
-    }, 30000); // 30000 ms = 30 segundos
+    }, 30000);
 
-    // 3. Limpieza: Detener el intervalo cuando el componente se desmonte
     return () => clearInterval(intervalId);
-  }, []); // El array vacío asegura que solo se configure una vez
+  }, []);
 
   return (
     <>
       {/* 💻 VERSIÓN ESCRITORIO */}
-      <div className="hidden sm:grid grid-cols-4 gap-4 mb-2">
+      <div className="hidden lg:grid grid-cols-4 gap-4 mb-2">
         <div className="col-span-4 flex justify-center">
           <div className="bg-blue-100 border border-blue-400 rounded-lg p-2 text-center shadow-sm w-full max-w-md">
             <div className="text-md font-semibold text-blue-800">
@@ -76,15 +77,39 @@ const ResumenPendientes: React.FC = () => {
         </div>
       </div>
 
-      {/* 📱 VERSIÓN MÓVIL */}
-      <div className="sm:hidden flex flex-wrap justify-center text-xs font-semibold text-gray-700 mb-4 px-2 text-center leading-relaxed">
-        <span className="mx-2 whitespace-nowrap text-amber-900">
-          <Dot className="text-amber-900" title="Pendientes" />
-          Pendientes:{" "}
-          <span className="font-bold text-amber-900">
+      {/* 📱 VERSIÓN MÓVIL (Con el estilo de botón) */}
+      <div className="lg:hidden flex justify-center mb-4 px-3">
+        <div
+          className={`
+          flex justify-between items-center 
+          w-60
+          md:w-80
+          max-w-xs px-4 py-2 rounded-full border border-blue-300 
+          shadow-sm bg-blue-100 text-blue-700
+        `}
+        >
+          {/* 🔹 Texto a la izquierda (con tu componente Dot) */}
+          <span
+            className="
+          text-center font-semibold 
+          text-[14px] 
+          md:text-[18px]
+          flex items-center gap-1.5"
+          >
+            {/* Usamos 'text-blue-700' para que la bolita combine */}
+            Pendientes
+          </span>
+
+          {/* 🔸 Número a la derecha */}
+          <span
+            className="text-right font-bold 
+          text-[15px]
+          md:text-[19px]
+           opacity-90"
+          >
             {loading ? "..." : totalPendientes}
           </span>
-        </span>
+        </div>
       </div>
     </>
   );

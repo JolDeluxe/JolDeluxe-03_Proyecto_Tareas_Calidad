@@ -14,3 +14,5 @@
 /dist-front          # O el nombre de la carpeta de build de tu frontend
 .vite
 .cache
+# Archivos de usuario
+/uploads/

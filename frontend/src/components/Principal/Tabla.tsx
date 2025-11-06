@@ -1,113 +1,112 @@
-import React, { useState, useEffect } from "react";
-import { api } from "../data/api";
-// 💡 1. Importa tu modelo real (ajusta la ruta si es necesario)
-import type { Tarea, HistorialFecha } from "../../types/tarea";
+import React, { useState } from "react";
+import type {
+  Tarea,
+  ImagenTarea,
+  HistorialFecha,
+  ResponsableLimpio,
+} from "../../types/tarea";
+import type { Usuario } from "../../types/usuario";
+import ModalGaleria from "./ModalGaleria";
 
+// 2. ✅ La interfaz AHORA recibe las tareas y el loading
 interface TablaProps {
   filtro: string;
   year: number;
   month: number;
   responsable: string;
   query: string;
+  tareas: Tarea[];
+  loading: boolean;
 }
 
-// 💡 2. Se eliminan las 'interface Tarea' e 'interface HistorialFecha' locales
-// porque ahora usamos el modelo importado.
-
-// 🔹 Utilidad para formatear fechas Date → dd/mm/yyyy
-const formateaFecha = (fecha?: Date | null): string => {
+const formateaFecha = (fecha?: Date | string | null): string => {
   if (!fecha) return "";
-  const d = String(fecha.getDate()).padStart(2, "0");
-  const m = String(fecha.getMonth() + 1).padStart(2, "0");
-  const y = fecha.getFullYear();
+  const dateObj = typeof fecha === "string" ? new Date(fecha) : fecha;
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+    return "";
+  }
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const y = dateObj.getFullYear();
   return `${d}/${m}/${y}`;
 };
 
+const getRowClass = (status: string): string => {
+  const s = status.toLowerCase();
+  if (s.includes("concluida")) return "bg-green-50 border-l-4 border-green-500";
+  if (s.includes("cancelada")) return "bg-red-50 border-l-4 border-red-500";
+  return "bg-blue-50 border-l-4 border-blue-500";
+};
+
+const isRetrasada = (
+  limite?: Date | string | null,
+  conclusion?: Date | string | null
+): boolean => {
+  if (!limite || !conclusion) return false;
+
+  // Convierte ambos a objetos Date para comparar
+  const limiteDate = typeof limite === "string" ? new Date(limite) : limite;
+  const conclusionDate =
+    typeof conclusion === "string" ? new Date(conclusion) : conclusion;
+
+  if (
+    !(limiteDate instanceof Date) ||
+    isNaN(limiteDate.getTime()) ||
+    !(conclusionDate instanceof Date) ||
+    isNaN(conclusionDate.getTime())
+  ) {
+    return false; // No se puede comparar si alguno es inválido
+  }
+
+  return conclusionDate > limiteDate;
+};
+
+// 4. ✅ El componente AHORA recibe las props del padre
 const Tabla: React.FC<TablaProps> = ({
   filtro,
   year,
   month,
   responsable,
   query,
+  tareas,
+  loading,
 }) => {
-  // 💡 3. El estado usa el tipo 'Tarea' importado
-  const [tareas, setTareas] = useState<Tarea[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [modalImagenes, setModalImagenes] = useState<ImagenTarea[] | null>(
+    null
+  );
 
-  // 🧠 Cargar tareas desde backend
-  useEffect(() => {
-    const fetchTareas = async () => {
-      try {
-        setLoading(true);
-        // La API da strings (formato ISO), los recibimos como 'any' temporalmente
-        const res = await api.get<any[]>("/tareas");
+  const filtrarPorFecha = (fecha: Date | string | null): boolean => {
+    if (!fecha) return false;
+    const dateObj = fecha instanceof Date ? fecha : new Date(fecha);
+    if (isNaN(dateObj.getTime())) return false;
 
-        // 💡 4. Convertimos los strings ISO de la API a objetos Date REALES
-        const tareasConFechas = res.data.map((t: any) => ({
-          ...t,
-          fechaRegistro: t.fechaRegistro ? new Date(t.fechaRegistro) : null,
-          fechaLimite: t.fechaLimite ? new Date(t.fechaLimite) : null,
-          fechaConclusion: t.fechaConclusion
-            ? new Date(t.fechaConclusion)
-            : null,
-          historialFechas:
-            t.historialFechas?.map((h: any) => ({
-              ...h,
-              fechaCambio: h.fechaCambio ? new Date(h.fechaCambio) : null,
-              fechaAnterior: h.fechaAnterior ? new Date(h.fechaAnterior) : null,
-              nuevaFecha: h.nuevaFecha ? new Date(h.nuevaFecha) : null,
-            })) || [],
-        }));
+    const y = dateObj.getFullYear();
+    const m = dateObj.getMonth() + 1;
 
-        // Guardamos los datos con objetos Date en el estado
-        setTareas(tareasConFechas as Tarea[]);
-      } catch (error) {
-        console.error("Error al cargar tareas:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTareas();
-  }, []);
-
-  // 🎨 Clases según estatus
-  const getRowClass = (status: string): string => {
-    const s = status.toLowerCase();
-    if (s.includes("concluida"))
-      return "bg-green-50 border-l-4 border-green-500";
-    if (s.includes("cancelada")) return "bg-red-50 border-l-4 border-red-500";
-    return "bg-blue-50 border-l-4 border-blue-500";
+    if (y !== year) return false;
+    if (month !== 0 && m !== month) return false;
+    return true;
   };
 
-  // 🧮 Verifica si se concluyó después de la fecha límite
-  // 💡 5. Lógica simple: compara objetos Date directamente
-  const isRetrasada = (limite: Date, conclusion?: Date | null): boolean => {
-    if (!conclusion) return false;
-    return conclusion > limite;
-  };
-
-  // 📊 Aplicar filtros
   const tareasFiltradas = tareas.filter((t) => {
-    // 't' es ahora del tipo 'Tarea' importado
     const estatus = t.estatus.toUpperCase();
-
     const pasaEstatus =
       filtro.toUpperCase() === "TOTAL" ||
       (filtro.toUpperCase() === "PENDIENTES" && estatus === "PENDIENTE") ||
       (filtro.toUpperCase() === "CONCLUIDAS" && estatus === "CONCLUIDA") ||
       (filtro.toUpperCase() === "CANCELADAS" && estatus === "CANCELADA");
 
-    // 💡 6. El filtro funciona porque 't.fechaRegistro' ES un objeto Date
-    let pasaFecha = true;
-    if (t.fechaRegistro) {
-      const y = t.fechaRegistro.getFullYear(); // <-- Esto ya funciona
-      const m = t.fechaRegistro.getMonth() + 1;
-      if (y !== year) pasaFecha = false;
-      if (month !== 0 && m !== month) pasaFecha = false;
-    }
+    const pasaFecha = filtrarPorFecha(t.fechaRegistro);
 
     const pasaResponsable =
-      responsable === "Todos" || t.responsable === responsable;
+      responsable === "Todos" || // Si el filtro es "Todos", pasa
+      (t.responsables && // 1. Chequeo de seguridad
+        t.responsables.some(
+          // 2. Usamos el tipo 'ResponsableLimpio' que SÍ tienes
+          (responsableObj: ResponsableLimpio) =>
+            // 3. Comparamos ID con ID
+            responsableObj.id.toString() === responsable
+        ));
 
     const texto = `${t.tarea} ${t.observaciones || ""}`.toLowerCase();
     const pasaBusqueda =
@@ -116,12 +115,20 @@ const Tabla: React.FC<TablaProps> = ({
     return pasaEstatus && pasaFecha && pasaResponsable && pasaBusqueda;
   });
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-40 text-gray-500 italic">
+        Cargando tareas...
+      </div>
+    );
+  }
+
   return (
     <div className="w-full text-sm font-sans pb-0.5">
       {tareasFiltradas && tareasFiltradas.length > 0 ? (
         <>
           {/* 💻 VISTA ESCRITORIO */}
-          <div className="hidden md:block max-h-[calc(100vh-280px)] overflow-y-auto overflow-x-auto rounded-lg border border-gray-300">
+          <div className="hidden lg:block max-h-[calc(100vh-280px)] overflow-y-auto overflow-x-auto rounded-lg border border-gray-300">
             <table className="w-full text-sm font-sans">
               <thead className="bg-gray-100 text-black text-xs uppercase sticky top-0 z-20 shadow-inner">
                 <tr>
@@ -178,8 +185,8 @@ const Tabla: React.FC<TablaProps> = ({
 
                   // 💡 'isRetrasada' ya compara objetos Date
                   const retrasada = isRetrasada(
-                    row.fechaLimite,
-                    row.fechaConclusion
+                    row.fechaLimite as Date,
+                    row.fechaConclusion as Date
                   );
 
                   return (
@@ -199,13 +206,15 @@ const Tabla: React.FC<TablaProps> = ({
 
                       <td className="px-4 py-4 text-left">
                         <span className="px-3 py-1 text-sm font-semibold text-amber-800">
-                          {row.asignador}
+                          {row.asignador.nombre}
                         </span>
                       </td>
 
                       <td className="px-4 py-4 text-center">
                         <span className="px-3 py-1 text-sm font-semibold text-blue-700">
-                          {row.responsable}
+                          {row.responsables
+                            .map((r: any) => r.nombre)
+                            .join(", ")}
                         </span>
                       </td>
 
@@ -226,7 +235,6 @@ const Tabla: React.FC<TablaProps> = ({
                       </td>
 
                       <td className="px-4 py-4 text-center font-semibold whitespace-nowrap align-middle">
-                        {/* 💡 CORREGIDO: Usar el formateador */}
                         {formateaFecha(row.fechaRegistro)}
                       </td>
 
@@ -325,7 +333,8 @@ const Tabla: React.FC<TablaProps> = ({
                                           {formateaFecha(h.nuevaFecha)}
                                         </p>
                                         <p className="italic text-gray-600">
-                                          Modificado por: {h.modificadoPor}
+                                          Modificado por:{" "}
+                                          {h.modificadoPor.nombre}
                                         </p>
                                         <p className="italic text-gray-600">
                                           Motivo: {h.motivo}
@@ -341,11 +350,9 @@ const Tabla: React.FC<TablaProps> = ({
 
                       <td
                         className={`px-4 py-4 text-center font-semibold whitespace-nowrap ${
-                          // 💡 'retrasada' se calcula arriba
                           retrasada ? "text-red-600 font-bold" : "text-gray-800"
                         }`}
                       >
-                        {/* 💡 CORREGIDO: Usar formateador */}
                         {row.fechaConclusion
                           ? formateaFecha(row.fechaConclusion)
                           : "—"}
@@ -372,9 +379,7 @@ const Tabla: React.FC<TablaProps> = ({
           </div>
 
           {/* === vISTA MOVIL === */}
-
-          {/* === vISTA MOVIL === */}
-          <div className="block md:hidden space-y-3 pb-0.5">
+          <div className="grid lg:hidden grid-cols-1 md:grid-cols-2 gap-3 p-2 items-start">
             {/* 💡 'row' es del tipo Tarea importado, con objetos Date */}
             {tareasFiltradas.map((row: Tarea) => {
               const hoy = new Date();
@@ -386,13 +391,23 @@ const Tabla: React.FC<TablaProps> = ({
                       .nuevaFecha
                   : row.fechaLimite;
 
-              // 💡 Comparamos objetos Date
-              const vencida =
-                fechaLimiteObj &&
-                fechaLimiteObj < hoy &&
-                row.estatus !== "CONCLUIDA";
+              const fechaLimiteDate =
+                typeof fechaLimiteObj === "string"
+                  ? new Date(fechaLimiteObj)
+                  : fechaLimiteObj;
 
-              // 💡 'isRetrasada' ya compara objetos Date
+              let vencida = false;
+              if (
+                fechaLimiteDate instanceof Date &&
+                !isNaN(fechaLimiteDate.getTime())
+              ) {
+                const fechaLimiteNormalizada = new Date(fechaLimiteDate);
+                fechaLimiteNormalizada.setHours(0, 0, 0, 0); // Normaliza la fecha límite
+
+                vencida =
+                  fechaLimiteNormalizada < hoy && row.estatus !== "CONCLUIDA";
+              }
+
               const retrasada = isRetrasada(
                 row.fechaLimite,
                 row.fechaConclusion
@@ -405,25 +420,25 @@ const Tabla: React.FC<TablaProps> = ({
                     row.estatus
                   )} rounded-md`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-mono font-semibold">
-                      #{row.id}
-                    </span>
-                  </div>
                   <div className="flex justify-between items-start mb-1">
                     <h3 className="font-bold text-gray-800 text-base leading-snug">
                       {row.tarea}
                     </h3>
                     <span
-                      className={`px-2 py-0.5 text-xs font-semibold ${
+                      className={`flex-shrink-0 px-2 py-0.5 text-xs font-semibold ${
                         row.urgencia === "ALTA"
-                          ? "text-red-700"
+                          ? "bg-red-100 text-red-700 border border-red-300 rounded-full"
                           : row.urgencia === "MEDIA"
-                          ? "text-amber-700"
-                          : "text-green-700"
+                          ? "bg-amber-100 text-amber-700 border border-amber-300 rounded-full"
+                          : "bg-green-100 text-green-700 border border-green-300 rounded-full"
                       }`}
                     >
-                      {row.urgencia}
+                      {/* Mostramos el valor literal */}
+                      {row.urgencia === "ALTA"
+                        ? "Alta"
+                        : row.urgencia === "MEDIA"
+                        ? "Media"
+                        : "Baja"}
                     </span>
                   </div>
 
@@ -433,7 +448,7 @@ const Tabla: React.FC<TablaProps> = ({
                         Asignado por:
                       </span>{" "}
                       <span className="text-amber-700 font-semibold">
-                        {row.asignador}
+                        {row.asignador.nombre}
                       </span>
                     </p>
                     <p>
@@ -441,14 +456,13 @@ const Tabla: React.FC<TablaProps> = ({
                         Responsable:
                       </span>{" "}
                       <span className="text-blue-700 font-semibold">
-                        {row.responsable}
+                        {row.responsables.map((r: any) => r.nombre).join(", ")}{" "}
                       </span>
                     </p>
                     <p>
                       <span className="font-semibold text-gray-700">
                         Registro:
                       </span>{" "}
-                      {/* 💡 CORREGIDO: Usar formateador */}
                       {formateaFecha(row.fechaRegistro)}
                     </p>
 
@@ -525,7 +539,7 @@ const Tabla: React.FC<TablaProps> = ({
 
                       <div className="mt-2 bg-white/80 border border-gray-200 rounded-md p-2 text-gray-700">
                         <ul className="space-y-2">
-                          {row.historialFechas.map((h, i) => (
+                          {row.historialFechas.map((h: HistorialFecha, i) => (
                             <li
                               key={i}
                               className="border-b border-gray-100 pb-1 last:border-none"
@@ -534,23 +548,20 @@ const Tabla: React.FC<TablaProps> = ({
                                 <span className="font-semibold text-gray-800">
                                   Modificación:
                                 </span>{" "}
-                                {/* 💡 CORREGIDO: Usar formateador */}
                                 {formateaFecha(h.fechaCambio)}
                               </p>
                               <p>
                                 <span className="font-semibold text-gray-800">
                                   Anterior:
                                 </span>{" "}
-                                {/* 💡 CORREGIDO: Usar formateador */}
                                 {formateaFecha(h.fechaAnterior)} →{" "}
                                 <span className="font-semibold text-gray-800">
                                   Nueva:
                                 </span>{" "}
-                                {/* 💡 CORREGIDO: Usar formateador */}
                                 {formateaFecha(h.nuevaFecha)}
                               </p>
                               <p className="italic text-gray-600">
-                                Por: {h.modificadoPor}
+                                Por: {h.modificadoPor.nombre}
                               </p>
                               <p className="italic text-gray-600">
                                 Motivo: {h.motivo}
@@ -561,13 +572,9 @@ const Tabla: React.FC<TablaProps> = ({
                       </div>
                     </details>
                   )}
-
-                  {/* ✅ Fecha de conclusión */}
-                  {/* 💡 CORREGIDO: Se elimina el IIFE y la lógica de .split() */}
                   {row.fechaConclusion && (
                     <p
                       className={`mt-2 text-xs flex items-center ${
-                        // 💡 'retrasada' se calcula arriba
                         retrasada
                           ? "text-red-600 font-semibold"
                           : "text-gray-700"
@@ -577,7 +584,7 @@ const Tabla: React.FC<TablaProps> = ({
                         Conclusión:
                       </span>{" "}
                       <span className="ml-1">
-                        {/* 💡 CORREGIDO: Usar formateador */}
+                        {/* ✅ 9. CORRECCIÓN: La función ya acepta string | Date */}
                         {formateaFecha(row.fechaConclusion)}
                       </span>
                       {retrasada && (
@@ -598,6 +605,25 @@ const Tabla: React.FC<TablaProps> = ({
                       )}
                     </p>
                   )}
+                  {row.imagenes && row.imagenes.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200 flex justify-center">
+                      <button
+                        onClick={() => setModalImagenes(row.imagenes)}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          height="24px"
+                          viewBox="0 -960 960 960"
+                          fill="currentColor"
+                          className="w-4 h-4"
+                        >
+                          <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm40-80h480L570-480 450-320l-90-120-120 160Zm-40 80v-560 560Z" />
+                        </svg>
+                        Ver Imágenes ({row.imagenes.length})
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -607,6 +633,13 @@ const Tabla: React.FC<TablaProps> = ({
         <div className="flex justify-center items-center h-40 text-gray-500 italic text-sm">
           No hay tareas registradas.
         </div>
+      )}
+      {/* 🔽 7. RENDERIZA EL MODAL (si 'modalImagenes' no es null) */}
+      {modalImagenes && (
+        <ModalGaleria
+          imagenes={modalImagenes}
+          onClose={() => setModalImagenes(null)}
+        />
       )}
     </div>
   );

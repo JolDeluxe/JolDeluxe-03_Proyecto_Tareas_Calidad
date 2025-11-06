@@ -148,6 +148,7 @@ const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
           );
         })}
       </div>
+
       <div className="sm:hidden grid grid-cols-2 gap-1.5 mb-2 px-3 text-[12px] font-semibold text-gray-700 text-center">
         {botones.map((btn) => {
           const isActive = filtro === btn.id;

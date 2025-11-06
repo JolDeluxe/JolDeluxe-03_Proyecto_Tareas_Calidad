@@ -61,6 +61,8 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   const [isResponsableModalOpen, setIsResponsableModalOpen] = useState(false);
   const [isPrioridadModalOpen, setIsPrioridadModalOpen] = useState(false);
 
+  const [archivos, setArchivos] = useState<File[]>([]);
+
   // 1. Convierte tu string 'DD-MM-YYYY' (estado) a un Date (para el picker)
   const getSelectedDate = () => {
     if (!fecha) return null;
@@ -77,22 +79,46 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     setFecha(formatDateToInput(date));
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      // Convierte el FileList (que no es un array) a un array
+      const nuevosArchivos = Array.from(e.target.files);
+
+      // Agrega los nuevos archivos al array existente
+      setArchivos((prevArchivos) => [...prevArchivos, ...nuevosArchivos]);
+
+      // Opcional: Limpia el valor del input para permitir
+      // seleccionar el mismo archivo de nuevo si se elimina por error.
+      e.target.value = "";
+    }
+  };
+
+  /**
+   * Elimina un archivo de la lista basado en su índice.
+   */
+  const handleRemoveArchivo = (indexToRemove: number) => {
+    setArchivos((prevArchivos) =>
+      // Crea un nuevo array excluyendo el archivo en 'indexToRemove'
+      prevArchivos.filter((_, index) => index !== indexToRemove)
+    );
+  };
+
   // 🧩 Enviar nueva tarea al backend
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
 
+    // 1. Validación (sin cambios)
     if (!nombre || !responsable || !prioridad || !fecha || !comentario) {
-      // Nota: Si quieres que comentario no sea obligatorio, quítalo de aquí.
       return;
     }
 
     setLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
-
-      let asignadorNombre = "Administrador"; // Valor por defecto
+      // 2. Obtener Asignador (sin cambios)
+      const token = localStorage.getItem("token"); // (Tu 'api' ya lo inyecta, pero es buena práctica tenerlo si se usa en payload)
+      let asignadorNombre = "Administrador";
       const usuarioStorage = localStorage.getItem("usuario");
       if (usuarioStorage) {
         try {
@@ -103,45 +129,73 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
         }
       }
 
-      // 💡 Prepara el objeto Tarea para enviar a la API
+      // 3. Payload de la Tarea (sin cambios)
       const nuevaTareaPayload = {
         tarea: nombre,
-        observaciones: comentario || null, // Enviar null si está vacío
+        observaciones: comentario || null,
         responsable: responsable,
-        // 💡 Usa el valor del estado 'prioridad' (ya es ALTA, MEDIA o BAJA)
         urgencia: prioridad,
-        // Fecha actual en formato ISO
         fechaRegistro: new Date().toISOString(),
-        // 💡 Convierte YYYY-MM-DD a formato ISO UTC T00:00:00
         fechaLimite: `${fecha}T00:00:00.000Z`,
-        // 💡 Estatus inicial correcto
         estatus: "PENDIENTE",
         asignador: asignadorNombre,
-        // fechaConclusion se omite, la API lo manejará como null por defecto
       };
 
-      console.log("📨 Enviando nueva tarea:", nuevaTareaPayload); // Para depuración
+      console.log("📨 PASO 1: Creando tarea...", nuevaTareaPayload);
 
-      await api.post("/tareas", nuevaTareaPayload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // --- 💡 LÓGICA ACTUALIZADA ---
 
-      // 🥇 MUESTRA EL TOAST PRIMERO
+      // 4. PASO 1: Crear la Tarea
+      // Usamos 'await' para obtener la respuesta con la tarea creada (y su ID)
+      const response = await api.post<Tarea>("/tareas", nuevaTareaPayload);
+      const tareaCreada = response.data;
+
+      console.log(`✅ Tarea creada con ID: ${tareaCreada.id}`);
+
+      if (archivos.length > 0) {
+        // 👈 Ya no es necesario 'archivos &&'
+        console.log(`Subiendo ${archivos.length} imágenes...`);
+        const formData = new FormData();
+
+        // De: Array.from(archivos).forEach(file => {
+        // A:
+        archivos.forEach((file) => {
+          // 👈 'archivos' ya es un array
+          formData.append("imagenes", file);
+        });
+
+        // ... (el resto de la lógica de subida es idéntica)
+        await api.post(`/tareas/${tareaCreada.id}/upload`, formData);
+
+        console.log(`✅ Imágenes subidas para Tarea ID: ${tareaCreada.id}`);
+      }
+
+      // 6. PASO 3: Finalizar
       toast.success("Tarea creada correctamente.");
-
-      // 👇 PASO 3.3: LLAMAR A LA FUNCIÓN DE RECARGA
-      onTareaAgregada();
-
-      // 🥈 Luego cierra el modal
-      onClose();
+      onTareaAgregada(); // Recarga la lista
+      onClose(); // Cierra el modal
     } catch (error: any) {
       console.error(
-        "❌ Error al crear tarea:",
+        "❌ Error en el proceso de creación:",
         error.response?.data || error.message
       );
-      const mensajeError =
-        error.response?.data?.error || "No se pudo guardar la tarea.";
-      toast.error(`❌ ${mensajeError}`);
+
+      // Error más descriptivo
+      // Comprueba si el error ocurrió durante la subida de imágenes
+      const isUploadError = error.config?.url.includes("/upload");
+
+      if (isUploadError) {
+        // La tarea se creó, pero las imágenes fallaron
+        toast.error(`❌ Tarea creada, pero falló la subida de imágenes.`);
+        // Igual recargamos y cerramos, ya que la tarea sí existe
+        onTareaAgregada();
+        onClose();
+      } else {
+        // El error fue al crear la tarea (Paso 1)
+        const mensajeError =
+          error.response?.data?.error || "No se pudo guardar la tarea.";
+        toast.error(`❌ ${mensajeError}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -351,6 +405,119 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                 )}
               </div>
 
+              {/* 📸 SECCIÓN DE EVIDENCIA ACTUALIZADA */}
+              <div>
+                <label className="block text-sm font-semibold mb-1">
+                  Evidencia (Opcional)
+                </label>
+
+                {/* 1. Botón visible (es una label) para activar el input */}
+                <label
+                  htmlFor="file-upload" // Conecta con el id del input
+                  // 👇 AÑADE ESTO: Previene el clic si está cargando
+                  onClick={(e) => {
+                    if (loading) e.preventDefault();
+                  }}
+                  // 👇 MODIFICA ESTO:
+                  className={`w-full flex items-center justify-center gap-2 
+                bg-amber-100 text-amber-900 
+                font-semibold px-4 py-2 rounded-md 
+                transition-all duration-200
+                ${
+                  loading
+                    ? "opacity-50 cursor-not-allowed" // Estilos "disabled"
+                    : "cursor-pointer hover:bg-amber-200" // Estilos normales
+                }
+              `}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10.5 3.5a.5.5 0 00-1 0V9H4a.5.5 0 000 1h5.5v5.5a.5.5 0 001 0V10H16a.5.5 0 000-1h-5.5V3.5z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span>
+                    {archivos.length > 0
+                      ? "Agregar más"
+                      : "Agregar / Tomar Foto"}
+                  </span>
+                </label>
+
+                {/* 2. El Input de archivo real, ahora oculto */}
+                <input
+                  id="file-upload" // ID para la label
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  capture="environment"
+                  disabled={loading}
+                  onChange={handleFileChange} // 👈 Usa el nuevo handler
+                  className="hidden" // 👈 Oculta el input por defecto
+                />
+
+                {/* 3. Lista interactiva de archivos seleccionados */}
+                {archivos.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-sm font-medium text-gray-800 mb-2">
+                      {archivos.length} archivo(s) para subir:
+                    </p>
+                    <ul className="space-y-2 max-h-32 overflow-y-auto pr-2">
+                      {archivos.map((file, index) => (
+                        <li
+                          key={index}
+                          className="flex items-center justify-between 
+                       bg-gray-100 p-2 rounded-md"
+                        >
+                          {/* Muestra un thumbnail (¡bonus!) */}
+                          <img
+                            src={URL.createObjectURL(file)} // Previsualización
+                            alt={file.name}
+                            className="w-10 h-10 object-cover rounded-md"
+                            onLoad={(e) =>
+                              URL.revokeObjectURL(e.currentTarget.src)
+                            } // Libera memoria
+                          />
+                          {/* Nombre (con truncado) */}
+                          <span className="flex-1 text-sm text-gray-700 mx-3 truncate">
+                            {file.name}
+                          </span>
+
+                          {/* Botón de Eliminar */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveArchivo(index)}
+                            disabled={loading}
+                            className="flex-shrink-0 p-1 text-red-600 
+                         hover:bg-red-100 rounded-full
+                         disabled:opacity-50"
+                            aria-label="Eliminar archivo"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                              className="w-5 h-5"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
               {/* Responsable */}
               <div>
                 <label
@@ -476,9 +643,11 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                   // 👇 IMPLEMENTACIÓN CLAVE: Bloquea la selección de fechas pasadas en el calendario
                   minDate={new Date()}
                   className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
-      ${
-        submitted && !getSelectedDate() ? "border-red-500" : "border-gray-300"
-      }`}
+                  ${
+                    submitted && !getSelectedDate()
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  }`}
                   withPortal
                   showYearDropdown
                   showMonthDropdown

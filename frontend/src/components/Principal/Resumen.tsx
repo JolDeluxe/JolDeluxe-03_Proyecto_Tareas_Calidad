@@ -1,62 +1,50 @@
-import React, { useEffect, useState } from "react";
-import { api } from "../data/api";
+import React from "react";
+import type { Tarea } from "../../types/tarea"; // (Ajusta la ruta si es necesario)
 
-interface ResumenPrincipal {
+interface ResumenPrincipalProps {
   filtro: string;
   onFiltroChange: (filtro: string) => void;
   year: number;
   month: number;
   responsable: string;
   query: string;
+  tareas: Tarea[];
+  loading: boolean;
 }
 
-const ResumenPrincipal: React.FC<ResumenPrincipal> = ({
+const ResumenPrincipal: React.FC<ResumenPrincipalProps> = ({
   filtro,
   onFiltroChange,
   year,
   month,
   responsable,
   query,
+  tareas,
+  loading,
 }) => {
-  const [tareas, setTareas] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchTareas = async () => {
-      try {
-        setLoading(true);
-        const res = await api.get("/tareas");
-        setTareas(res.data);
-      } catch (error) {
-        console.error("Error al cargar tareas:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTareas();
-  }, []);
-
-  const formatDate = (iso: string): string => {
-    if (!iso) return "";
-    const date = new Date(iso);
-    const d = String(date.getDate()).padStart(2, "0");
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const y = date.getFullYear();
-    return `${d}/${m}/${y}`;
-  };
-
-  const filtrarPorFecha = (fecha: string): boolean => {
+  const filtrarPorFecha = (fecha: Date | string | null): boolean => {
     if (!fecha) return false;
-    const [d, m, y] = formatDate(fecha).split("/").map(Number);
+
+    // Aseguramos que sea un objeto Date, ya que el padre lo convirtió
+    const dateObj = fecha instanceof Date ? fecha : new Date(fecha);
+    if (isNaN(dateObj.getTime())) return false; // Fecha inválida
+
+    const y = dateObj.getFullYear();
+    const m = dateObj.getMonth() + 1; // getMonth() es 0-indexado
+
     if (y !== year) return false;
     if (month !== 0 && m !== month) return false;
     return true;
   };
 
+  // 6. ACTUALIZAMOS el filtro de responsables
   const tareasFiltradas = tareas.filter((t) => {
     const pasaFecha = filtrarPorFecha(t.fechaRegistro);
+
+    // Tu API ahora devuelve 'responsables' (array) no 'responsable' (string)
     const pasaResponsable =
-      responsable === "Todos" || t.responsable === responsable;
+      responsable === "Todos" ||
+      t.responsables.some((r: any) => r.nombre === responsable);
 
     const texto = `${t.tarea} ${t.observaciones || ""}`.toLowerCase();
     const pasaBusqueda =
@@ -65,6 +53,7 @@ const ResumenPrincipal: React.FC<ResumenPrincipal> = ({
     return pasaFecha && pasaResponsable && pasaBusqueda;
   });
 
+  // 7. El resto de tu lógica de cálculo y JSX no necesita cambios
   const pendientes = tareasFiltradas.filter(
     (t) => t.estatus.toUpperCase() === "PENDIENTE"
   ).length;
@@ -102,7 +91,7 @@ const ResumenPrincipal: React.FC<ResumenPrincipal> = ({
   return (
     <>
       {/* 💻 Versión escritorio */}
-      <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 text-center font-sans">
+      <div className="hidden lg:grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 text-center font-sans">
         {botones.map((btn) => {
           const isActive = filtro === btn.id;
           const baseColors = {
@@ -132,7 +121,8 @@ const ResumenPrincipal: React.FC<ResumenPrincipal> = ({
           );
         })}
       </div>
-      <div className="sm:hidden grid grid-cols-2 gap-1.5 mb-2 px-3 text-[12px] font-semibold text-gray-700 text-center">
+      {/* 📱 Versión móvil */}
+      <div className="lg:hidden grid grid-cols-2 gap-1.5 mb-2 px-3 text-[12px] md:text-[15px] font-semibold text-gray-700 text-center">
         {botones.map((btn) => {
           const isActive = filtro === btn.id;
           const colors = isActive
@@ -143,13 +133,13 @@ const ResumenPrincipal: React.FC<ResumenPrincipal> = ({
             <button
               key={btn.id}
               onClick={() => onFiltroChange(btn.id)}
-              className={`flex justify-between items-center w-full px-4 py-2 rounded-full border border-${btn.color}-300 shadow-sm transition-all duration-200 ${colors}`}
+              className={`flex justify-between items-center w-full px-4 py-2 md:py-3 rounded-full border border-${btn.color}-300 shadow-sm transition-all duration-200 ${colors}`}
             >
               {/* 🔹 Texto a la izquierda */}
               <span className="text-left">{btn.label}</span>
 
               {/* 🔸 Número a la derecha */}
-              <span className="text-right font-bold text-[13px] opacity-90">
+              <span className="text-right font-bold text-[13px] md:text-[16px] opacity-90">
                 {btn.value}
               </span>
             </button>

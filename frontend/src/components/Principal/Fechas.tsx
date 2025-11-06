@@ -95,7 +95,7 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
   return (
     <div className="flex flex-col items-center space-y-5 mb-8 font-sans w-full px-3">
       {/* 🔸 Selector de Año (desktop) */}
-      <div className="hidden sm:flex justify-center mb-6">
+      <div className="hidden lg:flex justify-center mb-6">
         <form className="flex items-center space-x-2 w-full sm:w-auto justify-center">
           <label
             htmlFor="year"
@@ -121,7 +121,7 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
       </div>
 
       {/* 🔸 Barra de meses (desktop) */}
-      <div className="hidden sm:flex justify-center flex-wrap gap-2 mb-6 text-sm font-bold uppercase font-sans">
+      <div className="hidden lg:flex justify-center flex-wrap gap-2 mb-6 text-sm font-bold uppercase font-sans">
         <button
           onClick={() => handleMonthChange(0)}
           className={`px-4 py-2 text-lg rounded-full transition-all duration-200 mr-7 ${
@@ -149,7 +149,7 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
       </div>
 
       {/* 📱 Selector móvil */}
-      <div className="sm:hidden w-full px-4 mb-3 space-y-3">
+      <div className="lg:hidden w-full px-4 mb-3 space-y-3">
         {/* 🔹 Selector de Año */}
         <div className="relative w-full">
           <label
