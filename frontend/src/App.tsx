@@ -13,16 +13,18 @@ import Admin from "./pages/Admin";
 import PrivateRoute from "./components/PrivateRoute";
 import PublicRoute from "./components/PublicRoute";
 import LoginPage from "./pages/LoginPage";
-import { authService } from "./api/auth.service"; // 2. Importar el servicio de auth
+import { authService } from "./api/auth.service";
 import type { Usuario } from "./types/usuario";
 
-// 4. AppLayout se convierte en el componente "inteligente"
+// 🔽 --- 1. IMPORTAR LA LÓGICA DE SUSCRIPCIÓN --- 🔽
+import { subscribeUser } from "./push-subscription";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
 const AppLayout: React.FC = () => {
-  // 5. Añadimos el estado del usuario y el estado de carga
   const [user, setUser] = useState<Usuario | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 6. Hook para verificar el usuario al cargar el layout
   useEffect(() => {
     const verifyUser = async () => {
       const token = localStorage.getItem("token");
@@ -31,6 +33,11 @@ const AppLayout: React.FC = () => {
           const res = await authService.verify();
           if (res.valid && res.usuario) {
             setUser(res.usuario);
+
+            // 🔽 --- 2. LLAMAR A LA SUSCRIPCIÓN AQUÍ --- 🔽
+            // Una vez que sabemos quién es el usuario, intentamos suscribirlo.
+            // Esto se ejecutará cada vez que la app cargue y el usuario esté logueado.
+            subscribeUser(res.usuario.id);
           }
         } catch (error) {
           console.error("Error en la verificación automática:", error);
@@ -41,7 +48,7 @@ const AppLayout: React.FC = () => {
     };
 
     verifyUser();
-  }, []);
+  }, []); // El array vacío asegura que solo se ejecute una vez
 
   if (loading) {
     return (
@@ -57,6 +64,9 @@ const AppLayout: React.FC = () => {
         <Route path="/" element={<Navigate to="/pendientes" replace />} />
         <Route path="/todas" element={<Principal user={user} />} />
         <Route path="/pendientes" element={<Pendientes user={user} />} />
+        {/* Tu App.tsx original tenía "/admin" apuntando a <Admin .../>
+          Asegúrate de que la ruta y el componente sean correctos.
+        */}
         <Route path="/admin" element={<Admin user={user} />} />
         <Route path="*" element={<Navigate to="/pendientes" replace />} />
       </Routes>
@@ -67,6 +77,14 @@ const AppLayout: React.FC = () => {
 function App() {
   return (
     <Router>
+      {/* 🔽 --- 3. AÑADIR EL CONTENEDOR DE TOASTS (para las alertas) --- 🔽 */}
+      <ToastContainer
+        position="bottom-right"
+        autoClose={3000}
+        theme="colored"
+        pauseOnHover
+      />
+
       <Routes>
         <Route
           path="/login"
