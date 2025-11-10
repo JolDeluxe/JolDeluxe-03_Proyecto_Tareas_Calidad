@@ -1,4 +1,5 @@
 import express from "express";
+import "dotenv/config";
 import cors from "cors";
 import path from "path"; // 👈 Importante para las rutas de archivos
 import { fileURLToPath } from "url"; // 👈 Importante para el fix de __dirname
@@ -35,6 +36,8 @@ app.use(
         "http://200.1.0.72:4173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://200.1.0.72:5173",
+        "http://10.0.2.2:5173",
       ]; // Lógica de permisos mejorada
 
       const isAllowed =
@@ -54,7 +57,7 @@ app.use(
       }
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept"],
   })
 );

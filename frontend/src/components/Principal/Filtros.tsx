@@ -1,55 +1,75 @@
-// 📍 src/components/Principal/Filtros.tsx
-
 import React, { useState, useRef, useEffect } from "react";
-// 1. Importar el nuevo servicio de usuarios
 import { usuariosService } from "../../api/usuarios.service";
-// 2. Importar el tipo Usuario (asumiendo la ruta)
 import type { Usuario } from "../../types/usuario";
 import { Rol } from "../../types/usuario";
 
 interface FiltrosProps {
-  // 3. Cambiar el nombre de la prop para que sea más claro
   onUsuarioChange: (usuarioId: string) => void;
   onBuscarChange?: (query: string) => void;
-  user: Usuario | null;
+  user: Usuario | null; // 🔹 Se recibe el 'user' como prop
 }
 
 const Filtros: React.FC<FiltrosProps> = ({
   onUsuarioChange,
   onBuscarChange,
+  user, // 🔹 Se usa el 'user' de las props
 }) => {
-  const { user } = useAuth();
-
   const [responsableOpen, setResponsableOpen] = useState(false);
-
-  // 4. El estado seleccionado ahora guarda el ID (como string) o "Todos"
   const [selectedUsuarioId, setSelectedUsuarioId] = useState("Todos");
-
-  // 5. El estado de la lista ahora guarda objetos Usuario
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
-
   const responsableRef = useRef<HTMLDivElement>(null);
 
+  // 🔹 useEffect actualizado para filtrar la lista de usuarios según el rol
   useEffect(() => {
-    // 6. Cargar la lista de Usuarios (no de Tareas)
     const fetchUsuarios = async () => {
+      // Si no hay usuario, o si el usuario es INVITADO, no hay nada que cargar.
+      if (!user || user.rol === Rol.INVITADO) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Usamos el servicio. getAll() por defecto trae solo ACTIVOS.
+        setLoading(true);
+        // 1. Obtenemos todos los usuarios activos
         const data = await usuariosService.getAll();
-        // Ordenamos alfabéticamente
-        const listaOrdenada = data.sort((a, b) =>
+
+        let listaFiltrada: Usuario[] = [];
+
+        // 2. Definimos los roles de gestión
+        const esGestion = ["SUPER_ADMIN", "ADMIN", "ENCARGADO"].includes(
+          user.rol
+        );
+
+        if (esGestion) {
+          // 3. Si es Gestión, puede ver a todos los usuarios
+          listaFiltrada = data;
+        } else if (user.rol === Rol.USUARIO) {
+          // 4. Si es USUARIO, solo ve a otros USUARIOs
+          //    (y opcionalmente, que pertenezcan a su mismo departamento)
+          listaFiltrada = data.filter(
+            (u) =>
+              u.rol === Rol.USUARIO && u.departamentoId === user.departamentoId
+          );
+        }
+
+        // 5. Ordenamos la lista resultante
+        const listaOrdenada = listaFiltrada.sort((a, b) =>
           a.nombre.localeCompare(b.nombre)
         );
+
         setUsuarios(listaOrdenada);
       } catch (error) {
         console.error("Error al cargar usuarios:", error);
+      } finally {
+        setLoading(false);
       }
     };
-    fetchUsuarios();
-  }, []); // Cargar solo al montar
 
-  // Hook para cerrar el dropdown si se hace clic fuera
+    fetchUsuarios();
+  }, [user]); // 🔹 El 'user' es la dependencia. Si cambia, la lista se recalcula.
+
+  // Hook para cerrar el dropdown (sin cambios, pero ahora usa el 'user' de las props)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -61,30 +81,27 @@ const Filtros: React.FC<FiltrosProps> = ({
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [user]);
+  }, []); // 🔹 Dependencia de 'user' eliminada, no es necesaria aquí.
 
-  // 7. Handler actualizado, ahora trabaja con IDs
   const handleUsuarioSelect = (usuarioId: string) => {
     setSelectedUsuarioId(usuarioId);
     setResponsableOpen(false);
-    onUsuarioChange(usuarioId); // Pasa el ID al componente padre
+    onUsuarioChange(usuarioId);
   };
 
   const handleLimpiar = () => {
-    handleUsuarioSelect("Todos"); // Llama al handler con "Todos"
+    handleUsuarioSelect("Todos");
   };
 
-  // 8. Helper para buscar el *nombre* del usuario basado en el *ID* guardado
   const getSelectedUsuarioNombre = () => {
     if (selectedUsuarioId === "Todos") return "Todos";
-    // Busca en la lista de usuarios el que coincida con el ID
     const usuario = usuarios.find((u) => u.id.toString() === selectedUsuarioId);
-    // Devuelve el nombre, o "Todos" si algo falla
     return usuario ? usuario.nombre : "Todos";
   };
 
+  // 🔹 Lógica de ocultar para INVITADO (¡Esta ya estaba correcta!)
   if (!user || user.rol === Rol.INVITADO) {
-    return null;
+    return null; // No muestra nada si es INVITADO o si no hay usuario
   }
 
   return (
@@ -97,16 +114,18 @@ const Filtros: React.FC<FiltrosProps> = ({
           } md:overflow-visible pb-2 md:pb-0 scrollbar-hide`}
         >
           {/* 🔸 Filtro Responsable (Actualizado a Usuarios) */}
-          <div className="relative flex-shrink-0" ref={responsableRef}>
+          <div
+            className="relative flex-shrink-0 hidden lg:block"
+            ref={responsableRef}
+          >
             <button
               onClick={() => setResponsableOpen(!responsableOpen)}
               disabled={loading}
               className="flex items-center whitespace-nowrap 
-                        text-gray-700 bg-transparent border-none 
-                        md:border md:bg-white md:hover:bg-gray-100 
-                        focus:outline-none font-medium 
-                        rounded-none md:rounded-lg text-sm px-2 md:px-3 py-1.5
-                        disabled:opacity-50 disabled:cursor-not-allowed"
+               text-gray-700 md:border md:bg-white md:hover:bg-gray-100 
+               focus:outline-none font-medium 
+               rounded-lg text-sm px-3 py-1.5
+               disabled:opacity-50 disabled:cursor-not-allowed"
               type="button"
             >
               Responsable:{" "}
@@ -130,29 +149,28 @@ const Filtros: React.FC<FiltrosProps> = ({
               </svg>
             </button>
 
+            {/* Menú Dropdown de Escritorio (tu código original) */}
             {responsableOpen && (
               <div className="absolute left-0 mt-2 bg-white divide-y divide-gray-100 rounded-lg shadow-lg w-44 z-50">
-                <ul className="py-1 text-sm text-gray-700">
+                {/* Añadí max-h-60 y overflow-y-auto por si la lista es muy larga */}
+                <ul className="py-1 text-sm text-gray-700 max-h-60 overflow-y-auto">
                   <li>
                     <button
-                      // 10. Seleccionar "Todos"
                       onClick={() => handleUsuarioSelect("Todos")}
                       className="block w-full text-left px-4 py-2 hover:bg-gray-100"
                     >
                       Todos
                     </button>
                   </li>
-                  {/* 11. Mapear la lista de objetos 'Usuario' */}
                   {usuarios.map((usuario) => (
                     <li key={usuario.id}>
                       <button
-                        // 12. Seleccionar el ID del usuario (convertido a string)
                         onClick={() =>
                           handleUsuarioSelect(usuario.id.toString())
                         }
                         className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700"
                       >
-                        {usuario.nombre} {/* Mostrar el nombre */}
+                        {usuario.nombre}
                       </button>
                     </li>
                   ))}
@@ -160,9 +178,33 @@ const Filtros: React.FC<FiltrosProps> = ({
               </div>
             )}
           </div>
-
-          {/* 🔸 Botón limpiar */}
-          {/* 13. Lógica de "limpiar" basada en el ID */}
+          <div className="relative flex-shrink-0 block lg:hidden">
+            <select
+              value={selectedUsuarioId}
+              onChange={(e) => handleUsuarioSelect(e.target.value)}
+              disabled={loading}
+              className="flex items-center whitespace-nowrap 
+               text-gray-700 bg-transparent border-none 
+               focus:outline-none font-medium 
+               rounded-none text-sm px-2 py-1.5
+               disabled:opacity-50 disabled:cursor-not-allowed
+               font-semibold text-amber-800"
+              aria-label="Seleccionar responsable"
+            >
+              {loading ? (
+                <option value={selectedUsuarioId}>Cargando...</option>
+              ) : (
+                <>
+                  <option value="Todos">Responsable: Todos</option>
+                  {usuarios.map((usuario) => (
+                    <option key={usuario.id} value={usuario.id.toString()}>
+                      {usuario.nombre}
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
+          </div>
           {selectedUsuarioId !== "Todos" && (
             <button
               onClick={handleLimpiar}
@@ -190,8 +232,6 @@ const Filtros: React.FC<FiltrosProps> = ({
             </button>
           )}
         </div>
-
-        {/* 🔹 Buscador (sin cambios, es correcto) */}
         <form className="relative flex-shrink-0 w-full md:w-64">
           <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
             <svg

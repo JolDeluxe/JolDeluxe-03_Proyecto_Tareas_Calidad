@@ -4,9 +4,23 @@ import axios from "axios";
 // 🔹 Configuración dinámica del entorno
 const getBaseURL = () => {
   if (import.meta.env.MODE === "development") {
+    // Detectar si estamos dentro del emulador Android
+    const isAndroidEmulator =
+      typeof navigator !== "undefined" &&
+      /Android/i.test(navigator.userAgent) &&
+      !window.location.hostname.includes("localhost");
+
+    if (isAndroidEmulator) {
+      console.log("📱 Ejecutando desde emulador Android → usando 10.0.2.2");
+      return "http://10.0.2.2:3000/api";
+    }
+
+    // Caso normal: navegador de escritorio
     return "http://localhost:3000/api";
   }
-  return "/api"; // producción
+
+  // Producción
+  return "/api";
 };
 
 const api = axios.create({

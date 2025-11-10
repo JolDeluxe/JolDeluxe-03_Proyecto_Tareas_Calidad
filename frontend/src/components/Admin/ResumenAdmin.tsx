@@ -1,86 +1,51 @@
-import React, { useEffect, useState } from "react";
-import { api } from "../data/api";
+// 📍 src/components/Admin/ResumenAdmin.tsx
 
+import React from "react";
+import type { Tarea } from "../../types/tarea";
+import type { Usuario } from "../../types/usuario";
+
+// 3. 💅 Interfaz de Props actualizada
 interface ResumenPrincipalProps {
   filtro: string;
   onFiltroChange: (filtro: string) => void;
-  // year: number;
-  // month: number;
   responsable: string;
   query: string;
-  // 👇 AÑADIMOS LAS PROPS DEL PADRE
-  tareas: any[]; // Usamos any[] porque en este componente no necesitas el tipo Date convertido
+  tareas: Tarea[];
   loading: boolean;
+  user: Usuario | null;
 }
 
 const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
   filtro,
   onFiltroChange,
-  // year,
-  // month,
   responsable,
   query,
-  // 👇 RECIBIMOS LAS PROPS
   tareas,
   loading,
+  user,
 }) => {
-  // ❌ ELIMINAMOS ESTOS ESTADOS:
-  // const [tareas, setTareas] = useState<any[]>([]);
-  // const [loading, setLoading] = useState(true);
+  // ❌ No hay estados de 'tareas' o 'loading'
+  // ❌ No hay 'useEffect'
+  // El componente ahora es "tonto", solo muestra datos.
 
-  // ❌ ELIMINAMOS ESTE useEffect:
-  // useEffect(() => {
-  //   const fetchTareas = async () => {
-  //     try {
-  //       setLoading(true);
-  //       const res = await api.get("/tareas");
-  //       setTareas(res.data);
-  //     } catch (error) {
-  //       console.error("Error al cargar tareas:", error);
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   };
-  //   fetchTareas();
-  // }, []);
-
-  // ... (El resto de funciones se quedan igual)
-
-  // const formatDate = (iso: string): string => {
-  //   if (!iso) return "";
-  //   const date = new Date(iso);
-  //   const d = String(date.getDate()).padStart(2, "0");
-  //   const m = String(date.getMonth() + 1).padStart(2, "0");
-  //   const y = date.getFullYear();
-  //   return `${d}/${m}/${y}`;
-  // };
-
-  // const filtrarPorFecha = (fecha: string): boolean => {
-  //   if (!fecha) return false;
-  //   const [d, m, y] = formatDate(fecha).split("/").map(Number);
-  //   if (y !== year) return false;
-  //   if (month !== 0 && m !== month) return false;
-  //   return true;
-  // };
-
-  // 📊 AHORA USA las 'tareas' de las props
+  // 📊 Lógica de filtrado (se ejecuta en cada render)
   const tareasFiltradas = tareas.filter((t) => {
-    // Nota: Si 't.fechaRegistro' ya viene como objeto Date del componente Admin.tsx,
-    // esta función 'filtrarPorFecha' fallará. Asumiremos que viene como string ISO,
-    // o que Admin.tsx debe pasarte las tareas filtradas si no puedes usar objetos Date aquí.
-    // Usaremos la versión que usa el string ISO.
-    // const pasaFecha = filtrarPorFecha(t.fechaRegistro);
+    // 4. 🚀 Lógica de Responsable CORREGIDA
+    // Verificamos si la Tarea (t) tiene *algun* responsable
+    // cuyo ID coincida con el filtro 'responsable' (que es un string "id")
     const pasaResponsable =
-      responsable === "Todos" || t.responsable === responsable;
+      responsable === "Todos" ||
+      t.responsables.some((r) => r.id.toString() === responsable);
 
+    // El filtro de búsqueda por texto (sin cambios, estaba bien)
     const texto = `${t.tarea} ${t.observaciones || ""}`.toLowerCase();
     const pasaBusqueda =
       query.trim() === "" || texto.includes(query.toLowerCase());
 
-    // return pasaFecha && pasaResponsable && pasaBusqueda;
     return pasaResponsable && pasaBusqueda;
   });
 
+  // El resto del cálculo de contadores (sin cambios, estaba bien)
   const pendientes = tareasFiltradas.filter(
     (t) => t.estatus.toUpperCase() === "PENDIENTE"
   ).length;
@@ -117,29 +82,41 @@ const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
 
   return (
     <>
-      {/* 💻 Versión escritorio */}
+      {/* 💻 Versión escritorio (Tailwind Purge-safe) */}
       <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 text-center font-sans">
         {botones.map((btn) => {
           const isActive = filtro === btn.id;
-          const baseColors = {
-            blue: "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100",
-            green:
-              "bg-green-50 border-green-200 text-green-700 hover:bg-green-100",
-            red: "bg-red-50 border-red-200 text-red-700 hover:bg-red-100",
-            gray: "bg-gray-200 border-gray-400 text-gray-800 hover:bg-gray-300",
-          }[btn.color];
-          const activeColors = {
-            blue: "bg-blue-700 text-white border-blue-700 shadow-lg",
-            green: "bg-green-700 text-white border-green-700 shadow-lg",
-            red: "bg-red-700 text-white border-red-700 shadow-lg",
-            gray: "bg-gray-700 text-white border-gray-700 shadow-lg",
-          }[btn.color];
+
+          // Mapeo de estilos base y activos
+          const colorStyles: {
+            [key: string]: { base: string; active: string };
+          } = {
+            blue: {
+              base: "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100",
+              active: "bg-blue-700 text-white border-blue-700 shadow-lg",
+            },
+            green: {
+              base: "bg-green-50 border-green-200 text-green-700 hover:bg-green-100",
+              active: "bg-green-700 text-white border-green-700 shadow-lg",
+            },
+            red: {
+              base: "bg-red-50 border-red-200 text-red-700 hover:bg-red-100",
+              active: "bg-red-700 text-white border-red-700 shadow-lg",
+            },
+            gray: {
+              base: "bg-gray-200 border-gray-400 text-gray-800 hover:bg-gray-300",
+              active: "bg-gray-700 text-white border-gray-700 shadow-lg",
+            },
+          };
+
+          const styles = colorStyles[btn.color] || colorStyles.gray;
+
           return (
             <button
               key={btn.id}
               onClick={() => onFiltroChange(btn.id)}
               className={`rounded-lg p-3 border font-semibold transition-all duration-200 ${
-                isActive ? activeColors : baseColors
+                isActive ? styles.active : styles.base
               }`}
             >
               <div className="text-xs uppercase tracking-wide">{btn.label}</div>
@@ -149,23 +126,44 @@ const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
         })}
       </div>
 
+      {/* 📱 Versión móvil (Tailwind Purge-safe) */}
       <div className="sm:hidden grid grid-cols-2 gap-1.5 mb-2 px-3 text-[12px] font-semibold text-gray-700 text-center">
         {botones.map((btn) => {
           const isActive = filtro === btn.id;
-          const colors = isActive
-            ? `bg-${btn.color}-700 text-white`
-            : `bg-${btn.color}-100 text-${btn.color}-700`;
+
+          // Mapeo de estilos para móvil
+          const mobileColorStyles: {
+            [key: string]: { base: string; active: string };
+          } = {
+            blue: {
+              base: "bg-blue-100 text-blue-700 border-blue-300",
+              active: "bg-blue-700 text-white border-blue-700",
+            },
+            green: {
+              base: "bg-green-100 text-green-700 border-green-300",
+              active: "bg-green-700 text-white border-green-700",
+            },
+            red: {
+              base: "bg-red-100 text-red-700 border-red-300",
+              active: "bg-red-700 text-white border-red-700",
+            },
+            gray: {
+              base: "bg-gray-100 text-gray-700 border-gray-300",
+              active: "bg-gray-700 text-white border-gray-700",
+            },
+          };
+
+          const styles = mobileColorStyles[btn.color] || mobileColorStyles.gray;
 
           return (
             <button
               key={btn.id}
               onClick={() => onFiltroChange(btn.id)}
-              className={`flex justify-between items-center w-full px-4 py-2 rounded-full border border-${btn.color}-300 shadow-sm transition-all duration-200 ${colors}`}
+              className={`flex justify-between items-center w-full px-4 py-2 rounded-full border shadow-sm transition-all duration-200 ${
+                isActive ? styles.active : styles.base
+              }`}
             >
-              {/* 🔹 Texto a la izquierda */}
               <span className="text-left">{btn.label}</span>
-
-              {/* 🔸 Número a la derecha */}
               <span className="text-right font-bold text-[13px] opacity-90">
                 {btn.value}
               </span>

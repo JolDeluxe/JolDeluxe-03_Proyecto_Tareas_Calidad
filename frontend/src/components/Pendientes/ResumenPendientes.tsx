@@ -1,10 +1,9 @@
-// src/components/Pendientes/ResumenPendientes.tsx
+// 📍 src/components/Pendientes/ResumenPendientes.tsx
 
 import React, { useState, useEffect } from "react";
-// 1. Importa tu NUEVO servicio
 import { tareasService } from "../../api/tareas.service";
-// 2. Importa el tipo (ajusta la ruta si es necesario)
 import type { Tarea } from "../../types/tarea";
+import type { Usuario } from "../../types/usuario"; // 1. Importa Usuario
 
 // ... (El componente Dot SVG se queda igual) ...
 const Dot: React.FC<{ className?: string; title?: string }> = ({
@@ -21,45 +20,100 @@ const Dot: React.FC<{ className?: string; title?: string }> = ({
   </svg>
 );
 
-const ResumenPendientes: React.FC = () => {
+// 🔹 1. AÑADIMOS EL HOOK 'useMediaQuery' (lg = 1024px)
+const useMediaQuery = (query: string) => {
+  // Asegurarse de que window exista (para SSR)
+  const [matches, setMatches] = useState(
+    typeof window !== "undefined" ? window.matchMedia(query).matches : false
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const listener = () => setMatches(media.matches);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
+  }, [query]);
+
+  return matches;
+};
+
+// 2. Define la interfaz de Props
+interface Props {
+  user: Usuario | null;
+}
+
+// 3. Aplica la interfaz y desestructura 'user'
+const ResumenPendientes: React.FC<Props> = ({ user }) => {
   const [totalPendientes, setTotalPendientes] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // 🔹 FUNCIÓN CENTRAL DE CARGA DE DATOS (MODIFICADA)
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+
   const fetchPendientes = async () => {
+    // 4. Si no hay usuario, no hacemos nada
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      // 3. Llama al método del servicio
+      setLoading(true);
       const todasLasTareas = await tareasService.getAll();
 
-      // 4. Filtra por estatus "PENDIENTE"
-      // (Usamos el tipo Tarea, por lo que comparamos directamente)
-      const pendientes = todasLasTareas.filter(
-        (t: Tarea) => t.estatus === "PENDIENTE"
-      );
+      // 5. Define los roles que ven todo
+      const rolesDeGestion = ["SUPER_ADMIN", "ADMIN", "ENCARGADO"];
+      const esRolGestion = user.rol ? rolesDeGestion.includes(user.rol) : false;
+
+      // 6. Aplica el filtro condicional
+      const pendientes = todasLasTareas.filter((t: Tarea) => {
+        // Filtro base: siempre PENDIENTE
+        if (t.estatus !== "PENDIENTE") {
+          return false;
+        }
+
+        // Si es rol de gestión, se aprueba (ve todas las pendientes)
+        if (esRolGestion) {
+          return true;
+        }
+
+        // Si es USUARIO o INVITADO, filtra por sus tareas
+        // (Usamos resp.id, como corregimos antes)
+        return t.responsables.some((resp) => resp.id === user.id);
+      });
 
       setTotalPendientes(pendientes.length);
     } catch (error) {
       console.error("Error al cargar tareas pendientes:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 🔄 POLLING: (Sin cambios)
+  // 7. Agrega 'user' a las dependencias del useEffect
   useEffect(() => {
     const initialFetch = async () => {
-      setLoading(true);
       await fetchPendientes();
-      setLoading(false);
     };
 
     initialFetch();
 
-    const intervalId = setInterval(() => {
-      console.log("🔄 Recargando resumen de pendientes automáticamente...");
-      fetchPendientes();
-    }, 30000);
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    return () => clearInterval(intervalId);
-  }, []);
+    if (isDesktop) {
+      // Solo activa el intervalo si es escritorio
+      intervalId = setInterval(() => {
+        console.log("🔄 [Desktop] Recargando resumen de pendientes...");
+        fetchPendientes();
+      }, 30000);
+    }
+
+    // Limpieza
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [user, isDesktop]);
 
   return (
     <>
@@ -68,7 +122,10 @@ const ResumenPendientes: React.FC = () => {
         <div className="col-span-4 flex justify-center">
           <div className="bg-blue-100 border border-blue-400 rounded-lg p-2 text-center shadow-sm w-full max-w-md">
             <div className="text-md font-semibold text-blue-800">
-              Total de Pendientes
+              {/* 8. Título condicional (opcional, pero coherente) */}
+              {user?.rol === "USUARIO" || user?.rol === "INVITADO"
+                ? "Mis Pendientes"
+                : "Total Pendientes"}
             </div>
             <div className="text-2xl font-extrabold text-blue-900">
               {loading ? "..." : totalPendientes}
@@ -88,7 +145,6 @@ const ResumenPendientes: React.FC = () => {
           shadow-sm bg-blue-100 text-blue-700
         `}
         >
-          {/* 🔹 Texto a la izquierda (con tu componente Dot) */}
           <span
             className="
           text-center font-semibold 
@@ -96,16 +152,14 @@ const ResumenPendientes: React.FC = () => {
           md:text-[18px]
           flex items-center gap-1.5"
           >
-            {/* Usamos 'text-blue-700' para que la bolita combine */}
             Pendientes
           </span>
 
-          {/* 🔸 Número a la derecha */}
           <span
             className="text-right font-bold 
           text-[15px]
           md:text-[19px]
-           opacity-90"
+            opacity-90"
           >
             {loading ? "..." : totalPendientes}
           </span>

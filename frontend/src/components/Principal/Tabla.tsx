@@ -17,6 +17,7 @@ interface TablaProps {
   query: string;
   tareas: Tarea[];
   loading: boolean;
+  user: Usuario | null;
 }
 
 const formateaFecha = (fecha?: Date | string | null): string => {
@@ -70,6 +71,7 @@ const Tabla: React.FC<TablaProps> = ({
   query,
   tareas,
   loading,
+  user,
 }) => {
   const [modalImagenes, setModalImagenes] = useState<ImagenTarea[] | null>(
     null
@@ -99,12 +101,10 @@ const Tabla: React.FC<TablaProps> = ({
     const pasaFecha = filtrarPorFecha(t.fechaRegistro);
 
     const pasaResponsable =
-      responsable === "Todos" || // Si el filtro es "Todos", pasa
-      (t.responsables && // 1. Chequeo de seguridad
+      responsable === "Todos" ||
+      (t.responsables &&
         t.responsables.some(
-          // 2. Usamos el tipo 'ResponsableLimpio' que SÍ tienes
           (responsableObj: ResponsableLimpio) =>
-            // 3. Comparamos ID con ID
             responsableObj.id.toString() === responsable
         ));
 
@@ -516,6 +516,40 @@ const Tabla: React.FC<TablaProps> = ({
                     </p>
                   </div>
 
+                  {row.fechaConclusion && (
+                    <p
+                      className={`mt-2 text-xs flex items-center ${
+                        retrasada
+                          ? "text-red-600 font-semibold"
+                          : "text-gray-700"
+                      }`}
+                    >
+                      <span className="font-semibold text-gray-700">
+                        Conclusión:
+                      </span>{" "}
+                      <span className="ml-1">
+                        {/* ✅ 9. CORRECCIÓN: La función ya acepta string | Date */}
+                        {formateaFecha(row.fechaConclusion)}
+                      </span>
+                      {retrasada && (
+                        <span className="ml-1 inline-flex items-center">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            className="w-3.5 h-3.5 text-red-500"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M12 2.25a9.75 9.75 0 1 1 0 19.5 9.75 9.75 0 0 1 0-19.5Zm0 1.5a8.25 8.25 0 1 0 0 16.5 8.25 8.25 0 0 0 0-16.5Zm.75 4.5a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h3.75a.75.75 0 0 0 0-1.5h-3V8.25Z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </span>
+                      )}
+                    </p>
+                  )}
+
                   {/* 🔽 Collapse — historial de cambios */}
                   {row.historialFechas && row.historialFechas.length > 0 && (
                     <details className="mt-3 text-xs transition-all duration-300 open:pb-2">
@@ -572,39 +606,7 @@ const Tabla: React.FC<TablaProps> = ({
                       </div>
                     </details>
                   )}
-                  {row.fechaConclusion && (
-                    <p
-                      className={`mt-2 text-xs flex items-center ${
-                        retrasada
-                          ? "text-red-600 font-semibold"
-                          : "text-gray-700"
-                      }`}
-                    >
-                      <span className="font-semibold text-gray-700">
-                        Conclusión:
-                      </span>{" "}
-                      <span className="ml-1">
-                        {/* ✅ 9. CORRECCIÓN: La función ya acepta string | Date */}
-                        {formateaFecha(row.fechaConclusion)}
-                      </span>
-                      {retrasada && (
-                        <span className="ml-1 inline-flex items-center">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="w-3.5 h-3.5 text-red-500"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M12 2.25a9.75 9.75 0 1 1 0 19.5 9.75 9.75 0 0 1 0-19.5Zm0 1.5a8.25 8.25 0 1 0 0 16.5 8.25 8.25 0 0 0 0-16.5Zm.75 4.5a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h3.75a.75.75 0 0 0 0-1.5h-3V8.25Z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        </span>
-                      )}
-                    </p>
-                  )}
+
                   {row.imagenes && row.imagenes.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-200 flex justify-center">
                       <button

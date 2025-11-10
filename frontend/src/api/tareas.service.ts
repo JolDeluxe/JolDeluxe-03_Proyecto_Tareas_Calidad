@@ -62,4 +62,10 @@ export const tareasService = {
     const { data } = await api.patch(`/tareas/${id}/complete`);
     return data;
   },
+
+  cancel: async (id: number): Promise<Tarea> => {
+    // Usamos PATCH para consistencia, aunque PUT también sería válido
+    const { data } = await api.patch(`/tareas/${id}/cancel`);
+    return data;
+  },
 };

@@ -13,7 +13,7 @@ import Admin from "./pages/Admin";
 import PrivateRoute from "./components/PrivateRoute";
 import PublicRoute from "./components/PublicRoute";
 import LoginPage from "./pages/LoginPage";
-import { authService } from "./api/auth.service";
+import { authService } from "./api/auth.service"; // 2. Importar el servicio de auth
 import type { Usuario } from "./types/usuario";
 
 // 4. AppLayout se convierte en el componente "inteligente"
@@ -28,56 +28,42 @@ const AppLayout: React.FC = () => {
       const token = localStorage.getItem("token");
       if (token) {
         try {
-          // Llamamos al servicio 'authService.verify'
           const res = await authService.verify();
           if (res.valid && res.usuario) {
-            setUser(res.usuario); // ✅ Token válido, guardamos el usuario
+            setUser(res.usuario);
           }
         } catch (error) {
-          // El token era inválido o expiró
           console.error("Error en la verificación automática:", error);
-          localStorage.removeItem("token"); // Limpiamos el token malo
+          localStorage.removeItem("token");
         }
       }
-      // Si no hay token, 'user' simplemente se queda 'null'
-      setLoading(false); // Terminamos de cargar
+      setLoading(false);
     };
 
     verifyUser();
-  }, []); // El array vacío [] asegura que esto solo se ejecute UNA VEZ
+  }, []);
 
-  // 7. Mostrar un estado de "Cargando..." mientras se verifica el token
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
         <p className="text-lg text-gray-600">Cargando aplicación...</p>
-        {/* Aquí podrías poner un spinner o logo */}
       </div>
     );
   }
 
-  // 8. Una vez cargado, renderizar el Layout y las rutas
   return (
-    // 9. Pasamos el 'user' al Layout (para que el Header lo reciba)
     <Layout user={user}>
       <Routes>
         <Route path="/" element={<Navigate to="/pendientes" replace />} />
-
-        {/* 10. Pasamos 'user' explícitamente a CADA ruta */}
-        {/* Tu 'Principal' ya lo acepta, por eso el error estaba aquí */}
         <Route path="/todas" element={<Principal user={user} />} />
-
-        {/* ❗️ AVISO: También tendrás que pasar 'user' a estas rutas */}
         <Route path="/pendientes" element={<Pendientes user={user} />} />
         <Route path="/admin" element={<Admin user={user} />} />
-
         <Route path="*" element={<Navigate to="/pendientes" replace />} />
       </Routes>
     </Layout>
   );
 };
 
-// --- El resto de tu archivo App.tsx (sin cambios) ---
 function App() {
   return (
     <Router>

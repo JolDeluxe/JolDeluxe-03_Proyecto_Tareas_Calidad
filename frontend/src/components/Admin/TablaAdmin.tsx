@@ -1,12 +1,17 @@
+// 📍 src/components/Admin/TablaAdmin.tsx
+
 import React, { useState } from "react";
-import { api } from "../data/api";
+// 1. 🚀 Importar servicios y tipos
+import { tareasService } from "../../api/tareas.service";
 import type {
   Tarea,
   HistorialFecha,
   Estatus,
   ImagenTarea,
 } from "../../types/tarea";
-import ModalGaleria from "../Principal/ModalGaleria"; // Reutilizamos el modal
+import type { Usuario } from "../../types/usuario"; // 👈 Importar Usuario
+import { Rol } from "../../types/usuario"; // 👈 Importar Rol
+import ModalGaleria from "../Principal/ModalGaleria";
 import Acciones from "./Acciones";
 import ModalEditar from "./ModalEditar";
 import ModalEliminar from "./ModalEliminar";
@@ -15,42 +20,32 @@ import { toast } from "react-toastify";
 
 interface TablaProps {
   filtro: string;
-  // year: number;
-  // month: number;
-  responsable: string;
+  responsable: string; // Sigue siendo string (ID o "Todos")
   query: string;
-  // 👇 PASO 2.1: AÑADIR LAS NUEVAS PROPS
   tareas: Tarea[];
   loading: boolean;
   onRecargarTareas: () => void;
+  user: Usuario | null; // 👈 2. Recibir 'user' como prop
 }
 
-// ... (formateaFecha, getRowClass, isRetrasada se quedan igual) ...
-// 🔹 Utilidad para formatear fechas Date → dd/mm/yyyy
-//    (Renombrada de formatDate a formateaFecha para consistencia)
-const formateaFecha = (fecha?: Date | null): string => {
-  if (!fecha) return "";
+// 3. 🛠️ Utilidad de fecha robusta (maneja string o Date)
+const formateaFecha = (fechaInput?: Date | string | null): string => {
+  if (!fechaInput) return "";
   try {
-    // Verifica si ya es un objeto Date válido
-    if (!(fecha instanceof Date) || isNaN(fecha.getTime())) {
-      // Si no lo es, intenta convertirlo (puede venir de la API como string)
-      const parsedDate = new Date(fecha as any);
-      if (isNaN(parsedDate.getTime())) return ""; // Si falla, retorna vacío
-      fecha = parsedDate;
-    }
+    const fecha = new Date(fechaInput);
+    // Verificar si la fecha es válida
+    if (isNaN(fecha.getTime())) return "";
     const d = String(fecha.getDate()).padStart(2, "0");
     const m = String(fecha.getMonth() + 1).padStart(2, "0");
     const y = fecha.getFullYear();
     return `${d}/${m}/${y}`;
   } catch {
-    return ""; // En caso de cualquier error inesperado
+    return "";
   }
 };
 
-// 🎨 Colores por estatus
-// 💡 3. Usa el tipo 'Estatus' importado
+// 🎨 Colores por estatus (sin cambios)
 const getRowClass = (status: Estatus): string => {
-  // Ya no necesita normalizar ni includes, compara directamente
   switch (status) {
     case "CONCLUIDA":
       return "bg-green-50 border-l-4 border-green-500";
@@ -61,63 +56,49 @@ const getRowClass = (status: Estatus): string => {
   }
 };
 
-// 🧮 Verifica si se concluyó después de la fecha límite
-// 💡 4. Recibe y compara objetos Date
+// 4. 🛠️ Utilidad de retraso robusta (maneja string o Date)
 const isRetrasada = (
-  limite?: Date | null,
-  conclusion?: Date | null
+  limiteInput?: Date | string | null,
+  conclusionInput?: Date | string | null
 ): boolean => {
-  if (!limite || !conclusion) return false;
-  // Asegurarse que son Date válidos antes de comparar
-  if (
-    !(limite instanceof Date) ||
-    isNaN(limite.getTime()) ||
-    !(conclusion instanceof Date) ||
-    isNaN(conclusion.getTime())
-  ) {
+  if (!limiteInput || !conclusionInput) return false;
+  try {
+    const limite = new Date(limiteInput);
+    const conclusion = new Date(conclusionInput);
+    // Verificar si ambas fechas son válidas
+    if (isNaN(limite.getTime()) || isNaN(conclusion.getTime())) return false;
+
+    // Comparar solo la fecha (ignorando la hora)
+    limite.setHours(0, 0, 0, 0);
+    conclusion.setHours(0, 0, 0, 0);
+
+    return conclusion > limite;
+  } catch {
     return false;
   }
-  return conclusion > limite;
 };
 
-// 👇 PASO 2.2: RECIBIR LAS NUEVAS PROPS
 const TablaAdmin: React.FC<TablaProps> = ({
   filtro,
-  // year,
-  // month,
   responsable,
   query,
-  tareas, // <--- Nueva
-  loading, // <--- Nueva
-  onRecargarTareas, // <--- Nueva
+  tareas,
+  loading,
+  onRecargarTareas,
+  user, // 👈 5. Recibir 'user'
 }) => {
-  // ❌ PASO 2.3: QUITAR ESTOS ESTADOS
-  // const [tareas, setTareas] = useState<Tarea[]>([]);
-  // const [loading, setLoading] = useState(true);
-
-  // (Estos estados de modales se quedan)
+  // (Estados de modales se quedan)
   const [openModalEditar, setOpenModalEditar] = useState(false);
   const [openModalEliminar, setOpenModalEliminar] = useState(false);
   const [openModalAceptar, setOpenModalAceptar] = useState(false);
   const [tareaSeleccionada, setTareaSeleccionada] = useState<Tarea | null>(
     null
   );
-
-  const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
-
   const [modalImagenes, setModalImagenes] = useState<ImagenTarea[] | null>(
     null
   );
 
-  // ❌ PASO 2.4: QUITAR TODO EL useEffect DE fetchTareas
-  // useEffect(() => {
-  //   const fetchTareas = async () => {
-  //     ...
-  //   };
-  //   fetchTareas();
-  // }, []);
-
-  // 🧩 Modales (Estas funciones se quedan)
+  // 🧩 Modales (Funciones se quedan)
   const abrirModalAceptar = (tarea: Tarea) => {
     setTareaSeleccionada(tarea);
     setOpenModalAceptar(true);
@@ -133,37 +114,15 @@ const TablaAdmin: React.FC<TablaProps> = ({
     setOpenModalEliminar(true);
   };
 
+  // 7. 🚀 Acción de confirmar CON SERVICIO
   const confirmarFinalizacion = async () => {
     if (!tareaSeleccionada) return;
 
     try {
-      // ... (Lógica de payload y api.put se queda igual) ...
-      const payload = {
-        estatus: "CONCLUIDA" as Estatus,
-      };
-      const res = await api.put<Tarea>(
-        `/tareas/${tareaSeleccionada.id}`,
-        payload
-      );
-
-      // (Toda la lógica de conversión de fechas se puede borrar,
-      // pero la dejaremos por si la necesitas en ModalEditar)
-
-      // ❌ PASO 2.5: REEMPLAZAR 'setTareas'
-      // setTareas((tareasAnteriores) =>
-      //   tareasAnteriores.map((t) =>
-      //     t.id === tareaActualizadaConFechas.id
-      //       ? tareaActualizadaConFechas
-      //       : t
-      //   )
-      // );
-
-      // ✅ POR LA LLAMADA AL PADRE:
+      await tareasService.complete(tareaSeleccionada.id);
       onRecargarTareas();
-
-      // 6. Cerramos el modal de confirmación
       setOpenModalAceptar(false);
-      setTareaSeleccionada(null); // Limpiamos la selección
+      setTareaSeleccionada(null);
       toast.success("¡Tarea completada con éxito!");
     } catch (error) {
       console.error("Error al finalizar la tarea:", error);
@@ -171,82 +130,44 @@ const TablaAdmin: React.FC<TablaProps> = ({
     }
   };
 
+  // 8. 🚀 Acción de eliminar CON SERVICIO
   const confirmarEliminacion = async () => {
     if (!tareaSeleccionada) return;
-
     try {
-      // ... (Lógica de payload y api.put se queda igual) ...
-      const payload = {
-        estatus: "CANCELADA" as Estatus,
-      };
-      const res = await api.put<Tarea>(
-        `/tareas/${tareaSeleccionada.id}`,
-        payload
-      );
+      // 🚀 ¡Llamada al nuevo servicio!
+      await tareasService.cancel(tareaSeleccionada.id);
 
-      // ❌ PASO 2.6: REEMPLAZAR 'setTareas'
-      // setTareas((tareasAnteriores) =>
-      //   tareasAnteriores.map((t) =>
-      //     t.id === tareaActualizadaConFechas.id
-      //       ? tareaActualizadaConFechas
-      //       : t
-      //   )
-      // );
-
-      // ✅ POR LA LLAMADA AL PADRE:
       onRecargarTareas();
-
-      // 6. Cerramos modal y mostramos toast de éxito
       setOpenModalEliminar(false);
       setTareaSeleccionada(null);
-      toast.success("Tarea cancelada correctamente."); // ¡Toast de éxito!
+      toast.success("Tarea cancelada correctamente.");
     } catch (error) {
       console.error("Error al cancelar la tarea:", error);
       toast.error("Error al cancelar la tarea. Intenta de nuevo.");
     }
   };
 
-  // 📂 Aplicar filtros
-  // (Esta función ahora usa 'tareas' de las props, ¡no hay que cambiar nada!)
+  // 9. 🚀 Lógica de filtro (Esta lógica es correcta)
   const tareasFiltradas = tareas.filter((t) => {
     const estatus = t.estatus;
 
-    // Comparamos directamente con los valores del tipo Estatus
     const pasaEstatus =
-      filtro.toUpperCase() === "TOTAL" || // Mantenemos toUpperCase para el prop 'filtro'
+      filtro.toUpperCase() === "TOTAL" ||
       (filtro.toUpperCase() === "PENDIENTES" && estatus === "PENDIENTE") ||
       (filtro.toUpperCase() === "CONCLUIDAS" && estatus === "CONCLUIDA") ||
       (filtro.toUpperCase() === "CANCELADAS" && estatus === "CANCELADA");
 
-    // 💡 9. El filtro de fecha usa métodos de Date
-    // let pasaFecha = true;
-    // if (
-    //   t.fechaRegistro &&
-    //   t.fechaRegistro instanceof Date &&
-    !isNaN(t.fechaRegistro.getTime());
-    // ) {
-    //   const y = t.fechaRegistro.getFullYear();
-    //   const m = t.fechaRegistro.getMonth() + 1;
-    //   if (y !== year) pasaFecha = false;
-    //   if (month !== 0 && m !== month) pasaFecha = false;
-    // } else if (year !== 0 || month !== 0) {
-    //   // Si no hay fecha de registro válida y se está filtrando por fecha, no pasa
-    //   pasaFecha = false;
-    // }
-
     const pasaResponsable =
-      responsable === "Todos" || t.responsable === responsable;
+      responsable === "Todos" ||
+      t.responsables.some((r) => r.id.toString() === responsable);
 
     const texto = `${t.tarea} ${t.observaciones || ""}`.toLowerCase();
     const pasaBusqueda =
       query.trim() === "" || texto.includes(query.toLowerCase());
 
-    // return pasaEstatus && pasaFecha && pasaResponsable && pasaBusqueda;
     return pasaEstatus && pasaResponsable && pasaBusqueda;
   });
 
-  // ⏳ Mostrar carga
-  // (Esta función ahora usa 'loading' de las props, ¡no hay que cambiar nada!)
   if (loading) {
     return (
       <div className="flex justify-center items-center h-32 text-gray-500 italic">
@@ -255,31 +176,29 @@ const TablaAdmin: React.FC<TablaProps> = ({
     );
   }
 
-  // (Todo el JSX de retorno se queda exactamente igual)
   return (
     <div className="w-full text-sm font-sans pb-0.5">
       {tareasFiltradas.length > 0 ? (
         <>
           {/* 💻 VISTA ESCRITORIO */}
-          <div className="hidden md:block max-h-[calc(100vh-280px)] overflow-y-auto overflow-x-auto rounded-lg border border-gray-300">
+          <div className="hidden lg:block max-h-[calc(100vh-280px)] overflow-y-auto overflow-x-auto rounded-lg border border-gray-300">
             <table className="w-full text-sm font-sans">
               <thead className="bg-gray-100 text-black text-xs uppercase sticky top-0 z-20 shadow-inner">
-                {/* Encabezados sin cambios */}
                 <tr>
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
                     ID
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300">
                     Tarea
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300">
                     Observaciones
                   </th>
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
                     Asignado por
                   </th>
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
-                    Responsable
+                    Responsable(s)
                   </th>
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
                     Prioridad
@@ -303,29 +222,36 @@ const TablaAdmin: React.FC<TablaProps> = ({
               </thead>
 
               <tbody className="divide-y divide-gray-200">
-                {/* 💡 10. Mapea sobre 'tareasFiltradas' usando el tipo Tarea */}
                 {tareasFiltradas.map((row: Tarea) => {
-                  // <-- Abre llave {
-
-                  // --- CÁLCULOS PARA ESTA FILA ---
                   const hoy = new Date();
+                  hoy.setHours(0, 0, 0, 0);
+
                   const fechaLimiteObj =
                     row.historialFechas && row.historialFechas.length > 0
-                      ? row.historialFechas[row.historialFechas.length - 1]
-                          .nuevaFecha! // Usamos ! porque si existe, asumimos que no es null
-                      : row.fechaLimite;
+                      ? new Date(
+                          row.historialFechas[
+                            row.historialFechas.length - 1
+                          ].nuevaFecha!
+                        )
+                      : row.fechaLimite
+                      ? new Date(row.fechaLimite)
+                      : null;
+
+                  if (fechaLimiteObj) fechaLimiteObj.setHours(0, 0, 0, 0);
+
                   const vencida =
                     fechaLimiteObj &&
                     fechaLimiteObj < hoy &&
-                    row.estatus !== "CONCLUIDA";
+                    row.estatus === "PENDIENTE";
+
                   const retrasada = isRetrasada(
-                    row.fechaLimite,
+                    fechaLimiteObj,
                     row.fechaConclusion
                   );
-                  // --- FIN CÁLCULOS ---
+
+                  const fechaLimiteFinalStr = formateaFecha(fechaLimiteObj);
 
                   return (
-                    // <-- Return de la fila
                     <tr
                       key={row.id}
                       className={`${getRowClass(row.estatus)} transition`}
@@ -335,15 +261,31 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </td>
                       <td className="px-3 py-3 text-left font-semibold">
                         {row.tarea}
+                        {row.imagenes && row.imagenes.length > 0 && (
+                          <button
+                            onClick={() => setModalImagenes(row.imagenes)}
+                            className="ml-2 inline-flex align-middle text-blue-600 hover:text-blue-800"
+                            title="Ver imágenes"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 -960 960 960"
+                              fill="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm40-80h480L570-480 450-320l-90-120-120 160Zm-40 80v-560 560Z" />
+                            </svg>
+                          </button>
+                        )}
                       </td>
                       <td className="px-3 py-3 text-left text-gray-700 italic">
                         {row.observaciones || ""}
                       </td>
                       <td className="px-3 py-3 text-center text-amber-800 font-semibold">
-                        {row.asignador}
+                        {row.asignador.nombre}
                       </td>
                       <td className="px-3 py-3 text-center text-blue-700 font-semibold">
-                        {row.responsable}
+                        {row.responsables.map((r) => r.nombre).join(", ")}
                       </td>
                       <td className="px-3 py-3 text-center font-semibold">
                         {row.urgencia === "ALTA" ? (
@@ -368,9 +310,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
                             row.historialFechas.length > 0
                               ? "justify-start"
                               : "justify-center h-full"
-                          } min-h-[50px]`} // Altura mínima ajustada si es necesario
+                          } min-h-[50px]`}
                         >
-                          {/* Muestra la fecha límite */}
                           <p
                             className={`font-semibold ${
                               vencida
@@ -378,9 +319,10 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                 : "text-gray-800"
                             }`}
                           >
-                            {formateaFecha(fechaLimiteObj)}
+                            {fechaLimiteFinalStr}
                             {vencida && (
                               <span className="ml-1 inline-flex items-center">
+                                {/* SVG Vencida */}
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
                                   viewBox="0 0 24 24"
@@ -397,7 +339,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
                             )}
                           </p>
 
-                          {/* 🔽 Collapse — historial de cambios (SI EXISTE) 🔽 */}
                           {row.historialFechas &&
                             row.historialFechas.length > 0 && (
                               <details
@@ -408,6 +349,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                   className="text-blue-600 font-semibold cursor-pointer hover:underline select-none list-none flex items-center justify-center gap-1"
                                   style={{ outline: "none" }}
                                 >
+                                  {/* SVG Historial */}
                                   <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     className="w-3 h-3 text-blue-500 transition-transform duration-200 group-open:rotate-180"
@@ -425,7 +367,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                   Ver historial ({row.historialFechas.length})
                                 </summary>
 
-                                {/* Contenido del historial */}
                                 <div className="mt-2 text-gray-700 bg-white/70 rounded-md p-2 border border-gray-200 text-left">
                                   <ul className="space-y-1">
                                     {row.historialFechas.map((h, i) => (
@@ -450,7 +391,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                           {formateaFecha(h.nuevaFecha)}
                                         </p>
                                         <p className="italic text-gray-600">
-                                          Por: {h.modificadoPor}
+                                          Por: {h.modificadoPor.nombre}
                                         </p>
                                         {h.motivo && (
                                           <p className="italic text-gray-600">
@@ -469,9 +410,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
 
                       <td
                         className={`px-3 py-3 text-center ${
-                          isRetrasada(row.fechaLimite, row.fechaConclusion)
-                            ? "text-red-600 font-bold"
-                            : "text-gray-800"
+                          retrasada ? "text-red-600 font-bold" : "text-gray-800"
                         }`}
                       >
                         {row.fechaConclusion
@@ -491,12 +430,15 @@ const TablaAdmin: React.FC<TablaProps> = ({
                           {row.estatus}
                         </span>
                       </td>
-                      <Acciones
-                        estatus={row.estatus}
-                        onCompletar={() => abrirModalAceptar(row)}
-                        onEditar={() => abrirModalEditar(row)}
-                        onBorrar={() => abrirModalEliminar(row)}
-                      />
+                      {user && (
+                        <Acciones
+                          tarea={row}
+                          user={user}
+                          onCompletar={() => abrirModalAceptar(row)}
+                          onEditar={() => abrirModalEditar(row)}
+                          onBorrar={() => abrirModalEliminar(row)}
+                        />
+                      )}
                     </tr>
                   );
                 })}
@@ -505,58 +447,77 @@ const TablaAdmin: React.FC<TablaProps> = ({
           </div>
 
           {/* 📱 VISTA MÓVIL */}
-          <div className="block md:hidden space-y-3 pb-0.5">
+          <div className="grid lg:hidden grid-cols-1 md:grid-cols-2 gap-3 p-2 items-start">
             {tareasFiltradas.map((row: Tarea) => {
-              // 💡 Lógica de fechas movida aquí para reutilizarla
+              // Lógica de fechas (similar a la de escritorio)
               const hoy = new Date();
-              // Obtener el objeto Date final
+              hoy.setHours(0, 0, 0, 0);
+
               const fechaLimiteObj =
                 row.historialFechas && row.historialFechas.length > 0
                   ? row.historialFechas[row.historialFechas.length - 1]
                       .nuevaFecha
                   : row.fechaLimite;
 
-              // Comparar objetos Date
-              const vencida =
-                fechaLimiteObj &&
-                fechaLimiteObj < hoy &&
-                row.estatus !== "CONCLUIDA"; // Comparar con Estatus.CONCLUIDA
+              const fechaLimiteDate =
+                typeof fechaLimiteObj === "string"
+                  ? new Date(fechaLimiteObj)
+                  : fechaLimiteObj;
 
-              // isRetrasada compara objetos Date
+              let vencida = false;
+              if (
+                fechaLimiteDate instanceof Date &&
+                !isNaN(fechaLimiteDate.getTime())
+              ) {
+                const fechaLimiteNormalizada = new Date(fechaLimiteDate);
+                fechaLimiteNormalizada.setHours(0, 0, 0, 0); // Normaliza la fecha límite
+
+                vencida =
+                  fechaLimiteNormalizada < hoy && row.estatus !== "CONCLUIDA";
+              }
+
               const retrasada = isRetrasada(
                 row.fechaLimite,
                 row.fechaConclusion
               );
 
+              const fechaLimiteFinalStr = formateaFecha(fechaLimiteObj);
+
+              // 🚀 ✅ SOLUCIÓN (VISTA MÓVIL):
+              //   Calculamos los permisos aquí también para que la lógica sea IDÉNTICA
+              const puedeValidar =
+                user &&
+                (user.rol === Rol.SUPER_ADMIN ||
+                  user.rol === Rol.ADMIN ||
+                  (user.rol === Rol.ENCARGADO && row.asignadorId === user.id));
+
+              const puedeCancelar =
+                user &&
+                (user.rol === Rol.SUPER_ADMIN ||
+                  user.rol === Rol.ADMIN ||
+                  (user.rol === Rol.ENCARGADO && row.asignadorId === user.id));
+
               return (
                 <div
                   key={row.id}
-                  // getRowClass recibe Estatus
                   className={`border border-gray-300 shadow-sm p-4 ${getRowClass(
                     row.estatus
-                  )} rounded-md select-none`}
+                  )} rounded-md`}
                 >
-                  {/* 🔹 ID y título */}
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-mono font-semibold">
-                      #{row.id}
-                    </span>
-                  </div>
-
                   <div className="flex justify-between items-start mb-1">
                     <h3 className="font-bold text-gray-800 text-base leading-snug">
                       {row.tarea}
                     </h3>
                     <span
-                      className={`px-2 py-0.5 text-xs font-semibold ${
+                      className={`flex-shrink-0 px-2 py-0.5 text-xs font-semibold ${
                         row.urgencia === "ALTA"
-                          ? "text-red-700"
+                          ? "bg-red-100 text-red-700 border border-red-300 rounded-full"
                           : row.urgencia === "MEDIA"
-                          ? "text-amber-700"
-                          : "text-green-700" // Urgencia BAJA
+                          ? "bg-amber-100 text-amber-700 border border-amber-300 rounded-full"
+                          : "bg-green-100 text-green-700 border border-green-300 rounded-full"
                       }`}
                     >
-                      {/* Mostrar el valor literal (Alta, Media, Baja) */}
+                      {/* Mostramos el valor literal */}
                       {row.urgencia === "ALTA"
                         ? "Alta"
                         : row.urgencia === "MEDIA"
@@ -565,14 +526,13 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     </span>
                   </div>
 
-                  {/* 🔸 Información general */}
                   <div className="text-xs text-gray-600 space-y-1">
                     <p>
                       <span className="font-semibold text-gray-700">
                         Asignado por:
                       </span>{" "}
                       <span className="text-amber-700 font-semibold">
-                        {row.asignador}
+                        {row.asignador.nombre}
                       </span>
                     </p>
                     <p>
@@ -580,7 +540,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         Responsable:
                       </span>{" "}
                       <span className="text-blue-700 font-semibold">
-                        {row.responsable}
+                        {row.responsables.map((r) => r.nombre).join(", ")}
                       </span>
                     </p>
                     <p>
@@ -590,7 +550,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       {formateaFecha(row.fechaRegistro)}
                     </p>
 
-                    {/* 📆 Fecha límite con validación */}
                     <p className="flex items-center text-xs">
                       <span className="font-semibold text-gray-700">
                         Límite:
@@ -600,10 +559,11 @@ const TablaAdmin: React.FC<TablaProps> = ({
                           vencida ? "text-red-600" : "text-gray-800"
                         }`}
                       >
-                        {formateaFecha(fechaLimiteObj)}
+                        {fechaLimiteFinalStr}
                       </span>
                       {vencida && (
                         <span className="ml-1 inline-flex items-center">
+                          {/* SVG Vencida */}
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 24 24"
@@ -637,7 +597,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </span>
                     </p>
 
-                    {/* 🏁 Conclusión */}
                     {row.fechaConclusion && (
                       <p
                         className={`mt-2 text-xs flex items-center ${
@@ -654,6 +613,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         </span>
                         {retrasada && (
                           <span className="ml-1 inline-flex items-center">
+                            {/* SVG Retrasada */}
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
                               viewBox="0 0 24 24"
@@ -671,10 +631,10 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </p>
                     )}
 
-                    {/* 🔽 Collapse — historial de cambios */}
                     {row.historialFechas && row.historialFechas.length > 0 && (
                       <details className="mt-3 text-xs transition-all duration-300 open:pb-2">
                         <summary className="cursor-pointer select-none font-semibold text-blue-600 hover:underline flex items-center gap-1">
+                          {/* SVG Historial */}
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             className="w-3.5 h-3.5 text-blue-500 transition-transform duration-200 group-open:rotate-180"
@@ -717,7 +677,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                     {formateaFecha(h.nuevaFecha)}
                                   </p>
                                   <p className="italic text-gray-600">
-                                    Por: {h.modificadoPor}
+                                    Por: {h.modificadoPor.nombre}
                                   </p>
                                   {h.motivo && (
                                     <p className="italic text-gray-600">
@@ -733,16 +693,15 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     )}
                   </div>
 
-                  {/* 🔽 3. BOTÓN DE IMAGEN (Móvil) */}
                   {row.imagenes && row.imagenes.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="mt-3 pt-3 border-t border-gray-200 flex justify-center">
                       <button
                         onClick={() => setModalImagenes(row.imagenes)}
-                        className="inline-flex items-center gap-1.5 text-xs
-                                   font-semibold text-blue-600 hover:text-blue-800"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800"
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
+                          height="24px"
                           viewBox="0 -960 960 960"
                           fill="currentColor"
                           className="w-4 h-4"
@@ -754,12 +713,12 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     </div>
                   )}
 
-                  {/* ⚙️ Acciones */}
+                  {/* ⚙️ Acciones (Móvil) - LÓGICA CORREGIDA */}
                   <div className="flex justify-around items-center mt-4 pt-2 border-t border-gray-200 h-[46px]">
                     {row.estatus === "PENDIENTE" && (
                       <>
-                        {/* 🗑️ Cancelar — Solo ADMIN */}
-                        {usuario.rol === "ADMIN" && (
+                        {/* 🚀 BOTÓN CANCELAR (Ahora visible para todos) */}
+                        {puedeCancelar && (
                           <button
                             onClick={() => abrirModalEliminar(row)}
                             className="flex flex-col items-center text-red-700 hover:text-red-800 transition"
@@ -778,7 +737,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
                             </span>
                           </button>
                         )}
-                        {/* ✏️ Editar */}
+
+                        {/* 🚀 BOTÓN EDITAR (Visible para todos) */}
                         <button
                           onClick={() => abrirModalEditar(row)}
                           className="flex flex-col items-center text-amber-700 hover:text-amber-800 transition"
@@ -797,8 +757,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
                           </span>
                         </button>
 
-                        {/* ✅ Completar */}
-                        {usuario.rol === "ADMIN" && (
+                        {/* 🚀 BOTÓN VALIDAR (Usa la nueva lógica 'puedeValidar') */}
+                        {puedeValidar && (
                           <button
                             onClick={() => abrirModalAceptar(row)}
                             className="flex flex-col items-center text-green-700 hover:text-green-800 transition"
@@ -813,7 +773,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                               <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Z" />
                             </svg>
                             <span className="text-[11px] font-semibold">
-                              Hecha
+                              Validar
                             </span>
                           </button>
                         )}
@@ -864,8 +824,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
             <ModalEditar
               onClose={() => setOpenModalEditar(false)}
               tarea={tareaSeleccionada}
-              onTareaAgregada={onRecargarTareas}
-              // Asegúrate que ModalEditar acepte el tipo Tarea
+              onTareaActualizada={onRecargarTareas}
+              user={user}
             />
           )}
           {openModalEliminar && tareaSeleccionada && (

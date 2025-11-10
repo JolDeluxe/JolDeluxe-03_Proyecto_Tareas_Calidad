@@ -298,11 +298,10 @@ router.get(
     // 2. Obtener el usuario del token
     const user = req.user;
     if (!user) {
-      // Esto no debería pasar si verifyToken está activo, pero es una buena guarda
       return res.status(401).json({ error: "Usuario no autenticado" });
     }
 
-    // 3. Validar los query params opcionales (ej. ?estatus=PENDIENTE)
+    // 3. Validar los query params opcionales
     const queryParse = getTareasQuerySchema.safeParse(req.query);
     if (!queryParse.success) {
       return res.status(400).json({
@@ -318,37 +317,104 @@ router.get(
     if (estatus) where.estatus = estatus;
     if (asignadorId) where.asignadorId = asignadorId;
 
-    // 5. Aplicar filtros de AUTORIZACIÓN (Tus Reglas de Negocio)
-    if (user.rol === "SUPER_ADMIN") {
-      // "Dios": No se aplican filtros de scope.
-      // Si el SUPER_ADMIN usó un query param de 'departamentoId', se respeta.
-      if (departamentoId) where.departamentoId = departamentoId;
-      // Si usó un filtro de 'responsableId', se respeta.
-      if (responsableId)
-        where.responsables = { some: { usuarioId: responsableId } };
-    } else if (["ADMIN", "ENCARGADO", "USUARIO"].includes(user.rol)) {
-      // Roles de Depto: Se FUERZA el scope a su propio departamento.
-      if (!user.departamentoId) {
-        return res
-          .status(403)
-          .json({ error: "Tu usuario no está asignado a un departamento." });
-      }
-      // Sobreescribe cualquier filtro de depto que el usuario intente poner.
-      where.departamentoId = user.departamentoId;
+    // 🔹 LA CORRECCIÓN:
+    //    Creamos un array separado para las cláusulas 'AND'.
+    const andClauses: Prisma.TareaWhereInput[] = [];
 
-      // Aún pueden filtrar por responsable, pero DENTRO de su depto.
-      if (responsableId)
-        where.responsables = { some: { usuarioId: responsableId } };
+    // 5. Aplicar filtros de AUTORIZACIÓN (Tus Nuevas Reglas de Negocio)
+
+    // 🔹 Primero, el filtro de query 'responsableId'
+    //    (se ignora si es INVITADO, ya que ese rol lo sobreescribe)
+    if (responsableId && user.rol !== "INVITADO") {
+      // 🔹 Usamos .push() en nuestro array
+      andClauses.push({
+        responsables: { some: { usuarioId: responsableId } },
+      });
+    }
+
+    // -----------------------------------------------------------------
+    // 🔹 INICIO DE LA LÓGICA DE ROLES (Modificada para usar andClauses)
+    // -----------------------------------------------------------------
+    if (user.rol === "SUPER_ADMIN") {
+      // "Dios": Ve todo.
+      if (departamentoId) where.departamentoId = departamentoId;
+      // No se añaden más 'andClauses'
+    } else if (user.rol === "ADMIN") {
+      // ADMIN: Ve tareas de ENCARGADO, USUARIO, INVITADO en su depto.
+      if (!user.departamentoId) {
+        return res.status(403).json({ error: "Usuario sin departamento." });
+      }
+      where.departamentoId = user.departamentoId; // Filtro de depto
+
+      // 🔹 Usamos .push() en nuestro array
+      andClauses.push({
+        responsables: {
+          some: {
+            usuario: { rol: { in: ["ENCARGADO", "USUARIO", "INVITADO"] } },
+          },
+        },
+      });
+    } else if (user.rol === "ENCARGADO") {
+      // ENCARGADO: Ve tareas de USUARIO e INVITADO en su depto.
+      if (!user.departamentoId) {
+        return res.status(403).json({ error: "Usuario sin departamento." });
+      }
+      where.departamentoId = user.departamentoId; // Filtro de depto
+
+      // 🔹 Usamos .push() en nuestro array
+      andClauses.push({
+        responsables: {
+          some: {
+            usuario: { rol: { in: ["USUARIO", "INVITADO"] } },
+          },
+        },
+      });
+    } else if (user.rol === "USUARIO") {
+      // USUARIO: Ve tareas de otros USUARIOs en su depto O tareas propias.
+      if (!user.departamentoId) {
+        return res.status(403).json({ error: "Usuario sin departamento." });
+      }
+      where.departamentoId = user.departamentoId; // Filtro de depto
+
+      // 🔹 Usamos .push() en nuestro array
+      andClauses.push({
+        OR: [
+          {
+            // 1. Tareas donde al menos un responsable es USUARIO
+            responsables: {
+              some: {
+                usuario: { rol: "USUARIO" },
+              },
+            },
+          },
+          {
+            // 2. Tareas donde YO (el usuario logueado) soy responsable
+            responsables: {
+              some: {
+                usuarioId: user.id,
+              },
+            },
+          },
+        ],
+      });
     } else if (user.rol === "INVITADO") {
       // INVITADO: Se FUERZA el scope a solo sus tareas asignadas.
       // Sobreescribe cualquier filtro de responsable.
       where.responsables = { some: { usuarioId: user.id } };
 
-      // Aún puede filtrar por depto (ej. "Tareas de Calidad asignadas a mí")
+      // Aún puede filtrar por depto
       if (departamentoId) where.departamentoId = departamentoId;
     }
+    // -----------------------------------------------------------------
+    // 🔹 FIN DE LA LÓGICA DE ROLES
+    // -----------------------------------------------------------------
 
-    // 6. Ejecutar la consulta con el 'where' dinámico
+    // 🔹 Finalmente, asignamos el array 'AND' al 'where' si tiene contenido
+    if (andClauses.length > 0) {
+      where.AND = andClauses;
+    }
+
+    // 6. Ejecutar la consulta (El resto de tu código es correcto)
     const tareas = await prisma.tarea.findMany({
       where,
       include: {
@@ -361,7 +427,6 @@ router.get(
             },
           },
         },
-        // ✅ CAMBIO: Trae los arrays completos
         imagenes: {
           select: { id: true, url: true, fechaSubida: true },
         },
@@ -370,7 +435,7 @@ router.get(
             modificadoPor: { select: { id: true, nombre: true } },
           },
           orderBy: {
-            fechaCambio: "asc", // o 'desc'
+            fechaCambio: "asc",
           },
         },
       },
@@ -378,8 +443,6 @@ router.get(
     });
 
     // 7. Limpiar la respuesta (hacer 'responsables' un array plano)
-    // Transforma: { responsables: [ { usuario: {id: 1} } ] }
-    // En:         { responsables: [ {id: 1} ] }
     const tareasLimpio = tareas.map((t) => ({
       ...t,
       responsables: t.responsables.map((r) => r.usuario),
@@ -409,34 +472,85 @@ router.get(
 
     // 3. Construir la cláusula 'where' base
     const where: Prisma.TareaWhereInput = {
-      id: tareaId,
+      id: tareaId, // 🔹 Regla 1: El ID debe coincidir
     };
 
-    // 4. Aplicar lógica de permisos al 'where'
+    // 4. 🔹 Aplicar lógica de permisos EXACTA de GET /
+    //    Creamos un array separado para las cláusulas 'AND' de seguridad.
+    const andClauses: Prisma.TareaWhereInput[] = [];
+
     if (user.rol === "SUPER_ADMIN") {
-      // Sin filtro. 'where: { id: ... }' es suficiente.
-    } else if (["ADMIN", "ENCARGADO", "USUARIO"].includes(user.rol)) {
-      // Regla: Debe pertenecer a su departamento
+      // "Dios": Ve todo. No se añaden más filtros.
+    } else if (user.rol === "ADMIN") {
+      // ADMIN: Ve tareas de ENCARGADO, USUARIO, INVITADO en su depto.
       if (!user.departamentoId) {
-        return res
-          .status(403)
-          .json({ error: "Tu usuario no está asignado a un departamento." });
+        return res.status(403).json({ error: "Usuario sin departamento." });
       }
-      where.departamentoId = user.departamentoId;
+      andClauses.push({ departamentoId: user.departamentoId }); // 🔹 Regla 2: De su depto
+      andClauses.push({
+        // 🔹 Regla 3: De roles permitidos
+        responsables: {
+          some: {
+            usuario: { rol: { in: ["ENCARGADO", "USUARIO", "INVITADO"] } },
+          },
+        },
+      });
+    } else if (user.rol === "ENCARGADO") {
+      // ENCARGADO: Ve tareas de USUARIO e INVITADO en su depto.
+      if (!user.departamentoId) {
+        return res.status(403).json({ error: "Usuario sin departamento." });
+      }
+      andClauses.push({ departamentoId: user.departamentoId }); // 🔹 Regla 2: De su depto
+      andClauses.push({
+        // 🔹 Regla 3: De roles permitidos
+        responsables: {
+          some: {
+            usuario: { rol: { in: ["USUARIO", "INVITADO"] } },
+          },
+        },
+      });
+    } else if (user.rol === "USUARIO") {
+      // USUARIO: Ve tareas de otros USUARIOs en su depto O tareas propias.
+      if (!user.departamentoId) {
+        return res.status(403).json({ error: "Usuario sin departamento." });
+      }
+      andClauses.push({ departamentoId: user.departamentoId }); // 🔹 Regla 2: De su depto
+      andClauses.push({
+        // 🔹 Regla 3: Lógica OR
+        OR: [
+          {
+            // Tareas donde al menos un responsable es USUARIO
+            responsables: { some: { usuario: { rol: "USUARIO" } } },
+          },
+          {
+            // Tareas donde YO soy responsable
+            responsables: { some: { usuarioId: user.id } },
+          },
+        ],
+      });
     } else if (user.rol === "INVITADO") {
-      // Regla: Debe ser un responsable asignado
-      where.responsables = { some: { usuarioId: user.id } };
+      // INVITADO: Se FUERZA el scope a solo sus tareas asignadas.
+      andClauses.push({
+        responsables: { some: { usuarioId: user.id } },
+      });
+    }
+
+    // 🔹 Finalmente, asignamos el array 'AND' al 'where'
+    if (andClauses.length > 0) {
+      where.AND = andClauses;
     }
 
     // 5. Ejecutar la consulta
-    // (Este 'await' ahora funcionará porque 'tareaDetalladaInclude' es válido)
+    //    'where' ahora es: { id: tareaId, AND: [ ...reglas de rol... ] }
     const tarea: TareaDetallada | null = await prisma.tarea.findFirst({
-      where, // El 'where' dinámico protege la ruta
+      where, // El 'where' dinámico y seguro protege la ruta
       include: tareaDetalladaInclude, // Usamos el include detallado
     });
 
     // 6. Manejar 'No Encontrado'
     if (!tarea) {
+      // Este error ahora es seguro:
+      // O la tarea no existe, O el usuario no tiene permisos para verla.
       return res.status(404).json({
         error: "Tarea no encontrada o no tienes permiso para verla.",
       });
@@ -867,6 +981,157 @@ router.put(
       responsables: tareaActualizada.responsables.map((r) => r.usuario),
     };
 
+    res.json(tareaLimpia);
+  })
+);
+
+/* ✅ [PATCH /:id/complete] Marcar una tarea como CONCLUIDA (Validar) */
+router.patch(
+  "/:id/complete",
+  // 1. Proteger la ruta (Solo estos roles pueden INTENTAR validar)
+  verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
+  safeAsync(async (req: Request, res: Response) => {
+    // 2. Validar ID de la URL
+    const paramsParse = paramsSchema.safeParse(req.params);
+    if (!paramsParse.success) {
+      return res.status(400).json({
+        error: "ID de tarea inválido",
+        detalles: paramsParse.error.flatten().fieldErrors,
+      });
+    }
+    const { id: tareaId } = paramsParse.data;
+
+    // 3. Obtener el usuario que está validando (del token)
+    const user = req.user!;
+
+    // 4. Obtener la tarea que se quiere completar
+    const tareaExistente = await prisma.tarea.findUnique({
+      where: { id: tareaId },
+      include: {
+        // Incluimos responsables para poder notificarlos
+        responsables: {
+          select: { usuarioId: true },
+        },
+      },
+    });
+
+    if (!tareaExistente) {
+      return res.status(404).json({ error: "Tarea no encontrada" });
+    }
+
+    // 5. 🚀 LÓGICA DE PERMISOS (Según tus reglas)
+    const esSuperAdmin = user.rol === "SUPER_ADMIN";
+    const esAdmin = user.rol === "ADMIN";
+    // Regla del Encargado: Su rol es ENCARGADO y él es el asignador
+    const esEncargadoAsignador =
+      user.rol === "ENCARGADO" && tareaExistente.asignadorId === user.id;
+
+    // Si NO es SuperAdmin, Y NO es Admin, Y NO es el Encargado que asignó...
+    if (!esSuperAdmin && !esAdmin && !esEncargadoAsignador) {
+      // ...entonces denegar el permiso.
+      return res.status(403).json({
+        error: "Acceso denegado",
+        detalle:
+          "No tienes permiso para validar esta tarea. Los Encargados solo pueden validar tareas que ellos mismos asignaron.",
+      });
+    }
+
+    // 6. Si pasa los permisos, actualizar la tarea
+    const tareaActualizada = await prisma.tarea.update({
+      where: { id: tareaId },
+      data: {
+        estatus: "CONCLUIDA",
+        fechaConclusion: new Date(), // Establece la fecha de conclusión
+      },
+      // Usamos el include genérico que ya tienes definido
+      include: tareaConRelacionesInclude,
+    });
+
+    // 7. Notificar a los responsables
+    const idsResponsables = tareaExistente.responsables.map((r) => r.usuarioId);
+
+    if (idsResponsables.length > 0) {
+      await sendNotificationToUsers(
+        idsResponsables,
+        `Tarea Validada (ID: ${tareaActualizada.id})`,
+        `La tarea "${tareaActualizada.tarea}" ha sido marcada como CONCLUIDA.`,
+        `/admin` // O la ruta a la que debe ir el usuario
+      );
+    }
+
+    // 8. Limpiar y devolver la respuesta
+    const tareaLimpia = {
+      ...tareaActualizada,
+      responsables: tareaActualizada.responsables.map((r) => r.usuario),
+    };
+
+    res.json(tareaLimpia);
+  })
+);
+
+/* ✅ [PATCH /:id/cancel] Marcar una tarea como CANCELADA */
+router.patch(
+  "/:id/cancel",
+  // 1. Proteger la ruta (Solo estos roles pueden INTENTAR cancelar)
+  verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
+  safeAsync(async (req: Request, res: Response) => {
+    // 2. Validar ID
+    const paramsParse = paramsSchema.safeParse(req.params);
+    if (!paramsParse.success) {
+      return res.status(400).json({ error: "ID de tarea inválido" });
+    }
+    const { id: tareaId } = paramsParse.data;
+
+    // 3. Obtener usuario y tarea
+    const user = req.user!;
+    const tareaExistente = await prisma.tarea.findUnique({
+      where: { id: tareaId },
+      include: {
+        responsables: { select: { usuarioId: true } },
+      },
+    });
+
+    if (!tareaExistente) {
+      return res.status(404).json({ error: "Tarea no encontrada" });
+    }
+
+    // 4. LÓGICA DE PERMISOS (Idéntica a la de 'completar' o la que definas)
+    const esSuperAdmin = user.rol === "SUPER_ADMIN";
+    const esAdmin = user.rol === "ADMIN";
+    const esEncargadoAsignador =
+      user.rol === "ENCARGADO" && tareaExistente.asignadorId === user.id;
+
+    if (!esSuperAdmin && !esAdmin && !esEncargadoAsignador) {
+      return res.status(403).json({
+        error: "Acceso denegado",
+        detalle: "No tienes permiso para cancelar esta tarea.",
+      });
+    }
+
+    // 5. Actualizar la tarea
+    const tareaActualizada = await prisma.tarea.update({
+      where: { id: tareaId },
+      data: {
+        estatus: "CANCELADA",
+        fechaConclusion: null, // Opcional: limpiar fecha de conclusión si la tuviera
+      },
+      include: tareaConRelacionesInclude,
+    });
+
+    // 6. Notificar (Opcional, pero recomendado)
+    const idsResponsables = tareaExistente.responsables.map((r) => r.usuarioId);
+    await sendNotificationToUsers(
+      idsResponsables,
+      `Tarea Cancelada (ID: ${tareaActualizada.id})`,
+      `La tarea "${tareaActualizada.tarea}" ha sido CANCELADA.`,
+      `/admin`
+    );
+
+    // 7. Devolver respuesta
+    const tareaLimpia = {
+      ...tareaActualizada,
+      responsables: tareaActualizada.responsables.map((r) => r.usuario),
+    };
     res.json(tareaLimpia);
   })
 );

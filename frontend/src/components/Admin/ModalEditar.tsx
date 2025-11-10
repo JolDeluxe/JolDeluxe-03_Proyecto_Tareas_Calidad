@@ -1,60 +1,39 @@
-import React, { useState } from "react";
-import { api } from "../data/api"; // 👈 Asegúrate que la ruta sea correcta
+import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
-// 👇 Asegúrate que la ruta a tus tipos sea correcta
-import type {
-  Tarea,
-  HistorialFecha,
-  Urgencia,
-  ImagenTarea,
-} from "../../types/tarea";
-import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
-// --- Props del Modal ---
+import { tareasService } from "../../api/tareas.service";
+import { usuariosService } from "../../api/usuarios.service";
+import type { Tarea, Estatus, Urgencia, ImagenTarea } from "../../types/tarea";
+import type { Usuario } from "../../types/usuario";
+import { Rol } from "../../types/usuario";
+import api from "../../api/01_axiosInstance";
+
 interface ModalEditarProps {
-  onClose: () => void; // Función para cerrar el modal
-  tarea: Tarea; // La tarea original a editar (con objetos Date)
-  // 👇 CAMBIO CLAVE para recarga automática
-  onTareaAgregada: () => void; // Función para refrescar la tabla padre
+  onClose: () => void;
+  onTareaActualizada: () => void;
+  user: Usuario | null;
+  tarea: Tarea;
 }
 
-// --- Helper para formatear Date a YYYY-MM-DD ---
-const formatDateToInput = (fecha?: Date | null): string => {
+// --- Helper (sin cambios) ---
+const formatDateToInput = (fecha?: Date | null | string): string => {
   if (!fecha) return "";
-  try {
-    // Verifica si ya es un objeto Date válido
-    if (!(fecha instanceof Date) || isNaN(fecha.getTime())) {
-      // Si no lo es, intenta convertirlo (puede venir de la API como string)
-      const parsedDate = new Date(fecha as any);
-      if (isNaN(parsedDate.getTime())) return ""; // Si falla, retorna vacío
-      fecha = parsedDate;
-    }
-    const anio = fecha.getUTCFullYear();
-    const mes = String(fecha.getUTCMonth() + 1).padStart(2, "0");
-    const dia = String(fecha.getUTCDate()).padStart(2, "0");
-    return `${anio}-${mes}-${dia}`;
-  } catch {
-    return ""; // En caso de cualquier error inesperado
-  }
+
+  // Maneja tanto strings ISO como objetos Date
+  const fechaObj = typeof fecha === "string" ? new Date(fecha) : fecha;
+
+  if (!(fechaObj instanceof Date) || isNaN(fechaObj.getTime())) return "";
+
+  // Usar getUTCFullYear, getUTCMonth, etc. para evitar problemas de zona horaria
+  // al convertir un string ISO que ya viene en UTC (Z).
+  const anio = fechaObj.getUTCFullYear();
+  const mes = String(fechaObj.getUTCMonth() + 1).padStart(2, "0");
+  const dia = String(fechaObj.getUTCDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
 };
 
-// --- Lista de Responsables (Considera moverla a un archivo de constantes) ---
-const RESPONSABLES_VALIDOS = [
-  "Juan Pérez",
-  "María López",
-  "Carlos Ramírez",
-  "Sofía Méndez",
-  "Luis García",
-  "Pedro Ortega",
-  "Ana Torres",
-  "Recursos Humanos",
-  "Miguel López",
-  "Ximena Álvarez",
-  "Joel Rodríguez",
-  "Luis Hernández",
-];
-
+// --- Constante (sin cambios) ---
 const PRIORIDADES_VALIDAS: { value: Urgencia; label: string }[] = [
   { value: "ALTA", label: "Alta" },
   { value: "MEDIA", label: "Media" },
@@ -67,388 +46,297 @@ const MOTIVOS_CAMBIO_FECHA = [
   "Falta de información/recursos",
   "Cambio de prioridades",
   "Ajuste de planificación",
-  "Otro", // Opción genérica
+  "Otro",
 ];
 
-const getBaseURL = () => {
-  if (import.meta.env.MODE === "development") {
-    return "http://localhost:3000";
-  }
-  return "";
-};
-const API_BASE_URL = getBaseURL();
-
-// --- Componente ModalEditar ---
 const ModalEditar: React.FC<ModalEditarProps> = ({
   onClose,
   tarea,
-  onTareaAgregada, // 👈 RECIBIMOS la nueva prop
+  onTareaActualizada,
+  user,
 }) => {
-  // --- Estados del Formulario ---
-
-  // 👇 CAMBIO 1: Guarda la fecha original en formato 'YYYY-MM-DD'
-  // Esta será nuestra referencia fija para saber si el usuario cambió la fecha.
-  const fechaOriginalFormateada = formatDateToInput(tarea.fechaLimite);
-
+  // --- Estados del formulario (inicializados) ---
   const [nombre, setNombre] = useState(tarea.tarea);
   const [comentario, setComentario] = useState(tarea.observaciones || "");
-  const [responsable, setResponsable] = useState(
-    (tarea.responsable || "").trim()
-  );
-  const [prioridad, setPrioridad] = useState<Urgencia>(tarea.urgencia);
-  const [fechaInput, setFechaInput] = useState(fechaOriginalFormateada);
-  const [motivoCambio, setMotivoCambio] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-
-  const [isResponsableModalOpen, setIsResponsableModalOpen] = useState(false);
-  const [isPrioridadModalOpen, setIsPrioridadModalOpen] = useState(false);
-
-  const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
-
+  const [prioridad, setPrioridad] = useState<Urgencia | "">(tarea.urgencia);
+  const [fecha, setFecha] = useState(formatDateToInput(tarea.fechaLimite));
+  const [archivos, setArchivos] = useState<File[]>([]);
   const [imagenesExistentes, setImagenesExistentes] = useState<ImagenTarea[]>(
     tarea.imagenes || []
   );
-  const [archivosNuevos, setArchivosNuevos] = useState<File[]>([]);
 
-  const [idsParaBorrar, setIdsParaBorrar] = useState<number[]>([]);
-  const [loadingDelete, setLoadingDelete] = useState<number | null>(null);
+  // --- Estados de Datos (inicializados) ---
+  const [responsablesIds, setResponsablesIds] = useState<number[]>(
+    // Esto está correcto (r.id) porque tu API devuelve los objetos de usuario
+    tarea.responsables ? tarea.responsables.map((r) => r.id) : []
+  );
+  const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
+  const [loadingUsuarios, setLoadingUsuarios] = useState(true);
 
-  // 1. Convierte tu string 'DD-MM-YYYY' (estado) a un Date (para el picker)
+  // --- 🚀 ESTADOS PARA EL MOTIVO DE CAMBIO (CORREGIDOS) ---
+
+  // 1. Guardamos la fecha YYYY-MM-DD original (para la UI)
+  const [fechaStringOriginal] = useState(formatDateToInput(tarea.fechaLimite));
+
+  // 2. 🎯 Guardamos la fecha ISO original (para el payload del historial)
+  const [fechaISOOriginal] = useState(tarea.fechaLimite);
+
+  const [motivoCambio, setMotivoCambio] = useState("");
+
+  // 3. La variable derivada usa el string de UI para la comparación
+  const fechaHaCambiado = fecha !== fechaStringOriginal;
+
+  // --- Estados de UI ---
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  // --- Cargar usuarios (sin cambios) ---
+  useEffect(() => {
+    const fetchUsuarios = async () => {
+      if (!user) return;
+      setLoadingUsuarios(true);
+      try {
+        // La lógica del backend ya filtra por rol/depto
+        const data = await usuariosService.getAll();
+        const listaOrdenada = data.sort((a, b) =>
+          a.nombre.localeCompare(b.nombre)
+        );
+        setListaUsuarios(listaOrdenada);
+      } catch (error) {
+        console.error("Error al cargar usuarios:", error);
+        toast.error("No se pudo cargar la lista de usuarios.");
+      } finally {
+        setLoadingUsuarios(false);
+      }
+    };
+
+    fetchUsuarios();
+  }, [user]);
+
+  // --- Handlers de DatePicker (sin cambios) ---
   const getSelectedDate = () => {
-    if (!fechaInput) return null;
-    // Usamos UTC para ser consistentes con tu lógica de 'handleSubmit'
-    const dateObj = new Date(`${fechaInput}T00:00:00.000Z`);
-    // Evita errores si el string de fecha es inválido
+    if (!fecha) return null;
+    // Aseguramos que la fecha se interprete como UTC
+    const dateObj = new Date(`${fecha}T00:00:00.000Z`);
     if (isNaN(dateObj.getTime())) return null;
     return dateObj;
   };
 
-  // 2. Convierte el Date (del picker) de vuelta a tu string 'DD-MM-YYYY' (para el estado)
-  const handleDateChange = (date: Date | null) => {
-    // Reutiliza tu propia función 'formatDateToInput' que ya tienes
-    setFechaInput(formatDateToInput(date));
-  };
+  // const handleDateChange = (date: Date | null) => { ... }; // Ya no se usa con input[type=date]
 
+  // --- Handlers de Archivos (Nuevos) (sin cambios) ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const nuevos = Array.from(e.target.files);
-      setArchivosNuevos((prev) => [...prev, ...nuevos]);
-      e.target.value = ""; // Limpia el input
+      const nuevosArchivos = Array.from(e.target.files);
+      setArchivos((prevArchivos) => [...prevArchivos, ...nuevosArchivos]);
+      e.target.value = "";
     }
   };
 
-  const handleRemoveNuevoArchivo = (indexToRemove: number) => {
-    setArchivosNuevos((prev) =>
-      prev.filter((_, index) => index !== indexToRemove)
+  const handleRemoveArchivo = (indexToRemove: number) => {
+    setArchivos((prevArchivos) =>
+      prevArchivos.filter((_, index) => index !== indexToRemove)
     );
   };
 
-  const handleDeleteImagenExistente = (
-    imagenABorrar: ImagenTarea,
-    index: number
-  ) => {
-    setIdsParaBorrar((prevIds) => [...prevIds, imagenABorrar.id]);
+  // --- 🚀 NUEVO HANDLER: Borrar Imagen Existente ---
+  const handleRemoveImagenExistente = async (imagenId: number) => {
+    if (loading) return;
+    // Opcional: Pedir confirmación
+    // if (!window.confirm("¿Seguro que quieres eliminar esta imagen?")) return;
 
-    setImagenesExistentes((prev) => prev.filter((_, i) => i !== index));
+    setLoading(true); // Usamos el spinner global
+    try {
+      // Usamos el endpoint de borrado de imagen del backend
+      await api.delete(`/tareas/imagen/${imagenId}`);
+      toast.success("Imagen eliminada.");
+      // Actualizamos el estado de imágenes existentes
+      setImagenesExistentes((prev) =>
+        prev.filter((img) => img.id !== imagenId)
+      );
+    } catch (error) {
+      console.error("Error al eliminar imagen:", error);
+      toast.error("No se pudo eliminar la imagen.");
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // --- Handler de Responsables (sin cambios) ---
+  const handleToggleResponsable = (id: number) => {
+    setResponsablesIds((prev) =>
+      prev.includes(id) ? prev.filter((uid) => uid !== id) : [...prev, id]
+    );
+  };
+
+  // --- 🚀 handleSubmit MODIFICADO PARA UPDATE ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setSubmitted(true);
 
-    // --- Validaciones ---
+    // 1. Validación (Campos básicos)
     if (
       !nombre ||
-      !responsable ||
+      responsablesIds.length === 0 ||
       !prioridad ||
-      !fechaInput ||
-      !comentario.trim()
+      !fecha ||
+      !comentario
     ) {
-      setLoading(false);
+      toast.warn("Por favor, completa todos los campos obligatorios.");
       return;
     }
-    const nuevaFechaLimiteObj = fechaInput
-      ? new Date(`${fechaInput}T00:00:00.000Z`)
-      : null;
-    if (!nuevaFechaLimiteObj || isNaN(nuevaFechaLimiteObj.getTime())) {
-      toast.error("❌ Fecha límite inválida.");
-      setLoading(false);
+
+    // 1.A. Validación de Motivo
+    if (fechaHaCambiado && !motivoCambio) {
+      toast.warn("Si cambias la fecha, debes seleccionar un motivo.");
       return;
     }
-    const fechaCambiada = fechaInput !== fechaOriginalFormateada;
-    if (fechaCambiada && !motivoCambio.trim()) {
-      toast.warning("⚠️ Debes indicar el motivo del cambio de fecha.");
+
+    setLoading(true);
+
+    // 2. Validación de Autenticación
+    if (!user || !user.departamentoId) {
+      toast.error(
+        "Error de autenticación: No se pudo identificar tu departamento."
+      );
       setLoading(false);
       return;
     }
 
-    // --- Payload para la API ---
-    const payload: Partial<
-      Omit<
-        Tarea,
-        | "historialFechas"
-        | "fechaRegistro"
-        | "asignador"
-        | "fechaConclusion"
-        | "estatus"
-      >
-    > & { id: number; motivoCambioFecha?: string } = {
-      id: tarea.id,
-      tarea: nombre,
-      observaciones: comentario || null,
-      responsable: responsable,
-      urgencia: prioridad,
-      fechaLimite: nuevaFechaLimiteObj,
-    };
-
-    if (fechaCambiada) {
-      payload.motivoCambioFecha = motivoCambio;
+    if (user.rol === Rol.SUPER_ADMIN) {
+      toast.error(
+        "El SUPER_ADMIN (aún) no puede editar tareas desde este modal."
+      );
+      setLoading(false);
+      return;
     }
 
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        toast.error("❌ No autorizado. Inicia sesión.");
-        setLoading(false);
-        return;
-      }
+      // 🚀 --- INICIA LÓGICA DE ENVÍO --- 🚀
 
-      // --- Decodifica el usuario logueado del token ---
-      let usuarioLogueado = "Desconocido";
-      try {
-        const payloadToken = JSON.parse(atob(token.split(".")[1]));
-        usuarioLogueado =
-          payloadToken.nombre || payloadToken.username || "Desconocido";
-      } catch (error) {
-        console.error("Error decodificando token para obtener usuario:", error);
-      }
+      if (fechaHaCambiado) {
+        // --- 3.A. LA FECHA CAMBIÓ (Dos llamadas API) ---
 
-      // 🔽 --- LÓGICA DE GUARDADO ACTUALIZADA --- 🔽
-
-      // 1️⃣ (NUEVO) Borrar las imágenes marcadas
-      if (idsParaBorrar.length > 0) {
-        console.log(`Borrando ${idsParaBorrar.length} imágenes...`);
-        setLoadingDelete(1); // Activa el estado 'Borrando...' en el botón
-
-        const promesasDeBorrado = idsParaBorrar.map((id) =>
-          api.delete(`/tareas/imagen/${id}`)
+        // PASO 1: Actualizar los datos (EXCEPTO la fecha)
+        const payloadDatos = {
+          tarea: nombre,
+          observaciones: comentario || null,
+          urgencia: prioridad,
+          estatus: tarea.estatus,
+          responsables: responsablesIds, // Esto es number[]
+        };
+        console.log(
+          "📨 PASO 1: Actualizando datos de la tarea...",
+          payloadDatos
         );
 
-        // Esperamos a que TODAS se completen
-        await Promise.all(promesasDeBorrado);
+        // Usamos 'as any' para saltar el error de tipo TS
+        await tareasService.update(tarea.id, payloadDatos as any);
 
-        console.log("Imágenes borradas.");
-        setLoadingDelete(null); // Desactiva 'Borrando...'
-      }
+        console.log(`✅ Datos de Tarea ID ${tarea.id} actualizados.`);
 
-      // 2️⃣ Actualiza la tarea (PUT)
-      console.log(`📨 Enviando actualización para tarea ${tarea.id}:`, payload);
-      await api.put(`/tareas/${tarea.id}`, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      // 3️⃣ Si cambió la fecha, registra el historial (POST)
-      if (fechaCambiada) {
-        const historialPayload = {
-          fechaAnterior: tarea.fechaLimite,
-          nuevaFecha: nuevaFechaLimiteObj,
-          modificadoPor: usuarioLogueado, // ✅ Usuario dinámico
+        // PASO 2: Actualizar la fecha y registrar el historial
+        // 🎯 CORRECCIÓN: Añadimos 'fechaAnterior' para evitar el error 400
+        const payloadHistorial = {
           motivo: motivoCambio,
+          nuevaFecha: new Date(`${fecha}T12:00:00.000Z`).toISOString(),
+          fechaAnterior: fechaISOOriginal, // 👈 Se envía la fecha ISO original
         };
 
         console.log(
-          "📜 Registrando historial de cambio de fecha:",
-          historialPayload
+          "📨 PASO 2: Actualizando fecha y historial...",
+          payloadHistorial
         );
 
-        await api.post(`/tareas/${tarea.id}`, historialPayload, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        await api.post(`/tareas/${tarea.id}/historial`, payloadHistorial);
+        console.log(
+          `✅ Fecha e Historial de Tarea ID ${tarea.id} actualizados.`
+        );
+      } else {
+        // --- 3.B. LA FECHA NO CAMBIÓ (Una llamada API) ---
+
+        const payloadCompleto = {
+          tarea: nombre,
+          observaciones: comentario || null,
+          urgencia: prioridad,
+          fechaLimite: new Date(`${fecha}T12:00:00.000Z`).toISOString(),
+          estatus: tarea.estatus,
+          responsables: responsablesIds, // Esto es number[]
+        };
+
+        console.log(
+          "📨 PASO 1: Actualizando tarea (sin cambio de fecha)...",
+          payloadCompleto
+        );
+
+        // Usamos 'as any' aquí también
+        await tareasService.update(tarea.id, payloadCompleto as any);
+
+        console.log(`✅ Tarea ID ${tarea.id} actualizada.`);
       }
 
-      // 4️⃣ Si hay archivos nuevos, los subimos
-      if (archivosNuevos.length > 0) {
-        console.log(`Subiendo ${archivosNuevos.length} imágenes nuevas...`);
+      // --- 🚀 FIN LÓGICA DE ENVÍO --- 🚀
+
+      // 4. PASO 4: Subir Imágenes (NUEVAS)
+      if (archivos.length > 0) {
+        console.log(`Subiendo ${archivos.length} imágenes NUEVAS...`);
         const formData = new FormData();
-        archivosNuevos.forEach((file) => {
+        archivos.forEach((file) => {
           formData.append("imagenes", file);
         });
-
-        // El ID de la TAREA se usa para el upload
         await api.post(`/tareas/${tarea.id}/upload`, formData);
+        console.log(`✅ Imágenes subidas para Tarea ID: ${tarea.id}`);
       }
-      // --- Fin del bloque añadido ---
 
+      // 5. PASO 5: Finalizar
       toast.success("Tarea actualizada correctamente.");
-
-      // Forzar la recarga de la tabla
-      onTareaAgregada();
-      onClose(); // Cerramos el modal
+      onTareaActualizada();
+      onClose();
     } catch (error: any) {
+      // Manejo de errores mejorado
       console.error(
-        "❌ Error al actualizar tarea:",
+        "❌ Error en el proceso de actualización:",
         error.response?.data || error.message
       );
-
-      // Manejo de errores mejorado
       const isUploadError = error.config?.url.includes("/upload");
-      const isDeleteError = error.config?.method === "delete";
+      const isHistorialError = error.config?.url.includes("/historial");
 
       if (isUploadError) {
-        toast.error(`❌ Datos guardados, pero falló la subida de imágenes.`);
-        // Igualmente refrescamos porque los datos de texto sí se guardaron
-        onTareaAgregada();
+        toast.error("Tarea actualizada, pero falló la subida de imágenes.");
+        onTareaActualizada();
         onClose();
-      } else if (isDeleteError) {
+      } else if (isHistorialError) {
+        const detalleError = error.response?.data?.detalles
+          ? JSON.stringify(error.response.data.detalles)
+          : error.response?.data?.error || "Datos inválidos";
+
         toast.error(
-          `❌ Falló al borrar las imágenes antiguas. Intente de nuevo.`
+          `Datos guardados, pero falló el registro de fecha: ${detalleError}`
         );
-        // No cerramos, para que el usuario vea qué falló
+        onTareaActualizada(); // Recargamos porque los datos SÍ se guardaron
+        onClose();
       } else {
-        // Error principal (al guardar datos de la tarea o historial)
         const mensajeError =
-          error.response?.data?.error || "No se pudo guardar la tarea.";
+          error.response?.data?.detalle ||
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          "No se pudo guardar la tarea.";
         toast.error(`❌ ${mensajeError}`);
       }
     } finally {
       setLoading(false);
-      setLoadingDelete(null); // Siempre resetea el estado de borrado
     }
   };
-
-  const ModalResponsablePicker = () => (
-    <div
-      // Fondo semi-transparente. z-[60] para estar sobre el modal (z-50)
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
-      onClick={() => setIsResponsableModalOpen(false)}
-    >
-      <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-sm flex flex-col max-h-[70vh]"
-        onClick={(e) => e.stopPropagation()} // Evita que se cierre al hacer clic dentro
-      >
-        {/* Header del Picker */}
-        <div className="flex-shrink-0 p-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-md font-semibold text-amber-950">
-            Seleccionar Responsable
-          </h3>
-          <button
-            type="button"
-            aria-label="Cerrar"
-            onClick={() => setIsResponsableModalOpen(false)}
-            className="text-gray-500 hover:text-gray-800 text-2xl font-light"
-          >
-            &times;
-          </button>
-        </div>
-
-        {/* Lista con Scroll */}
-        <div className="flex-grow overflow-y-auto">
-          {RESPONSABLES_VALIDOS.map((r) => (
-            <button
-              type="button"
-              key={r}
-              onClick={() => {
-                setResponsable(r); // Actualiza el estado
-                setIsResponsableModalOpen(false); // Cierra el picker
-              }}
-              className={`w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-100 transition-colors
-                ${
-                  responsable === r // Resalta el seleccionado
-                    ? "bg-amber-100 text-amber-900 font-semibold"
-                    : ""
-                }
-              `}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-
-        {/* 🚀 INICIO: Mensaje Adicional */}
-        <div className="flex-shrink-0 p-4 border-t border-gray-200">
-          <p className="text-xs text-gray-600 italic">
-            * Si necesita registrar un nuevo responsable para las tareas, envíe
-            correo a{" "}
-            <strong className="font-medium not-italic">
-              coordinador.procesostecnologicos@cuadra.com.mx
-            </strong>{" "}
-            con el nombre completo de la persona a registrar.
-          </p>
-        </div>
-        {/* 🚀 FIN: Mensaje Adicional */}
-      </div>
-    </div>
-  );
-
-  const ModalPrioridadPicker = () => (
-    <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
-      onClick={() => setIsPrioridadModalOpen(false)} // 👈 Conecta al nuevo estado
-    >
-      <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-sm flex flex-col" // No necesita max-h ni scroll
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header del Picker */}
-        <div className="flex-shrink-0 p-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-md font-semibold text-amber-950">
-            Seleccionar Prioridad
-          </h3>
-          <button
-            type="button"
-            aria-label="Cerrar"
-            onClick={() => setIsPrioridadModalOpen(false)} // 👈 Conecta al nuevo estado
-            className="text-gray-500 hover:text-gray-800 text-2xl font-light"
-          >
-            &times;
-          </button>
-        </div>
-
-        {/* Lista de Prioridades */}
-        <div>
-          {PRIORIDADES_VALIDAS.map(
-            (
-              p // 👈 Itera sobre el nuevo array
-            ) => (
-              <button
-                type="button"
-                key={p.value}
-                onClick={() => {
-                  setPrioridad(p.value); // 👈 Asigna el valor ("ALTA", "MEDIA", "BAJA")
-                  setIsPrioridadModalOpen(false); // 👈 Cierra este picker
-                }}
-                className={`w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-100 transition-colors
-                ${
-                  prioridad === p.value // 👈 Compara con el valor
-                    ? "bg-amber-100 text-amber-900 font-semibold"
-                    : ""
-                }
-              `}
-              >
-                {p.label}{" "}
-                {/* 👈 Muestra la etiqueta ("Alta", "Media", "Baja") */}
-              </button>
-            )
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
-  // --- Renderizado del Modal ---
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
-      {/* 💡 1. PANEL: Sin padding, altura máxima, y layout flex-col */}
       <div
         className="bg-white rounded-lg shadow-xl w-[90%] max-w-md relative flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 💡 2. HEADER (Fijo) */}
+        {/* --- HEADER --- */}
         <div className="flex-shrink-0 p-6 pb-4 border-b border-gray-200">
           <button
             onClick={onClose}
@@ -459,35 +347,32 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
             ×
           </button>
           <h2 className="text-lg font-bold text-amber-950 text-center">
-            Editar tarea #{tarea.id}
+            EDITAR TAREA
           </h2>
         </div>
 
-        {/* 💡 3. FORMULARIO (ocupa el espacio restante) */}
+        {/* --- FORMULARIO --- */}
         <form
           onSubmit={handleSubmit}
-          className="flex flex-col flex-grow min-h-0" // 👈 Clave
+          className="flex flex-col flex-grow min-h-0"
           noValidate
         >
-          {/* 💡 4. BODY (Scrollable) */}
+          {/* --- BODY (Scrollable) --- */}
           <div className="flex-grow overflow-y-auto p-6">
             <div className="flex flex-col gap-4 text-gray-800">
-              {/* Nombre */}
+              {/* --- Nombre --- */}
               <div>
-                <label
-                  htmlFor={`edit-nombre-${tarea.id}`}
-                  className="block text-sm font-semibold mb-1"
-                >
+                <label className="block text-sm font-semibold mb-1">
                   Nombre
                 </label>
                 <input
-                  id={`edit-nombre-${tarea.id}`}
                   type="text"
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
+                  placeholder="Ej. Revisar reporte de calidad"
                   required
                   disabled={loading}
-                  className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
+                  className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
                     ${
                       submitted && !nombre.trim()
                         ? "border-red-500"
@@ -501,21 +386,18 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                 )}
               </div>
 
-              {/* Observaciones (Indicaciones) */}
+              {/* --- Indicaciones --- */}
               <div>
-                <label
-                  htmlFor={`edit-obs-${tarea.id}`}
-                  className="block text-sm font-semibold mb-1"
-                >
-                  Observaciones
+                <label className="block text-sm font-semibold mb-1">
+                  Indicaciones
                 </label>
                 <textarea
-                  id={`edit-obs-${tarea.id}`}
                   value={comentario}
                   onChange={(e) => setComentario(e.target.value)}
+                  placeholder="Agrega indicaciones o detalles..."
                   disabled={loading}
                   required
-                  className={`w-full border rounded-md px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
+                  className={`w-full border rounded-md px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
                     ${
                       submitted && !comentario.trim()
                         ? "border-red-500"
@@ -524,54 +406,52 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                 />
                 {submitted && !comentario.trim() && (
                   <p className="text-red-600 text-xs mt-1">
-                    Las observaciones son obligatorias.
+                    Las indicaciones son obligatorias.
                   </p>
                 )}
               </div>
 
-              {/* 🔽 6. SECCIÓN DE EVIDENCIA (NUEVA) */}
-              <div className="border-t border-b border-gray-200 py-4">
-                <label className="block text-sm font-semibold mb-2">
+              {/* --- Evidencia --- */}
+              <div>
+                <label className="block text-sm font-semibold mb-1">
                   Evidencia
                 </label>
-
-                {/* --- Lista de Imágenes Existentes --- */}
+                {/* 1. Imágenes Existentes */}
                 {imagenesExistentes.length > 0 && (
                   <div className="mb-4">
-                    <p className="text-xs font-medium text-gray-600 mb-2">
+                    <p className="text-sm font-medium text-gray-800 mb-2">
                       Imágenes actuales:
                     </p>
-                    <ul className="space-y-2">
-                      {imagenesExistentes.map((img, index) => (
+                    <ul className="space-y-2 max-h-32 overflow-y-auto pr-2">
+                      {imagenesExistentes.map((imagen) => (
                         <li
-                          key={img.id}
-                          className="flex items-center justify-between 
-                         bg-gray-100 p-2 rounded-md"
+                          key={imagen.id}
+                          className="flex items-center justify-between bg-gray-100 p-2 rounded-md"
                         >
-                          <img
-                            src={`${API_BASE_URL}/${img.url}`}
-                            alt={`Evidencia ${index + 1}`}
-                            className="w-10 h-10 object-cover rounded-md"
-                          />
+                          <a
+                            href={imagen.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <img
+                              src={imagen.url}
+                              alt={`Imagen ${imagen.id}`}
+                              className="w-10 h-10 object-cover rounded-md"
+                            />
+                          </a>
                           <span className="flex-1 text-sm text-gray-700 mx-3 truncate">
-                            {img.url.split("/").pop()}
+                            {imagen.url.split("/").pop()?.substring(0, 20)}...
                           </span>
-
-                          {/* ESTE BOTÓN AHORA USA LA LÓGICA DE "MARCAR PARA BORRAR" */}
                           <button
                             type="button"
-                            onClick={
-                              () => handleDeleteImagenExistente(img, index) // 👈 Llama a la función actualizada
+                            onClick={() =>
+                              handleRemoveImagenExistente(imagen.id)
                             }
-                            disabled={loading} // 👈 Deshabilitado solo si el modal entero está guardando
-                            className="flex-shrink-0 p-1 text-red-600 
-                           hover:bg-red-100 rounded-full
-                           disabled:opacity-50"
-                            aria-label="Marcar para eliminar"
+                            disabled={loading}
+                            className="flex-shrink-0 p-1 text-red-600 hover:bg-red-100 rounded-full disabled:opacity-50"
+                            aria-label="Eliminar imagen existente"
                           >
-                            {/* Ya no necesita el spinner individual, 
-                    el botón "Guardar" mostrará "Borrando..." */}
-                            <svg // Icono de basura
+                            <svg
                               xmlns="http://www.w3.org/2000/svg"
                               viewBox="0 0 20 20"
                               fill="currentColor"
@@ -589,61 +469,62 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                     </ul>
                   </div>
                 )}
-
-                {/* --- Sección para Añadir Nuevas Imágenes --- */}
-                <div>
-                  <label
-                    htmlFor="file-upload-edit"
-                    onClick={(e) => {
-                      if (loading || loadingDelete) e.preventDefault(); // 👈 Bloquea si está guardando o borrando
-                    }}
-                    className={`w-full flex items-center justify-center gap-2 
-                   bg-amber-100 text-amber-900 font-semibold 
-                   px-4 py-2 rounded-md transition-all duration-200
-                   ${
-                     loading || loadingDelete
-                       ? "opacity-50 cursor-not-allowed"
-                       : "cursor-pointer hover:bg-amber-200"
-                   }`}
+                {/* 2. Botón de Carga */}
+                <label
+                  htmlFor="file-upload"
+                  onClick={(e) => {
+                    if (loading) e.preventDefault();
+                  }}
+                  className={`w-full flex items-center justify-center gap-2 
+                    bg-amber-100 text-amber-900 
+                    font-semibold px-4 py-2 rounded-md 
+                    transition-all duration-200
+                    ${
+                      loading
+                        ? "opacity-50 cursor-not-allowed"
+                        : "cursor-pointer hover:bg-amber-200"
+                    }
+                  `}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="w-5 h-5"
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                      className="w-5 h-5"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10.5 3.5a.5.5 0 00-1 0V9H4a.5.5 0 000 1h5.5v5.5a.5.5 0 001 0V10H16a.5.5 0 000-1h-5.5V3.5z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    <span>Agregar Nuevas Imágenes</span>
-                  </label>
-                  <input
-                    id="file-upload-edit"
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    capture="environment"
-                    disabled={loading} // 👈 Bloquea si está guardando o borrando
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                </div>
-
-                {/* --- Lista de Nuevas Imágenes (para subir) --- */}
-                {archivosNuevos.length > 0 && (
+                    <path
+                      fillRule="evenodd"
+                      d="M10.5 3.5a.5.5 0 00-1 0V9H4a.5.5 0 000 1h5.5v5.5a.5.5 0 001 0V10H16a.5.5 0 000-1h-5.5V3.5z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span>
+                    {archivos.length > 0
+                      ? "Agregar más"
+                      : "Agregar / Tomar Foto"}
+                  </span>
+                </label>
+                <input
+                  id="file-upload"
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  capture="environment"
+                  disabled={loading}
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                {/* 3. Archivos Nuevos */}
+                {archivos.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-xs font-medium text-gray-600 mb-2">
-                      Nuevas para subir:
+                    <p className="text-sm font-medium text-gray-800 mb-2">
+                      {archivos.length} archivo(s) NUEVOS para subir:
                     </p>
                     <ul className="space-y-2 max-h-32 overflow-y-auto pr-2">
-                      {archivosNuevos.map((file, index) => (
+                      {archivos.map((file, index) => (
                         <li
                           key={index}
-                          className="flex items-center justify-between 
-                         bg-gray-100 p-2 rounded-md"
+                          className="flex items-center justify-between bg-gray-100 p-2 rounded-md"
                         >
                           <img
                             src={URL.createObjectURL(file)}
@@ -658,12 +539,10 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleRemoveNuevoArchivo(index)}
+                            onClick={() => handleRemoveArchivo(index)}
                             disabled={loading}
-                            className="flex-shrink-0 p-1 text-red-600 
-                           hover:bg-red-100 rounded-full
-                           disabled:opacity-50"
-                            aria-label="Quitar archivo"
+                            className="flex-shrink-0 p-1 text-red-600 hover:bg-red-100 rounded-full disabled:opacity-50"
+                            aria-label="Eliminar archivo"
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -684,167 +563,191 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   </div>
                 )}
               </div>
-              {/* --- FIN SECCIÓN EVIDENCIA --- */}
 
-              {/* Responsable */}
-              <div className="mb-3">
-                {" "}
-                {/* 👈 Tu div original 'mb-3' puede quedarse */}
+              {/* --- Responsables --- */}
+              <div>
                 <label
-                  htmlFor={`edit-resp-${tarea.id}`} // 👈 ID de editar
-                  className="block text-sm font-semibold mb-1" // 👈 Clases consistentes
+                  htmlFor="responsable-list"
+                  className="block text-sm font-semibold mb-1"
                 >
-                  Responsable
+                  Responsable(s)
                 </label>
-                {/* ✨ PEGA EL BOTÓN AQUÍ ✨ */}
-                <button
-                  type="button"
-                  id={`edit-resp-${tarea.id}`} // 👈 ID de editar
-                  onClick={() => setIsResponsableModalOpen(true)}
-                  disabled={loading}
-                  className={`relative w-full border rounded-md px-3 py-2 text-left focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
-      ${submitted && !responsable ? "border-red-500" : "border-gray-300"}
-      ${responsable ? "text-gray-900" : "text-gray-400"}
-    `}
-                >
-                  {responsable || "Seleccionar..."}
-                  {/* Esto ya funciona porque tu estado 'responsable' está pre-llenado */}
-
-                  <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="w-4 h-4 text-gray-500"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9"
-                      />
-                    </svg>
-                  </span>
-                </button>
-                {submitted && !responsable && (
+                {loadingUsuarios ? (
+                  <div
+                    className="relative w-full h-32 border rounded-md px-3 py-2 
+                           bg-gray-100 border-gray-300 
+                           flex items-center justify-center"
+                  >
+                    <p className="text-gray-500">Cargando usuarios...</p>
+                  </div>
+                ) : (
+                  <div
+                    id="responsable-list"
+                    className={`relative w-full h-32 border rounded-md 
+                    overflow-y-auto 
+                    focus:ring-2 focus:ring-amber-950 focus:outline-none 
+                    ${
+                      submitted && responsablesIds.length === 0
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    }
+                  `}
+                    tabIndex={0}
+                  >
+                    {listaUsuarios.map((u) => (
+                      <label
+                        key={u.id}
+                        htmlFor={`resp-${u.id}`}
+                        className={`
+                          flex items-center gap-3 w-full px-3 py-2 
+                          cursor-pointer transition-colors
+                          ${
+                            responsablesIds.includes(u.id)
+                              ? "bg-amber-100 text-amber-900 font-semibold"
+                              : "text-gray-800 hover:bg-gray-50"
+                          }
+                        `}
+                      >
+                        <input
+                          type="checkbox"
+                          id={`resp-${u.id}`}
+                          checked={responsablesIds.includes(u.id)}
+                          onChange={() => handleToggleResponsable(u.id)}
+                          disabled={loading}
+                          className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
+                        />
+                        <span>{u.nombre}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {submitted && responsablesIds.length === 0 && (
                   <p className="text-red-600 text-xs mt-1">
-                    Debes seleccionar un responsable.
+                    Debes seleccionar al menos un responsable.
                   </p>
                 )}
               </div>
 
-              {/* Prioridad */}
+              {/* --- Prioridad --- */}
               <div>
-                <label
-                  htmlFor={`edit-prio-${tarea.id}`} // 👈 ID de editar
-                  className="block text-sm font-semibold mb-1"
-                >
+                <label className="block text-sm font-semibold mb-1">
                   Prioridad
                 </label>
-
-                {/* ✨ PEGA EL BOTÓN AQUÍ ✨ */}
-                <button
-                  type="button"
-                  id={`edit-prio-${tarea.id}`} // 👈 ID de editar
-                  onClick={() => setIsPrioridadModalOpen(true)}
-                  disabled={loading}
-                  className={`relative w-full border rounded-md px-3 py-2 text-left focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
-      ${submitted && !prioridad ? "border-red-500" : "border-gray-300"}
-      ${prioridad ? "text-gray-900" : "text-gray-400"}
-    `}
-                >
-                  {PRIORIDADES_VALIDAS.find((p) => p.value === prioridad)
-                    ?.label || "Seleccionar..."}
-                  {/* Esto ya funciona porque tu estado 'prioridad' está pre-llenado */}
-
-                  <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                      stroke="currentColor"
-                      className="w-4 h-4 text-gray-500"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9"
+                <fieldset className="mt-2 grid grid-cols-3 gap-2">
+                  {PRIORIDADES_VALIDAS.map((p) => (
+                    <div key={p.value}>
+                      <input
+                        type="radio"
+                        id={`prioridad-${p.value}`}
+                        name="prioridad-radio-group"
+                        value={p.value}
+                        checked={prioridad === p.value}
+                        onChange={(e) =>
+                          setPrioridad(e.target.value as Urgencia)
+                        }
+                        disabled={loading}
+                        className="sr-only peer"
                       />
-                    </svg>
-                  </span>
-                </button>
-
+                      <label
+                        htmlFor={`prioridad-${p.value}`}
+                        className={`
+                          w-full block text-center px-3 py-2 rounded-md 
+                          border text-sm font-semibold cursor-pointer transition-all
+                          ${loading ? "opacity-50 cursor-not-allowed" : ""}
+                          
+                          ${
+                            p.value === "ALTA" &&
+                            `
+                            border-gray-300 bg-gray-50 text-gray-700
+                            peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600
+                            ${!loading && "hover:bg-red-100"}
+                          `
+                          }
+                          ${
+                            p.value === "MEDIA" &&
+                            `
+                            border-gray-300 bg-gray-50 text-gray-700
+                            peer-checked:bg-amber-400 peer-checked:text-white peer-checked:border-amber-400
+                            ${!loading && "hover:bg-amber-100"}
+                          `
+                          }
+                          ${
+                            p.value === "BAJA" &&
+                            `
+                            border-gray-300 bg-gray-50 text-gray-700
+                            peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-600
+                            ${!loading && "hover:bg-blue-100"}
+                          `
+                          }
+                        `}
+                      >
+                        {p.label}
+                      </label>
+                    </div>
+                  ))}
+                </fieldset>
                 {submitted && !prioridad && (
                   <p className="text-red-600 text-xs mt-1">
                     Debes seleccionar una prioridad.
                   </p>
                 )}
               </div>
-              {usuario?.rol === "ADMIN" && (
-                <>
-                  {/* Fecha Límite */}
-                  <div>
-                    <label
-                      htmlFor={`edit-fecha-${tarea.id}`}
-                      className="block text-sm font-semibold mb-1"
-                    >
-                      Fecha Límite
-                    </label>
-                    <DatePicker
-                      id={`edit-fecha-${tarea.id}`}
-                      selected={getSelectedDate()}
-                      onChange={handleDateChange}
-                      dateFormat="dd/MM/yyyy"
-                      required
-                      disabled={loading}
-                      minDate={new Date()}
-                      readOnly // Previene que se abra el teclado
-                      onFocus={(e) => e.target.blur()} // Previene el foco en el input
-                      className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
-${submitted && !getSelectedDate() ? "border-red-500" : "border-gray-300"}`}
-                      withPortal
-                      showYearDropdown
-                      showMonthDropdown
-                      dropdownMode="select"
-                      yearDropdownItemNumber={15}
-                      scrollableYearDropdown
-                    />
-                    {submitted && !getSelectedDate() && (
-                      <p className="text-red-600 text-xs mt-1">
-                        La fecha límite es obligatoria.
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
 
-              {/* Motivo del Cambio (Condicional) */}
-              {fechaInput !== fechaOriginalFormateada && (
+              {/* --- Fecha Límite --- */}
+              <div>
+                <label
+                  htmlFor="nueva-fecha"
+                  className="block text-sm font-semibold mb-1"
+                >
+                  Fecha Límite
+                </label>
+                <input
+                  type="date"
+                  id="nueva-fecha"
+                  value={fecha}
+                  onChange={(e) => setFecha(e.target.value)}
+                  required
+                  disabled={loading}
+                  min={formatDateToInput(new Date())}
+                  className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
+                  ${
+                    submitted && !getSelectedDate()
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  }
+                `}
+                />
+                {submitted && !getSelectedDate() && (
+                  <p className="text-red-600 text-xs mt-1">
+                    La fecha límite es obligatoria.
+                  </p>
+                )}
+              </div>
+
+              {/* --- Motivo de Cambio (Condicional) --- */}
+              {fechaHaCambiado && (
                 <div>
                   <label
-                    htmlFor={`edit-motivo-${tarea.id}`}
-                    className="block text-sm font-semibold mb-1 text-red-700"
+                    htmlFor="motivo-cambio"
+                    className="block text-sm font-semibold mb-1 text-blue-800"
                   >
-                    Motivo del cambio de fecha{" "}
-                    <span className="text-red-500">*</span>
+                    Motivo del Cambio de Fecha
                   </label>
                   <select
-                    id={`edit-motivo-${tarea.id}`}
+                    id="motivo-cambio"
                     value={motivoCambio}
                     onChange={(e) => setMotivoCambio(e.target.value)}
-                    required
                     disabled={loading}
-                    className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
+                    required
+                    className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-700 focus:outline-none
                       ${
-                        submitted && !motivoCambio.trim()
-                          ? "border-red-500 focus:ring-red-500"
-                          : "border-red-300 focus:ring-red-600"
+                        submitted && fechaHaCambiado && !motivoCambio
+                          ? "border-red-500"
+                          : "border-gray-300"
                       }`}
                   >
                     <option value="" disabled>
-                      Selecciona un motivo...
+                      -- Selecciona un motivo --
                     </option>
                     {MOTIVOS_CAMBIO_FECHA.map((motivo) => (
                       <option key={motivo} value={motivo}>
@@ -852,9 +755,9 @@ ${submitted && !getSelectedDate() ? "border-red-500" : "border-gray-300"}`}
                       </option>
                     ))}
                   </select>
-                  {submitted && !motivoCambio.trim() && (
+                  {submitted && fechaHaCambiado && !motivoCambio && (
                     <p className="text-red-600 text-xs mt-1">
-                      El motivo es obligatorio si cambia la fecha.
+                      El motivo es obligatorio si cambias la fecha.
                     </p>
                   )}
                 </div>
@@ -862,36 +765,28 @@ ${submitted && !getSelectedDate() ? "border-red-500" : "border-gray-300"}`}
             </div>
           </div>
 
-          {/* 💡 5. FOOTER (Fijo) */}
+          {/* --- FOOTER --- */}
           <div className="flex-shrink-0 flex justify-end gap-2 p-6 pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-2 rounded-md transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-2 rounded-md transition-all duration-200 disabled:opacity-70"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={loading} // 🔽 7. DESHABILITA SI ESTÁ SUBIENDO O BORRANDO
-              className={` ${
-                loading || loadingDelete
-                  ? "opacity-70 cursor-not-allowed"
-                  : "hover:bg-blue-700"
-              } bg-blue-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
+              disabled={loading}
+              className={`${
+                loading ? "opacity-70 cursor-not-allowed" : "hover:bg-green-700"
+              } bg-green-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
             >
-              {loading
-                ? "Guardando..."
-                : loadingDelete
-                ? "Borrando..."
-                : "Guardar cambios"}
+              {loading ? "Actualizando..." : "Guardar Cambios"}
             </button>
           </div>
         </form>
       </div>
-      {isResponsableModalOpen && <ModalResponsablePicker />}
-      {isPrioridadModalOpen && <ModalPrioridadPicker />}
     </div>
   );
 };

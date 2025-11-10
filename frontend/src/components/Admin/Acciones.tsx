@@ -1,50 +1,67 @@
 import React from "react";
-// 1. Importamos tu tipo 'Estatus' (asegúrate que la ruta sea correcta)
-import { Estatus } from "../../types/tarea";
+// 1. Importamos los tipos necesarios
+import { type Tarea, Estatus } from "../../types/tarea";
+import { type Usuario, Rol } from "../../types/usuario";
 
 interface AccionesProps {
-  // 2. Usamos el tipo Estatus en lugar de 'string'
-  estatus: Estatus;
+  // 2. Modificamos las props para recibir la tarea completa y el usuario
+  tarea: Tarea;
+  user: Usuario;
   onCompletar?: () => void;
   onEditar?: () => void;
   onBorrar?: () => void;
 }
 
 const Acciones: React.FC<AccionesProps> = ({
-  estatus,
+  // 3. Actualizamos la desestructuración de props
+  tarea,
+  user,
   onCompletar,
   onEditar,
   onBorrar,
 }) => {
-  // 3. Ya NO hay 'useState'.
-  //    Calculamos si está completada basándonos en el 'estatus' que recibimos.
-  const estaCompletada = estatus === "CONCLUIDA";
+  // 4. 🚀 LÓGICA DE PERMISOS
+  // Permiso para Validar (Completar)
+  const puedeValidar =
+    user.rol === Rol.SUPER_ADMIN ||
+    user.rol === Rol.ADMIN ||
+    (user.rol === Rol.ENCARGADO && tarea.asignadorId === user.id);
 
-  // 4. Ya NO hay 'handleCompletar'.
+  // 🚀 NUEVA LÓGICA: Permiso para Cancelar (Borrar)
+  const puedeCancelar =
+    user.rol === Rol.SUPER_ADMIN ||
+    user.rol === Rol.ADMIN ||
+    (user.rol === Rol.ENCARGADO && tarea.asignadorId === user.id);
 
   return (
     <td className="w-[7%] px-4 py-3 text-center border-b border-gray-300">
       {/* Contenedor con altura fija para evitar "saltos" */}
       <div className="flex items-center justify-center gap-3 h-7">
-        {/* --- CASO 1: Tarea PENDIENTE (Muestra los 3 botones) --- */}
-        {estatus === "PENDIENTE" && (
+        {/* --- CASO 1: Tarea PENDIENTE (Muestra botones condicionales) --- */}
+        {/* 5. Usamos tarea.estatus en lugar de solo estatus */}
+        {tarea.estatus === "PENDIENTE" && (
           <>
             {/* ✅ Completar / checklist */}
-            <button
-              onClick={onCompletar}
-              title="Marcar como completada"
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-green-400 text-geen-700 hover:bg-geen-100 transition-all duration-200"
-            >
-              {/* Icono caja vacía (de la vista móvil) */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 -960 960 960"
-                className="w-5 h-5 text-green-700" /* Ajustado el color */
-                fill="currentColor"
+            {/* 6. 🚀 APLICAMOS LA LÓGICA
+                El botón de completar AHORA solo se muestra si 'puedeValidar' es true 
+            */}
+            {puedeValidar && (
+              <button
+                onClick={onCompletar}
+                title="Marcar como completada"
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-green-400 text-geen-700 hover:bg-geen-100 transition-all duration-200"
               >
-                <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Z" />
-              </svg>
-            </button>
+                {/* Icono caja vacía (de la vista móvil) */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 -960 960 960"
+                  className="w-5 h-5 text-green-700" /* Ajustado el color */
+                  fill="currentColor"
+                >
+                  <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Z" />
+                </svg>
+              </button>
+            )}
 
             {/* ✏️ Editar */}
             <button
@@ -64,28 +81,32 @@ const Acciones: React.FC<AccionesProps> = ({
               </svg>
             </button>
 
-            {/* 🗑️ Cancelar */}
-            <button
-              onClick={onBorrar}
-              title="Cancelar tarea"
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-red-400 text-red-600 
-                         hover:bg-red-600 hover:text-white transition-all duration-200"
-            >
-              {/* Icono basura (de la vista móvil) */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 -960 960 960"
-                className="w-5 h-5" /* Tamaño ajustado */
-                fill="currentColor"
+            {/* 🗑️ Cancelar (AHORA CONDICIONAL) */}
+            {/* 🚀 APLICAMOS LA LÓGICA 'puedeCancelar' */}
+            {puedeCancelar && (
+              <button
+                onClick={onBorrar}
+                title="Cancelar tarea"
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-red-400 text-red-600 
+                           hover:bg-red-600 hover:text-white transition-all duration-200"
               >
-                <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
-              </svg>
-            </button>
+                {/* Icono basura (de la vista móvil) */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 -960 960 960"
+                  className="w-5 h-5" /* Tamaño ajustado */
+                  fill="currentColor"
+                >
+                  <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
+                </svg>
+              </button>
+            )}
           </>
         )}
 
         {/* --- CASO 2: Tarea CONCLUIDA (Muestra solo el check) --- */}
-        {estatus === "CONCLUIDA" && (
+        {/* 5. Usamos tarea.estatus */}
+        {tarea.estatus === "CONCLUIDA" && (
           <div
             className="flex items-center justify-center"
             title="Tarea completada"
@@ -103,7 +124,8 @@ const Acciones: React.FC<AccionesProps> = ({
         )}
 
         {/* --- CASO 3: Tarea CANCELADA (Muestra icono 'X') --- */}
-        {estatus === "CANCELADA" && (
+        {/* 5. Usamos tarea.estatus */}
+        {tarea.estatus === "CANCELADA" && (
           <div
             className="flex items-center justify-center"
             title="Tarea cancelada"

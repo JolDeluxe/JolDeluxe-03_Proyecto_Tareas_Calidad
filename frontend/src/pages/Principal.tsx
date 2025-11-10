@@ -121,6 +121,7 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
             query={query}
             tareas={tareas}
             loading={loading}
+            user={user}
           />
           <Filtros
             onUsuarioChange={setFiltroUsuarioId}
@@ -137,6 +138,7 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
             query={query}
             tareas={tareas}
             loading={loading}
+            user={user}
           />
         </div>
       </div>

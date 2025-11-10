@@ -1,3 +1,5 @@
+// 📍 src/components/Pendientes/TablaPendientes.tsx
+
 import React, { useState, useEffect } from "react";
 import { tareasService } from "../../api/tareas.service";
 import type {
@@ -7,13 +9,13 @@ import type {
   Urgencia,
   ImagenTarea,
 } from "../../types/tarea";
+import type { Usuario } from "../../types/usuario"; // 1. Importar Usuario
 
 // Importar los componentes hijos
 import TablaPendientesMobile from "./TablaPendientesMobile";
 import ModalGaleria from "../Principal/ModalGaleria";
 
-// --- Funciones Helper (Optimizadas para aceptar string | Date) ---
-
+// --- Funciones Helper (Sin cambios) ---
 const formateaFecha = (fecha?: Date | string | null): string => {
   if (!fecha) return "";
   const dateObj = typeof fecha === "string" ? new Date(fecha) : fecha;
@@ -66,8 +68,7 @@ const getEstadoFecha = (
   return "normal";
 };
 
-// --- Hook para detectar vista de Escritorio (Desktop) ---
-// (md: 768px)
+// --- Hook useMediaQuery (Sin cambios) ---
 const useMediaQuery = (query: string) => {
   const [matches, setMatches] = useState(window.matchMedia(query).matches);
 
@@ -81,23 +82,35 @@ const useMediaQuery = (query: string) => {
   return matches;
 };
 
-// --- Componente Principal ---
-const TablaPendientes: React.FC = () => {
-  const [tareas, setTareas] = useState<Tarea[]>([]);
+// 2. Definir la interfaz de Props
+interface Props {
+  user: Usuario | null;
+}
+
+// 3. Aplicar la interfaz y desestructurar 'user'
+const TablaPendientes: React.FC<Props> = ({ user }) => {
+  // 4. Renombrar 'tareas' a 'tareasPendientes' para mayor claridad
+  const [tareasPendientes, setTareasPendientes] = useState<Tarea[]>([]);
   const [pagina, setPagina] = useState(0);
   const [loading, setLoading] = useState(true);
   const [modalImagenes, setModalImagenes] = useState<ImagenTarea[] | null>(
     null
   );
 
-  // ✅ 1. Detectar si es vista de escritorio
-  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
+  // 5. Modificar fetchTareas para que use 'user' y aplique filtros
   const fetchTareas = async () => {
+    // 5a. Si no hay usuario, no hacer nada
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const tareasDesdeServicio = await tareasService.getAll();
 
-      // ✅ 2. CORRECCIÓN: Asegurarse de incluir 'imagenes' y 'responsables'
+      // (Tu lógica de mapeo de fechas es correcta)
       const tareasConFechas = tareasDesdeServicio.map((t: any) => ({
         ...t,
         fechaRegistro: t.fechaRegistro ? new Date(t.fechaRegistro) : null,
@@ -114,7 +127,25 @@ const TablaPendientes: React.FC = () => {
         responsables: t.responsables || [],
       }));
 
-      setTareas(tareasConFechas as Tarea[]);
+      // 5b. Aplicar la LÓGICA DE ROL
+      const rolesDeGestion = ["SUPER_ADMIN", "ADMIN", "ENCARGADO"];
+      const esRolGestion = user.rol ? rolesDeGestion.includes(user.rol) : false;
+
+      const tareasFiltradas = tareasConFechas.filter((t: Tarea) => {
+        // Filtro 1: Solo PENDIENTES
+        if (t.estatus !== "PENDIENTE") {
+          return false;
+        }
+        // Filtro 2: Si es Gestión, las ve todas
+        if (esRolGestion) {
+          return true;
+        }
+        // Filtro 3: Si es Usuario/Invitado, solo ve las suyas (con la corrección de resp.id)
+        return t.responsables.some((resp) => resp.id === user.id);
+      });
+
+      // 5c. Guardar en el estado la lista ya filtrada
+      setTareasPendientes(tareasFiltradas as Tarea[]);
     } catch (error) {
       console.error("❌ Error al cargar tareas:", error);
     }
@@ -122,11 +153,10 @@ const TablaPendientes: React.FC = () => {
 
   useEffect(() => {
     setLoading(true);
-    fetchTareas().finally(() => setLoading(false)); // Carga inicial siempre
+    fetchTareas().finally(() => setLoading(false));
 
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    // Solo activa el intervalo de polling si es escritorio
     if (isDesktop) {
       intervalId = setInterval(() => {
         console.log("🔄 [Desktop] Recargando tareas pendientes...");
@@ -134,17 +164,14 @@ const TablaPendientes: React.FC = () => {
       }, 30000);
     }
 
-    // Limpieza
     return () => {
       if (intervalId) {
         clearInterval(intervalId);
       }
     };
-  }, [isDesktop]); // Depende de 'isDesktop' para reiniciar el efecto
+  }, [isDesktop, user]);
 
-  // ... (Lógica de filtrado y ordenado)
-  const pendientes = tareas.filter((t) => t.estatus === "PENDIENTE");
-  const pendientesOrdenados = [...pendientes].sort((a, b) => {
+  const pendientesOrdenados = [...tareasPendientes].sort((a, b) => {
     const fechaA = getFechaFinalObj(a);
     const fechaB = getFechaFinalObj(b);
     const timeA = fechaA ? new Date(fechaA as any).getTime() : 0;
@@ -175,15 +202,14 @@ const TablaPendientes: React.FC = () => {
     };
   }, [totalPaginas, isDesktop]);
 
-  // 'visibles' se usa SÓLO para la tabla de escritorio
   const visibles = pendientesOrdenados.slice(
     pagina * itemsPorPagina,
     (pagina + 1) * itemsPorPagina
   );
-  // --- Fin Lógica de Paginación ---
 
   return (
     <div className="w-full pb-2 text-sm font-sans">
+      {/* 9. El resto del render usa 'pendientesOrdenados', lo cual es correcto */}
       {loading ? (
         <div className="flex justify-center items-center h-40 text-gray-500 italic">
           Cargando tareas...
@@ -211,8 +237,6 @@ const TablaPendientes: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {/* AQUÍ USAMOS 'visibles'
-                 */}
                 {visibles.map((row) => {
                   const fechaFinalObj = getFechaFinalObj(row);
                   const estado = getEstadoFecha(fechaFinalObj);
@@ -306,15 +330,14 @@ const TablaPendientes: React.FC = () => {
 
           {/* 📱 VISTA MÓVIL (Usa la lista COMPLETA 'pendientesOrdenados') */}
           <TablaPendientesMobile
-            // ✅ 5. CORRECCIÓN: Pasa la lista COMPLETA
-            tareas={pendientesOrdenados}
+            tareas={pendientesOrdenados} // Pasa la lista filtrada y ordenada
             formateaFecha={formateaFecha}
             getRowClass={getRowClass}
             getFechaFinalObj={getFechaFinalObj}
             getEstadoFecha={getEstadoFecha}
-            // Pasa la función para abrir el modal
             onVerImagenes={(imagenes) => setModalImagenes(imagenes)}
           />
+
           {/* Renderiza el modal */}
           {modalImagenes && (
             <ModalGaleria

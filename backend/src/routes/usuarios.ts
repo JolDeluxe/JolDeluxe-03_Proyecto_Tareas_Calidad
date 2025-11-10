@@ -191,11 +191,16 @@ const subscriptionSchema = z.object({
 /* ✅ [READ] Obtener todos los usuarios */
 router.get(
   "/",
-  // verifyToken("ADMIN"),
+  verifyToken(), // 🔹 2. Proteger la ruta
   safeAsync(async (req: Request, res: Response) => {
-    // 1. Validar los query params (ej. ?departamentoId=1)
-    const queryParseResult = querySchema.safeParse(req.query);
+    // 🔹 3. Obtener el usuario logueado
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: "Usuario no autenticado" });
+    }
 
+    // 4. Validar los query params
+    const queryParseResult = querySchema.safeParse(req.query);
     if (!queryParseResult.success) {
       return res.status(400).json({
         error: "Query param inválido",
@@ -203,22 +208,86 @@ router.get(
       });
     }
 
-    // 👈 CAMBIO 6: Obtener 'estatus' del query
     const { departamentoId, estatus } = queryParseResult.data;
 
-    // 👈 CAMBIO 7: El filtro base ahora es 'ACTIVO'
-    const whereClause: Prisma.UsuarioWhereInput = {
-      estatus: estatus ?? "ACTIVO", // Por defecto solo trae ACTIVOS
+    // 5. ⭐️ MODIFICADO: El filtro base ahora SIEMPRE excluye a INVITADOS
+    const where: Prisma.UsuarioWhereInput = {
+      estatus: estatus ?? "ACTIVO",
+      rol: {
+        not: "INVITADO", // <-- REGLA GLOBAL DE EXCLUSIÓN
+      },
     };
 
-    // Si nos pasaron un ID, lo añadimos al filtro
-    if (departamentoId) {
-      whereClause.departamentoId = departamentoId;
+    // 🔹 6. Crear array para cláusulas de seguridad
+    const andClauses: Prisma.UsuarioWhereInput[] = [];
+
+    // 7. 🔹 APLICAR LÓGICA DE ROLES (simplificada)
+    switch (user.rol) {
+      case "SUPER_ADMIN":
+        // Regla: Ve todo (excepto INVITADOS, ya cubierto por el 'where' base).
+        // Respeta el query param de 'departamentoId' si el admin lo usa.
+        if (departamentoId) {
+          where.departamentoId = departamentoId;
+        }
+        break;
+
+      case "ADMIN":
+        // Regla: (Usuarios de su depto)
+        // ⭐️ MODIFICADO: Ya no necesita la cláusula OR para INVITADO
+        if (!user.departamentoId) {
+          return res.status(403).json({ error: "Usuario sin departamento." });
+        }
+        andClauses.push({
+          departamentoId: user.departamentoId,
+        });
+        break;
+
+      case "ENCARGADO":
+        // Regla: (Usuarios de su depto con rol USUARIO o ENCARGADO)
+        // ⭐️ MODIFICADO: Ya no necesita la cláusula OR para INVITADO
+        if (!user.departamentoId) {
+          return res.status(403).json({ error: "Usuario sin departamento." });
+        }
+        andClauses.push({
+          AND: [
+            { rol: { in: ["USUARIO", "ENCARGADO"] } },
+            { departamentoId: user.departamentoId },
+          ],
+        });
+        break;
+
+      case "USUARIO":
+        // Regla: (Usuarios de su depto con rol USUARIO)
+        // (Esta regla ya excluía a INVITADO, así que está bien)
+        if (!user.departamentoId) {
+          return res.status(403).json({ error: "Usuario sin departamento." });
+        }
+        andClauses.push({
+          rol: "USUARIO",
+          departamentoId: user.departamentoId,
+        });
+        break;
+
+      case "INVITADO":
+        // Regla: No ve a nadie.
+        andClauses.push({
+          id: -1, // Un ID que nunca existirá
+        });
+        break;
+
+      default:
+        // Por si acaso, denegar por defecto
+        andClauses.push({ id: -1 });
     }
 
-    // 3. Ejecutar la consulta con el 'where'
+    // 8. 🔹 Combinar las cláusulas de seguridad
+    if (andClauses.length > 0) {
+      where.AND = andClauses;
+    }
+
+    // 9. Ejecutar la consulta con el 'where' seguro
     const usuarios = await prisma.usuario.findMany({
-      where: whereClause,
+      where: where, // 'where' ahora contiene la exclusión de INVITADO
       select: {
         id: true,
         nombre: true,
@@ -239,12 +308,67 @@ router.get(
   })
 );
 
+router.get(
+  "/invitados",
+  // 1. Proteger la ruta. Solo roles de gestión pueden ver invitados.
+  verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
+  safeAsync(async (req: Request, res: Response) => {
+    // 2. Validar el query param 'estatus' (ej. ?estatus=INACTIVO)
+    // Asumimos que querySchema está definido en este archivo
+    const queryParseResult = querySchema.safeParse(req.query);
+
+    if (!queryParseResult.success) {
+      return res.status(400).json({
+        error: "Query param inválido",
+        detalles: queryParseResult.error.flatten().fieldErrors,
+      });
+    }
+
+    // 3. Obtenemos 'estatus'. Ignoramos cualquier otro query param.
+    const { estatus } = queryParseResult.data;
+
+    // 4. Definir el filtro de la consulta
+    const where: Prisma.UsuarioWhereInput = {
+      // Regla Clave: Forzar el rol a INVITADO
+      rol: "INVITADO",
+
+      // Regla de Estatus: Permitir filtrar por 'ACTIVO' (default) o 'INACTIVO'
+      estatus: estatus ?? "ACTIVO",
+    };
+
+    // 5. Ejecutar la consulta
+    const usuariosInvitados = await prisma.usuario.findMany({
+      where: where,
+      select: {
+        // Usamos el mismo 'select' que en la ruta GET /
+        // para que el frontend reciba objetos consistentes.
+        id: true,
+        nombre: true,
+        username: true,
+        rol: true,
+        estatus: true,
+        fechaCreacion: true,
+        departamento: {
+          // Esto será 'null' para invitados, pero mantiene la estructura
+          select: {
+            id: true,
+            nombre: true,
+          },
+        },
+      },
+      orderBy: { nombre: "asc" },
+    });
+
+    res.json(usuariosInvitados);
+  })
+);
+
 /* ✅ [READ BY ID] Obtener un usuario por su ID */
 router.get(
-  "/:id", // Ruta: GET /api/usuarios/1
-  // verifyToken("ADMIN"),
+  "/:id",
+  verifyToken(), // 🔹 2. Proteger la ruta
   safeAsync(async (req: Request, res: Response) => {
-    // 1. Validar el ID de la URL
+    // 3. Validar el ID de la URL
     const paramsParseResult = paramsSchema.safeParse(req.params);
     if (!paramsParseResult.success) {
       return res.status(400).json({
@@ -252,20 +376,100 @@ router.get(
         detalles: paramsParseResult.error.flatten().fieldErrors,
       });
     }
-    const { id } = paramsParseResult.data;
+    const { id: targetUsuarioId } = paramsParseResult.data; // Renombrado para claridad
 
-    // 2. Buscar el usuario en la BD
+    // 4. 🔹 Obtener el usuario QUE HACE LA PETICIÓN
+    const requester = req.user;
+    if (!requester) {
+      return res.status(401).json({ error: "Usuario no autenticado" });
+    }
+
+    // 5. 🔹 Construir el 'where' base
+    const where: Prisma.UsuarioWhereInput = {
+      id: targetUsuarioId,
+      estatus: "ACTIVO", // Solo buscar usuarios activos
+    };
+
+    // 6. 🔹 Lógica de auto-visualización (Self-View)
+    //    Si el ID que buscas es TU PROPIO ID, no se aplican más filtros.
+    if (requester.id !== targetUsuarioId) {
+      // 7. 🔹 Si buscas a ALGUIEN MÁS, aplica las reglas de seguridad
+      const andClauses: Prisma.UsuarioWhereInput[] = [];
+
+      switch (requester.rol) {
+        case "SUPER_ADMIN":
+          // Ve a todos, no se añade ningún filtro.
+          break;
+
+        case "ADMIN":
+          // Regla: (Target de su depto) O (Target es INVITADO)
+          if (!requester.departamentoId) {
+            return res.status(403).json({ error: "Usuario sin departamento." });
+          }
+          andClauses.push({
+            OR: [
+              { departamentoId: requester.departamentoId },
+              { rol: "INVITADO" },
+            ],
+          });
+          break;
+
+        case "ENCARGADO":
+          // Regla: (Target de su depto con rol USUARIO/ENCARGADO) O (Target es INVITADO)
+          if (!requester.departamentoId) {
+            return res.status(403).json({ error: "Usuario sin departamento." });
+          }
+          andClauses.push({
+            OR: [
+              {
+                AND: [
+                  { rol: { in: ["USUARIO", "ENCARGADO"] } },
+                  { departamentoId: requester.departamentoId },
+                ],
+              },
+              { rol: "INVITADO" },
+            ],
+          });
+          break;
+
+        case "USUARIO":
+          // Regla: (Target de su depto con rol USUARIO)
+          if (!requester.departamentoId) {
+            return res.status(403).json({ error: "Usuario sin departamento." });
+          }
+          andClauses.push({
+            rol: "USUARIO",
+            departamentoId: requester.departamentoId,
+          });
+          break;
+
+        case "INVITADO":
+          // Regla: No ve a nadie más que a sí mismo (ya cubierto arriba).
+          andClauses.push({
+            id: -1, // Condición imposible
+          });
+          break;
+
+        default:
+          andClauses.push({ id: -1 }); // Denegar por defecto
+      }
+
+      // 8. 🔹 Asignar las reglas al 'where'
+      if (andClauses.length > 0) {
+        where.AND = andClauses;
+      }
+    }
+
+    // 9. Buscar el usuario en la BD con el 'where' seguro
+    //    (where es: { id: ..., estatus: 'ACTIVO', AND: [ ...reglas... ] } )
     const usuario = await prisma.usuario.findFirst({
-      where: {
-        id: id,
-        estatus: "ACTIVO", // Por defecto, no puedes ver usuarios inactivos por ID
-      },
+      where: where, // 'where' ahora es 100% seguro
       select: {
         id: true,
         nombre: true,
         username: true,
         rol: true,
-        estatus: true, // 👈 CAMBIO 10: Devolver el estatus
+        estatus: true,
         fechaCreacion: true,
         fechaEdicion: true,
         departamento: {
@@ -277,15 +481,15 @@ router.get(
       },
     });
 
-    // 4. Manejar "No Encontrado"
+    // 10. Manejar "No Encontrado" (o "No Permitido")
     if (!usuario) {
-      // 👈 CAMBIO 11: Mensaje actualizado
-      return res
-        .status(404)
-        .json({ error: "Usuario no encontrado o está inactivo" });
+      return res.status(404).json({
+        error:
+          "Usuario no encontrado, inactivo, o no tienes permiso para verlo.",
+      });
     }
 
-    // 5. Devolver el usuario
+    // 11. Devolver el usuario
     res.json(usuario);
   })
 );
@@ -473,7 +677,6 @@ router.put(
   })
 );
 
-// 👈 CAMBIO 18: AÑADIR NUEVA RUTA PARA "SOFT DELETE"
 /* ✅ [UPDATE STATUS] Desactivar o Reactivar un usuario */
 router.put(
   "/:id/estatus", // Ruta: PUT /api/usuarios/1/estatus
