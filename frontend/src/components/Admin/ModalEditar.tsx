@@ -71,7 +71,10 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     tarea.responsables ? tarea.responsables.map((r) => r.id) : []
   );
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
+  const [listaInvitados, setListaInvitados] = useState<Usuario[]>([]);
   const [loadingUsuarios, setLoadingUsuarios] = useState(true);
+
+  const isKaizen = nombre.toUpperCase().startsWith("KAIZEN");
 
   // --- 🚀 ESTADOS PARA EL MOTIVO DE CAMBIO (CORREGIDOS) ---
 
@@ -96,12 +99,18 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       if (!user) return;
       setLoadingUsuarios(true);
       try {
-        // La lógica del backend ya filtra por rol/depto
-        const data = await usuariosService.getAll();
-        const listaOrdenada = data.sort((a, b) =>
-          a.nombre.localeCompare(b.nombre)
+        // ✅ Cargamos AMBAS listas en paralelo
+        const [usersData, invitadosData] = await Promise.all([
+          usuariosService.getAll(), // Compañeros del depto
+          usuariosService.getInvitados(), // Invitados externos
+        ]);
+
+        setListaUsuarios(
+          usersData.sort((a, b) => a.nombre.localeCompare(b.nombre))
         );
-        setListaUsuarios(listaOrdenada);
+        setListaInvitados(
+          invitadosData.sort((a, b) => a.nombre.localeCompare(b.nombre))
+        );
       } catch (error) {
         console.error("Error al cargar usuarios:", error);
         toast.error("No se pudo cargar la lista de usuarios.");
@@ -560,7 +569,10 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   htmlFor="responsable-list"
                   className="block text-sm font-semibold mb-1"
                 >
-                  Responsable(s)
+                  {/* Cambiamos el texto según el tipo */}
+                  {isKaizen
+                    ? "Selecciona Invitado(s) (KAIZEN)"
+                    : "Responsable(s)"}
                 </label>
                 {loadingUsuarios ? (
                   <div
@@ -584,7 +596,11 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   `}
                     tabIndex={0}
                   >
-                    {listaUsuarios.map((u) => (
+                    {/* ✅ CONDICIÓN LÓGICA:
+                        Si es Kaizen -> Mapea listaInvitados
+                        Si no -> Mapea listaUsuarios (del depto)
+                    */}
+                    {(isKaizen ? listaInvitados : listaUsuarios).map((u) => (
                       <label
                         key={u.id}
                         htmlFor={`resp-${u.id}`}
@@ -607,8 +623,25 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                           className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
                         />
                         <span>{u.nombre}</span>
+
+                        {/* Etiqueta visual extra para confirmar (opcional) */}
+                        {isKaizen && (
+                          <span className="text-xs text-gray-400 ml-auto">
+                            (Invitado)
+                          </span>
+                        )}
                       </label>
                     ))}
+
+                    {/* Mensaje si la lista está vacía */}
+                    {(isKaizen ? listaInvitados : listaUsuarios).length ===
+                      0 && (
+                      <p className="text-center text-gray-500 text-sm py-8">
+                        {isKaizen
+                          ? "No hay invitados disponibles."
+                          : "No hay usuarios en tu departamento."}
+                      </p>
+                    )}
                   </div>
                 )}
                 {submitted && responsablesIds.length === 0 && (

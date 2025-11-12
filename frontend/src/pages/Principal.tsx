@@ -134,6 +134,7 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
             onResponsableChange={setFiltroUsuarioId}
             onBuscarChange={setQuery}
             onKaizenChange={setIsKaizen}
+            user={user}
           />
         </div>
         <div className="px-1">
