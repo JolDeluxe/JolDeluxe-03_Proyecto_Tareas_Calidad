@@ -302,13 +302,10 @@ router.get(
   "/",
   verifyToken(),
   safeAsync(async (req: Request, res: Response) => {
-    // 2. Obtener el usuario del token
     const user = req.user;
-    if (!user) {
-      return res.status(401).json({ error: "Usuario no autenticado" });
-    }
+    if (!user) return res.status(401).json({ error: "Usuario no autenticado" });
 
-    // 3. Validar los query params opcionales
+    // Validar Query Params
     const queryParse = getTareasQuerySchema.safeParse(req.query);
     if (!queryParse.success) {
       return res.status(400).json({
@@ -316,125 +313,146 @@ router.get(
         detalles: queryParse.error.flatten().fieldErrors,
       });
     }
-    // 🔽 CAMBIO 2: Desestructuramos el nuevo viewType 🔽
+
     const { departamentoId, asignadorId, responsableId, estatus, viewType } =
-      queryParse.data; //
+      queryParse.data;
 
-    // 4. Construir el 'where' base con filtros de query
-    const where: Prisma.TareaWhereInput = {};
-    if (estatus) where.estatus = estatus;
+    // --- 1. DETECCIÓN DE "CALIDAD" ---
+    // Necesitamos saber si el usuario pertenece al departamento de Calidad.
+    let esDepartamentoCalidad = false;
 
-    // Ajuste: Si el rol es ENCARGADO y la vista es ASIGNADAS, forzaremos asignadorId, así que ignoramos el query param genérico de asignadorId para evitar conflictos.
-    if (user.rol !== "ENCARGADO" || viewType !== "ASIGNADAS") {
-      //
-      if (asignadorId) where.asignadorId = asignadorId;
+    if (user.rol === "SUPER_ADMIN") {
+      esDepartamentoCalidad = true; // Super Admin accede a todo
+    } else if (user.departamentoId) {
+      // Consultamos el nombre del depto si no viene en el token
+      // Nota: Si tu middleware 'verifyToken' ya inyecta el nombre del depto, usa eso para ahorrar la consulta.
+      const depto = await prisma.departamento.findUnique({
+        where: { id: user.departamentoId },
+        select: { nombre: true },
+      });
+      if (depto?.nombre?.toUpperCase().includes("CALIDAD")) {
+        esDepartamentoCalidad = true;
+      }
     }
 
-    // 🔹 Creamos un array separado para las cláusulas 'AND'.
+    // --- 2. CONSTRUCCIÓN DEL FILTRO (WHERE) ---
+    const where: Prisma.TareaWhereInput = {};
     const andClauses: Prisma.TareaWhereInput[] = [];
 
-    // 🔹 Primero, el filtro de query 'responsableId'
-    // Solo se aplica si el rol NO ES INVITADO/USUARIO/ENCARGADO (vista MIS_TAREAS) ya que estos roles ya fuerzan el filtro por responsable.
-    const isRoleFilteringResponsables =
-      user.rol === "INVITADO" ||
-      user.rol === "USUARIO" ||
-      (user.rol === "ENCARGADO" && viewType !== "ASIGNADAS"); //
+    // Filtros básicos
+    if (estatus) where.estatus = estatus;
 
-    if (responsableId && !isRoleFilteringResponsables) {
-      //
-      andClauses.push({
-        responsables: { some: { usuarioId: responsableId } },
-      });
-    }
+    // --- 3. LÓGICA DE ROLES ---
 
-    // -----------------------------------------------------------------
-    // 🔹 INICIO DE LA LÓGICA DE ROLES (Modificada para Encargado y Usuario)
-    // -----------------------------------------------------------------
     if (user.rol === "SUPER_ADMIN") {
-      // "Dios": Ve todo.
+      // Ve todo. Aplica filtros opcionales si existen.
       if (departamentoId) where.departamentoId = departamentoId;
+      if (asignadorId) where.asignadorId = asignadorId;
+      if (responsableId)
+        andClauses.push({
+          responsables: { some: { usuarioId: responsableId } },
+        });
     } else if (user.rol === "ADMIN") {
-      // ADMIN: Ve tareas de ENCARGADO, USUARIO, INVITADO en su depto. (Sin cambios)
-      if (!user.departamentoId) {
-        return res.status(403).json({ error: "Usuario sin departamento." });
-      }
-      where.departamentoId = user.departamentoId; // Filtro de depto
+      // ADMIN: Ve todo lo de su departamento.
+      if (!user.departamentoId)
+        return res.status(403).json({ error: "Sin departamento." });
+      where.departamentoId = user.departamentoId;
 
-      // Se mantiene la visibilidad amplia del ADMIN (Encargado, Usuario, Invitado en su depto)
-      andClauses.push({
-        responsables: {
-          some: {
-            usuario: { rol: { in: ["ENCARGADO", "USUARIO", "INVITADO"] } },
-          },
-        },
-      });
+      // Si es ADMIN de CALIDAD, automáticamente verá las KAIZEN porque tienen el mismo departamentoId.
+      // El "Blindaje" (paso 4) se encargará de proteger si NO es de calidad.
+
+      // Filtros opcionales del Admin
+      if (asignadorId) where.asignadorId = asignadorId;
+      if (responsableId)
+        andClauses.push({
+          responsables: { some: { usuarioId: responsableId } },
+        });
     } else if (user.rol === "ENCARGADO") {
-      // 🔽--- CAMBIO CLAVE: Lógica de Doble Vista para ENCARGADO ---🔽
-      if (!user.departamentoId) {
-        return res.status(403).json({ error: "Usuario sin departamento." });
-      }
-      where.departamentoId = user.departamentoId; // Filtro de depto
+      // ENCARGADO: Aquí está el cambio importante.
+      if (!user.departamentoId)
+        return res.status(403).json({ error: "Sin departamento." });
+      where.departamentoId = user.departamentoId;
+
+      // Definimos su "Visión Normal" (Lo que ve un encargado estándar)
+      let filtroVisionNormal: Prisma.TareaWhereInput = {};
 
       if (viewType === "ASIGNADAS") {
-        // VISTA ASIGNADAS: Tareas que el ENCARGADO creó (ignora filtro de responsable)
-        where.asignadorId = user.id; //
+        filtroVisionNormal = { asignadorId: user.id };
       } else {
-        // VISTA MIS TAREAS (default/MIS_TAREAS): Tareas donde es responsable.
-        where.responsables = { some: { usuarioId: user.id } }; //
+        // Default: Mis Tareas (donde soy responsable)
+        filtroVisionNormal = { responsables: { some: { usuarioId: user.id } } };
+      }
+
+      if (esDepartamentoCalidad) {
+        // 🚀 EXCEPCIÓN CALIDAD:
+        // Si es Encargado de Calidad, ve: (Sus tareas normales) O (Cualquier tarea KAIZEN)
+        andClauses.push({
+          OR: [
+            filtroVisionNormal, // Lo que le toca
+            { tarea: { startsWith: "KAIZEN" } }, // Lo que le interesa por ser Calidad
+          ],
+        });
+      } else {
+        // Encargado Normal: Se aplica la restricción estricta
+        andClauses.push(filtroVisionNormal);
       }
     } else if (user.rol === "USUARIO") {
-      // 🔽--- CAMBIO CLAVE: Lógica simplificada para USUARIO (Solo sus tareas asignadas) ---🔽
-      if (!user.departamentoId) {
-        return res.status(403).json({ error: "Usuario sin departamento." });
-      }
-      where.departamentoId = user.departamentoId; // Filtro de depto
-
-      // Se fuerza a ver SÓLO sus tareas asignadas (cumple con "solo deben ver sus tareas")
-      where.responsables = { some: { usuarioId: user.id } }; //
-    } else if (user.rol === "INVITADO") {
+      // USUARIO: Solo ve lo que se le asigna.
+      if (!user.departamentoId)
+        return res.status(403).json({ error: "Sin departamento." });
+      where.departamentoId = user.departamentoId;
       where.responsables = { some: { usuarioId: user.id } };
 
-      // Aún puede filtrar por depto
-      if (departamentoId) where.departamentoId = departamentoId;
+      // Nota: Un USUARIO de Calidad NO ve KAIZEN automáticamente según tu instrucción
+      // (solo dijiste Admin y Encargado), así que se queda con esta lógica estricta.
+    } else if (user.rol === "INVITADO") {
+      where.responsables = { some: { usuarioId: user.id } };
     }
-    // -----------------------------------------------------------------
 
-    // 🔹 Finalmente, asignamos el array 'AND' al 'where' si tiene contenido
+    // --- 4. BLINDAJE ANTI-KAIZEN (Seguridad) ---
+    // Si NO eres del departamento de Calidad (y no eres Super Admin),
+    // NO debes ver tareas KAIZEN a menos que te hayan invitado explícitamente.
+    if (!esDepartamentoCalidad) {
+      andClauses.push({
+        OR: [
+          // Opción A: Es una tarea normal (NO Kaizen)
+          { tarea: { not: { startsWith: "KAIZEN" } } },
+
+          // Opción B: Es Kaizen, PERO me invitaron (soy responsable)
+          {
+            AND: [
+              { tarea: { startsWith: "KAIZEN" } },
+              { responsables: { some: { usuarioId: user.id } } },
+            ],
+          },
+        ],
+      });
+    }
+
+    // Inyectar todas las cláusulas AND acumuladas
     if (andClauses.length > 0) {
       where.AND = andClauses;
     }
 
-    // 6. Ejecutar la consulta (El resto de tu código es correcto)
-    // 6. Ejecutar la consulta (PESADA / COMPLETA)
+    // Ejecutar consulta
     const tareas = await prisma.tarea.findMany({
       where,
       include: {
         departamento: { select: { id: true, nombre: true } },
         asignador: { select: { id: true, nombre: true } },
         responsables: {
-          select: {
-            usuario: {
-              select: { id: true, nombre: true },
-            },
-          },
+          select: { usuario: { select: { id: true, nombre: true } } },
         },
-        // 🚨 CARGA COMPLETA: Esto traerá todos los datos (puede ser lento)
-        imagenes: {
-          select: { id: true, url: true, fechaSubida: true },
-        },
+        imagenes: { select: { id: true, url: true, fechaSubida: true } },
         historialFechas: {
-          include: {
-            modificadoPor: { select: { id: true, nombre: true } },
-          },
-          orderBy: {
-            fechaCambio: "asc",
-          },
+          include: { modificadoPor: { select: { id: true, nombre: true } } },
+          orderBy: { fechaCambio: "asc" },
         },
       },
       orderBy: { id: "desc" },
     });
 
-    // 7. Limpiar la respuesta
+    // Limpiar respuesta
     const tareasLimpio = tareas.map((t) => ({
       ...t,
       responsables: t.responsables.map((r) => r.usuario),
