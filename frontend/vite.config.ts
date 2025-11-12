@@ -9,8 +9,15 @@ export default defineConfig({
     react(),
     tailwindcss(),
     svgr(),
+
     VitePWA({
       registerType: "autoUpdate",
+      workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+        navigateFallbackDenylist: [/^\/api/],
+      },
       manifest: {
         name: "Tareas Calidad MBC",
         short_name: "Tareas Calidad",
