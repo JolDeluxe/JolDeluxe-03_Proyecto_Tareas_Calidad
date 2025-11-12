@@ -306,9 +306,11 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
             <div className="flex flex-col gap-4 text-gray-800">
               {/* ✅ NUEVO: SWITCH DE TIPO DE TAREA (Solo Calidad/Admin) */}
               {/* Ajusta la condición "CALIDAD" según el nombre exacto en tu BD */}
-              {(user?.rol === "ADMIN" ||
-                user?.rol === "ENCARGADO" ||
-                user?.rol === "SUPER_ADMIN") && (
+              {(user?.rol === "SUPER_ADMIN" ||
+                ((user?.rol === "ADMIN" || user?.rol === "ENCARGADO") &&
+                  user?.departamento?.nombre
+                    ?.toUpperCase()
+                    .includes("CALIDAD"))) && (
                 <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
                   <button
                     type="button"

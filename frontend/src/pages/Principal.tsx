@@ -22,6 +22,8 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
   const [filtroUsuarioId, setFiltroUsuarioId] = useState<string>("Todos");
   const [query, setQuery] = useState<string>("");
 
+  const [isKaizen, setIsKaizen] = useState(false);
+
   // 4. AÑADIMOS estado para los datos y la carga
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,6 +73,11 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
     setMonth(newMonth);
   };
 
+  const tareasFiltradasPorModo = tareas.filter((t) => {
+    const esKaizen = t.tarea.trim().toUpperCase().startsWith("KAIZEN");
+    return isKaizen ? esKaizen : !esKaizen;
+  });
+
   return (
     <div className="relative mx-auto max-w-7x2 px-6 lg:px-10 py-2">
       <button
@@ -119,14 +126,14 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
             month={month}
             responsable={filtroUsuarioId}
             query={query}
-            tareas={tareas}
+            tareas={tareasFiltradasPorModo}
             loading={loading}
             user={user}
           />
           <Filtros
-            onUsuarioChange={setFiltroUsuarioId}
+            onResponsableChange={setFiltroUsuarioId}
             onBuscarChange={setQuery}
-            user={user}
+            onKaizenChange={setIsKaizen}
           />
         </div>
         <div className="px-1">
@@ -136,7 +143,7 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
             month={month}
             responsable={filtroUsuarioId}
             query={query}
-            tareas={tareas}
+            tareas={tareasFiltradasPorModo}
             loading={loading}
             user={user}
           />
