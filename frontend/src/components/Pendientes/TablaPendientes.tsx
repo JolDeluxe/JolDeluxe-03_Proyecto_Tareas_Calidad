@@ -82,14 +82,15 @@ const useMediaQuery = (query: string) => {
   return matches;
 };
 
-// 2. Definir la interfaz de Props
+// 2. Definir la interfaz de Props con el nuevo viewType
 interface Props {
   user: Usuario | null;
+  viewType?: "MIS_TAREAS" | "ASIGNADAS"; // Añadido para diferenciar vistas del ENCARGADO
 }
 
-// 3. Aplicar la interfaz y desestructurar 'user'
-const TablaPendientes: React.FC<Props> = ({ user }) => {
-  // 4. Renombrar 'tareas' a 'tareasPendientes' para mayor claridad
+// 3. Aplicar la interfaz y desestructurar 'user' y 'viewType'
+const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
+  // 4. Renombrar 'tareas' a 'tareasPendientes' para mayor claridad (según tu código)
   const [tareasPendientes, setTareasPendientes] = useState<Tarea[]>([]);
   const [pagina, setPagina] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -103,12 +104,14 @@ const TablaPendientes: React.FC<Props> = ({ user }) => {
   const fetchTareas = async () => {
     // 5a. Si no hay usuario, no hacer nada
     if (!user) {
+      setTareasPendientes([]);
       setLoading(false);
       return;
     }
 
     try {
-      const tareasDesdeServicio = await tareasService.getAll();
+      // 💡 CAMBIO CLAVE: Llama al servicio y pasa el filtro viewType al backend
+      const tareasDesdeServicio = await tareasService.getAll({ viewType });
 
       // (Tu lógica de mapeo de fechas es correcta)
       const tareasConFechas = tareasDesdeServicio.map((t: any) => ({
@@ -127,27 +130,17 @@ const TablaPendientes: React.FC<Props> = ({ user }) => {
         responsables: t.responsables || [],
       }));
 
-      // 5b. Aplicar la LÓGICA DE ROL
-      const rolesDeGestion = ["SUPER_ADMIN", "ADMIN", "ENCARGADO"];
-      const esRolGestion = user.rol ? rolesDeGestion.includes(user.rol) : false;
-
-      const tareasFiltradas = tareasConFechas.filter((t: Tarea) => {
-        // Filtro 1: Solo PENDIENTES
-        if (t.estatus !== "PENDIENTE") {
-          return false;
-        }
-        // Filtro 2: Si es Gestión, las ve todas
-        if (esRolGestion) {
-          return true;
-        }
-        // Filtro 3: Si es Usuario/Invitado, solo ve las suyas (con la corrección de resp.id)
-        return t.responsables.some((resp) => resp.id === user.id);
-      });
+      // 💡 ÚNICO FILTRO NECESARIO: Filtrar por estatus PENDIENTE en el cliente.
+      // El filtro de rol/responsable/asignador ya fue manejado por el backend.
+      const tareasFiltradas = tareasConFechas.filter(
+        (t: Tarea) => t.estatus === "PENDIENTE"
+      );
 
       // 5c. Guardar en el estado la lista ya filtrada
       setTareasPendientes(tareasFiltradas as Tarea[]);
     } catch (error) {
       console.error("❌ Error al cargar tareas:", error);
+      setTareasPendientes([]);
     }
   };
 
@@ -159,7 +152,7 @@ const TablaPendientes: React.FC<Props> = ({ user }) => {
 
     if (isDesktop) {
       intervalId = setInterval(() => {
-        console.log("🔄 [Desktop] Recargando tareas pendientes...");
+        // console.log("🔄 [Desktop] Recargando tareas pendientes...");
         fetchTareas();
       }, 30000);
     }
@@ -169,7 +162,7 @@ const TablaPendientes: React.FC<Props> = ({ user }) => {
         clearInterval(intervalId);
       }
     };
-  }, [isDesktop, user]);
+  }, [isDesktop, user, viewType]); // 💡 CAMBIO: Dependencia de user y viewType
 
   const pendientesOrdenados = [...tareasPendientes].sort((a, b) => {
     const fechaA = getFechaFinalObj(a);

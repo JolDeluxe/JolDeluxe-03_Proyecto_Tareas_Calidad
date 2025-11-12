@@ -69,6 +69,12 @@ export const usuariosService = {
     return data;
   },
 
+  getInvitados: async () => {
+    // Asumiendo que tu ruta base es /usuarios y el endpoint es /invitados
+    const { data } = await api.get<Usuario[]>("/usuarios/invitados");
+    return data;
+  },
+
   /**
    * 🔹 Obtener un usuario por ID (GET /api/usuarios/:id)
    */

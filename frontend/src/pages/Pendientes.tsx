@@ -14,9 +14,47 @@ const Pendientes: React.FC<Props> = ({ user }) => {
     setRefreshKey((prevKey) => prevKey + 1);
   };
 
-  // 1. Lógica para definir el título según el rol
+  // 1. Lógica para determinar si el usuario es un ENCARGADO
+  const esEncargado = user?.rol === "ENCARGADO";
+
+  // Lógica para el título principal si no es ENCARGADO
   const esRolPersonal = user?.rol === "USUARIO" || user?.rol === "INVITADO";
-  const titulo = esRolPersonal ? "MIS TAREAS PENDIENTES" : "TAREAS PENDIENTES";
+  const tituloNormal = esRolPersonal
+    ? "MIS TAREAS PENDIENTES"
+    : "TAREAS PENDIENTES"; // ADMIN/SUPER_ADMIN/USUARIO/INVITADO
+
+  // Función helper para renderizar una sección completa, adaptada para aceptar viewType
+  const renderSection = (
+    title: string,
+    viewType?: "MIS_TAREAS" | "ASIGNADAS"
+  ) => (
+    // La clave dinámica asegura que React trate cada sección como única
+    <div key={viewType || "default-view"} className="mb-8">
+      {/* Título dinámico aplicado */}
+      <h1 className="text-3xl font-bold mb-3 text-center text-black tracking-wide font-sans">
+        {title}
+      </h1>
+
+      <div className="shadow-lg rounded-lg border border-gray-400 bg-white overflow-visible pb-5 sm:pb-0">
+        <div className="lg:static sticky top-[40px] md:top-[70px] z-40 bg-white border-b border-gray-200 m-1 px-1 pt-4 pb-1 lg:pb-4">
+          {/* Se pasa el viewType al ResumenPendientes */}
+          <ResumenPendientes
+            key={`resumen-${viewType}-${refreshKey}`}
+            user={user}
+            viewType={viewType}
+          />
+        </div>
+        <div className="px-1">
+          {/* Se pasa el viewType a la TablaPendientes */}
+          <TablaPendientes
+            key={`tabla-${viewType}-${refreshKey}`}
+            user={user}
+            viewType={viewType}
+          />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="relative mx-auto max-w-7x2 px-6 lg:px-10 py-2">
@@ -46,21 +84,23 @@ const Pendientes: React.FC<Props> = ({ user }) => {
         </svg>
       </button>
 
-      {/* 2. Título dinámico aplicado */}
-      <h1 className="text-3xl font-bold mb-3 text-center text-black tracking-wide font-sans">
-        {titulo}
-      </h1>
+      {/* 🔹 RENDERIZADO CONDICIONAL POR ROL */}
+      {esEncargado ? (
+        <>
+          {/* SECCIÓN 1: MIS PENDIENTES (Tareas asignadas AL ENCARGADO) */}
+          {/* viewType="MIS_TAREAS" fuerza el filtro por responsable = user.id */}
+          {renderSection("MIS PENDIENTES", "MIS_TAREAS")}
 
-      <div className="shadow-lg rounded-lg border border-gray-400 bg-white overflow-visible pb-5 sm:pb-0">
-        <div className="lg:static sticky top-[40px] md:top-[70px] z-40 bg-white border-b border-gray-200 m-1 px-1 pt-4 pb-1 lg:pb-4">
-          {/* Los errores aquí son normales, los arreglamos en el paso 2 */}
-          <ResumenPendientes key={`resumen-${refreshKey}`} user={user} />
-        </div>
-        <div className="px-1">
-          {/* Los errores aquí son normales, los arreglamos en el paso 3 */}
-          <TablaPendientes key={`tabla-${refreshKey}`} user={user} />
-        </div>
-      </div>
+          {/* SECCIÓN 2: ASIGNADAS (Tareas asignadas POR EL ENCARGADO) */}
+          {/* viewType="ASIGNADAS" fuerza el filtro por asignador = user.id */}
+          {renderSection("TAREAS ASIGNADAS", "ASIGNADAS")}
+        </>
+      ) : (
+        // RENDERIZADO PARA SUPER_ADMIN, ADMIN, USUARIO, INVITADO
+        // Se llama a la función una sola vez, omitiendo viewType.
+        // El backend aplica el filtro de rol por defecto (Ver todo el depto para ADMIN, solo sus tareas para USUARIO).
+        renderSection(tituloNormal)
+      )}
     </div>
   );
 };

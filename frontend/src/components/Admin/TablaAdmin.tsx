@@ -170,8 +170,12 @@ const TablaAdmin: React.FC<TablaProps> = ({
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-32 text-gray-500 italic">
-        Cargando tareas...
+      <div className="flex flex-col justify-center items-center h-40 text-gray-500 italic">
+        {/* El Spinner */}
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+
+        {/* Mensaje */}
+        <span className="text-gray-600 font-semibold">Cargando tareas...</span>
       </div>
     );
   }
@@ -185,37 +189,42 @@ const TablaAdmin: React.FC<TablaProps> = ({
             <table className="w-full text-sm font-sans">
               <thead className="bg-gray-100 text-black text-xs uppercase sticky top-0 z-20 shadow-inner">
                 <tr>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  {/* 🚀 ANCHOS OPTIMIZADOS (Suman ~100% para evitar scroll horizontal innecesario) */}
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[4%]">
                     ID
                   </th>
-                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[14%]">
                     Tarea
                   </th>
-                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300">
+                  {/* 🚀 NUEVA COLUMNA DE IMAGEN */}
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[5%]">
+                    Img
+                  </th>
+                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[10%]">
                     Observaciones
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[8%]">
                     Asignado por
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[13%]">
                     Responsable(s)
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[6%]">
                     Prioridad
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">
                     Registro
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[10%]">
                     Fecha límite / Historial
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">
                     Conclusión
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">
                     Estatus
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300">
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[9%]">
                     Acciones
                   </th>
                 </tr>
@@ -226,6 +235,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                   const hoy = new Date();
                   hoy.setHours(0, 0, 0, 0);
 
+                  // Lógica de fechas (asumida)
                   const fechaLimiteObj =
                     row.historialFechas && row.historialFechas.length > 0
                       ? new Date(
@@ -256,16 +266,25 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       key={row.id}
                       className={`${getRowClass(row.estatus)} transition`}
                     >
-                      <td className="px-3 py-3 text-center font-semibold">
+                      {/* Columna ID */}
+                      <td className="px-3 py-3 text-center font-semibold w-[4%]">
                         {row.id}
                       </td>
-                      <td className="px-3 py-3 text-left font-semibold">
+
+                      {/* Columna Tarea */}
+                      <td className="px-3 py-3 text-left font-semibold w-[14%]">
                         {row.tarea}
-                        {row.imagenes && row.imagenes.length > 0 && (
+                      </td>
+
+                      {/* 🚀 Columna IMAGEN (Implementación del Badge) */}
+                      <td className="px-3 py-3 text-center w-[5%]">
+                        {row.imagenes && row.imagenes.length > 0 ? (
                           <button
                             onClick={() => setModalImagenes(row.imagenes)}
-                            className="ml-2 inline-flex align-middle text-blue-600 hover:text-blue-800"
-                            title="Ver imágenes"
+                            title={`Ver ${row.imagenes.length} imagen(es)`}
+                            className="inline-flex items-center justify-center w-6 h-6 rounded-full 
+                               bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white 
+                               transition-colors duration-200 shadow-sm"
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -276,18 +295,34 @@ const TablaAdmin: React.FC<TablaProps> = ({
                               <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm40-80h480L570-480 450-320l-90-120-120 160Zm-40 80v-560 560Z" />
                             </svg>
                           </button>
+                        ) : (
+                          <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-left text-gray-700 italic">
+
+                      {/* Columna Observaciones */}
+                      <td className="px-3 py-3 text-left text-gray-700 italic w-[10%]">
                         {row.observaciones || ""}
                       </td>
-                      <td className="px-3 py-3 text-center text-amber-800 font-semibold">
+
+                      {/* Columna Asignado por */}
+                      <td className="px-3 py-3 text-center text-amber-800 font-semibold w-[8%]">
                         {row.asignador.nombre}
                       </td>
-                      <td className="px-3 py-3 text-center text-blue-700 font-semibold">
-                        {row.responsables.map((r) => r.nombre).join(", ")}
+
+                      {/* Columna Responsable(s) */}
+                      <td className="px-3 py-3 text-center text-blue-700 font-semibold w-[13%] align-top">
+                        <ul className="text-xs list-none p-0 m-0 space-y-0.5">
+                          {row.responsables.map((r, i) => (
+                            <li key={i} className="leading-tight">
+                              {r.nombre}
+                            </li>
+                          ))}
+                        </ul>
                       </td>
-                      <td className="px-3 py-3 text-center font-semibold">
+
+                      {/* Columna Prioridad */}
+                      <td className="px-3 py-3 text-center font-semibold w-[6%]">
                         {row.urgencia === "ALTA" ? (
                           <span className="text-red-700 font-bold">Alta</span>
                         ) : row.urgencia === "MEDIA" ? (
@@ -298,12 +333,14 @@ const TablaAdmin: React.FC<TablaProps> = ({
                           <span className="text-green-700 font-bold">Baja</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-center">
+
+                      {/* Columna Registro */}
+                      <td className="px-3 py-3 text-center w-[7%]">
                         {formateaFecha(row.fechaRegistro)}
                       </td>
 
-                      {/* === 📆 Fecha límite e historial (VISTA ESCRITORIO) === */}
-                      <td className="px-1 py-4 text-center font-semibold whitespace-nowrap align-top">
+                      {/* === Celda Fecha límite e historial === */}
+                      <td className="px-1 py-4 text-center font-semibold whitespace-nowrap w-[10%]">
                         <div
                           className={`flex flex-col items-center ${
                             row.historialFechas &&
@@ -322,7 +359,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
                             {fechaLimiteFinalStr}
                             {vencida && (
                               <span className="ml-1 inline-flex items-center">
-                                {/* SVG Vencida */}
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
                                   viewBox="0 0 24 24"
@@ -349,7 +385,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                   className="text-blue-600 font-semibold cursor-pointer hover:underline select-none list-none flex items-center justify-center gap-1"
                                   style={{ outline: "none" }}
                                 >
-                                  {/* SVG Historial */}
                                   <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     className="w-3 h-3 text-blue-500 transition-transform duration-200 group-open:rotate-180"
@@ -408,8 +443,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </td>
                       {/* === FIN Celda Historial === */}
 
+                      {/* Columna Conclusión */}
                       <td
-                        className={`px-3 py-3 text-center ${
+                        className={`px-3 py-3 text-center w-[7%] ${
                           retrasada ? "text-red-600 font-bold" : "text-gray-800"
                         }`}
                       >
@@ -417,7 +453,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
                           ? formateaFecha(row.fechaConclusion)
                           : "—"}
                       </td>
-                      <td className="px-4 py-4 text-center">
+
+                      {/* Columna Estatus */}
+                      <td className="px-4 py-4 text-center w-[7%]">
                         <span
                           className={`px-3 py-1 text-md font-bold ${
                             row.estatus === "CONCLUIDA"
@@ -430,6 +468,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
                           {row.estatus}
                         </span>
                       </td>
+
+                      {/* Columna Acciones */}
                       {user && (
                         <Acciones
                           tarea={row}

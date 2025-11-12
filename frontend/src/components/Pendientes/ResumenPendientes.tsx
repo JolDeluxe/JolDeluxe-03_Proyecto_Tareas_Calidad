@@ -37,13 +37,14 @@ const useMediaQuery = (query: string) => {
   return matches;
 };
 
-// 2. Define la interfaz de Props
+// 2. Define la interfaz de Props, incluyendo viewType
 interface Props {
   user: Usuario | null;
+  viewType?: "MIS_TAREAS" | "ASIGNADAS"; // Añadir el nuevo prop
 }
 
-// 3. Aplica la interfaz y desestructura 'user'
-const ResumenPendientes: React.FC<Props> = ({ user }) => {
+// 3. Aplica la interfaz y desestructura 'user' y 'viewType'
+const ResumenPendientes: React.FC<Props> = ({ user, viewType }) => {
   const [totalPendientes, setTotalPendientes] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -58,27 +59,14 @@ const ResumenPendientes: React.FC<Props> = ({ user }) => {
 
     try {
       setLoading(true);
-      const todasLasTareas = await tareasService.getAll();
 
-      // 5. Define los roles que ven todo
-      const rolesDeGestion = ["SUPER_ADMIN", "ADMIN", "ENCARGADO"];
-      const esRolGestion = user.rol ? rolesDeGestion.includes(user.rol) : false;
+      // 💡 CAMBIO CLAVE 1: Llama al servicio y pasa el viewType al backend
+      const todasLasTareas = await tareasService.getAll({ viewType });
 
-      // 6. Aplica el filtro condicional
+      // 💡 CAMBIO CLAVE 2: Solo filtramos por estatus PENDIENTE.
+      // El backend ya se encargó de filtrar por rol, asignador, o responsable.
       const pendientes = todasLasTareas.filter((t: Tarea) => {
-        // Filtro base: siempre PENDIENTE
-        if (t.estatus !== "PENDIENTE") {
-          return false;
-        }
-
-        // Si es rol de gestión, se aprueba (ve todas las pendientes)
-        if (esRolGestion) {
-          return true;
-        }
-
-        // Si es USUARIO o INVITADO, filtra por sus tareas
-        // (Usamos resp.id, como corregimos antes)
-        return t.responsables.some((resp) => resp.id === user.id);
+        return t.estatus === "PENDIENTE";
       });
 
       setTotalPendientes(pendientes.length);
@@ -89,7 +77,7 @@ const ResumenPendientes: React.FC<Props> = ({ user }) => {
     }
   };
 
-  // 7. Agrega 'user' a las dependencias del useEffect
+  // 7. Agrega 'user' y 'viewType' a las dependencias del useEffect
   useEffect(() => {
     const initialFetch = async () => {
       await fetchPendientes();
@@ -102,7 +90,7 @@ const ResumenPendientes: React.FC<Props> = ({ user }) => {
     if (isDesktop) {
       // Solo activa el intervalo si es escritorio
       intervalId = setInterval(() => {
-        console.log("🔄 [Desktop] Recargando resumen de pendientes...");
+        // console.log("🔄 [Desktop] Recargando resumen de pendientes...");
         fetchPendientes();
       }, 30000);
     }
@@ -113,7 +101,16 @@ const ResumenPendientes: React.FC<Props> = ({ user }) => {
         clearInterval(intervalId);
       }
     };
-  }, [user, isDesktop]);
+  }, [user, isDesktop, viewType]); // Depende del usuario y la vista
+
+  // Lógica para el título en escritorio
+  const isPersonalRole = user?.rol === "USUARIO" || user?.rol === "INVITADO";
+  const desktopTitle =
+    viewType === "ASIGNADAS"
+      ? "Pendientes Asignadas"
+      : isPersonalRole
+      ? "Mis Pendientes"
+      : "Total Pendientes";
 
   return (
     <>
@@ -122,10 +119,8 @@ const ResumenPendientes: React.FC<Props> = ({ user }) => {
         <div className="col-span-4 flex justify-center">
           <div className="bg-blue-100 border border-blue-400 rounded-lg p-2 text-center shadow-sm w-full max-w-md">
             <div className="text-md font-semibold text-blue-800">
-              {/* 8. Título condicional (opcional, pero coherente) */}
-              {user?.rol === "USUARIO" || user?.rol === "INVITADO"
-                ? "Mis Pendientes"
-                : "Total Pendientes"}
+              {/* Usamos el título adaptado */}
+              {desktopTitle}
             </div>
             <div className="text-2xl font-extrabold text-blue-900">
               {loading ? "..." : totalPendientes}

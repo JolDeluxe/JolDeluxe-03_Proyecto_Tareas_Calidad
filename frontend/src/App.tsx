@@ -52,8 +52,15 @@ const AppLayout: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <p className="text-lg text-gray-600">Cargando aplicación...</p>
+      // 🚀 CORRECCIÓN: Usar h-screen y flex/grid para centrar en toda la vista
+      <div className="flex flex-col justify-center items-center h-screen bg-gray-50">
+        {/* 🚀 SPINNER MÁS GRANDE: h-12 w-12 */}
+        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600 mb-4"></div>
+
+        {/* Mensaje */}
+        <span className="text-xl text-gray-900 font-bold">
+          Cargando aplicacion...
+        </span>
       </div>
     );
   }
@@ -80,7 +87,7 @@ function App() {
       {/* 🔽 --- 3. AÑADIR EL CONTENEDOR DE TOASTS (para las alertas) --- 🔽 */}
       <ToastContainer
         position="bottom-right"
-        autoClose={3000}
+        autoClose={2000}
         theme="colored"
         pauseOnHover
       />

@@ -34,7 +34,7 @@ const Acciones: React.FC<AccionesProps> = ({
     (user.rol === Rol.ENCARGADO && tarea.asignadorId === user.id);
 
   return (
-    <td className="w-[7%] px-4 py-3 text-center border-b border-gray-300">
+    <td className="w-[7%] px-4 py-3 text-center">
       {/* Contenedor con altura fija para evitar "saltos" */}
       <div className="flex items-center justify-center gap-3 h-7">
         {/* --- CASO 1: Tarea PENDIENTE (Muestra botones condicionales) --- */}

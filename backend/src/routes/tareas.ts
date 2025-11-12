@@ -8,6 +8,14 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import webpush from "web-push";
+import { v2 as cloudinary } from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+
+// Configuración de Cloudinary: Se conecta automáticamente usando CLOUDINARY_URL
+cloudinary.config({
+  cloudinary_url: process.env.CLOUDINARY_URL, // Obtiene la URL del .env
+  secure: true, // Opcional, pero recomendado
+});
 
 // Configuración para __dirname en ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -87,19 +95,18 @@ const sendNotificationToUsers = async (
 };
 
 // --- Configuración de Multer ---
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, "..", "uploads");
-    fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(
-      null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname)
-    );
-  },
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "tareas", // Nombre de la carpeta en Cloudinary (mencionado en el prompt)
+    // 🚀 FIX TS7006: Se tipan explícitamente 'req' y 'file'
+    public_id: (
+      req: Request, // <-- CORRECCIÓN: Tipo explícito
+      file: Express.Multer.File // <-- CORRECCIÓN: Tipo explícito
+    ) => `${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
+    // Opcional: Especificar un formato para optimización
+    // format: async (req, file) => 'webp',
+  } as any,
 });
 
 const upload = multer({ storage: storage });
@@ -162,6 +169,7 @@ type TareaCreadaConRelaciones = Prisma.TareaGetPayload<{
 }>;
 
 // 3. Definimos el 'include' para una TAREA DETALLADA (GET /:id)
+// ESTO DEBE INCLUIR TODO, porque es para ver el detalle completo.
 const tareaDetalladaInclude = {
   departamento: { select: { id: true, nombre: true } },
   asignador: { select: { id: true, nombre: true } },
@@ -170,17 +178,16 @@ const tareaDetalladaInclude = {
       usuario: { select: { id: true, nombre: true } },
     },
   },
-  // Incluimos el historial completo, ordenado
+  // ✅ DESCOMENTADO: Necesitamos ver el historial en el detalle
   historialFechas: {
     include: {
       modificadoPor: { select: { id: true, nombre: true } },
     },
     orderBy: {
-      // 🔽--- ¡LA CORRECCIÓN ESTÁ AQUÍ! ---🔽
       fechaCambio: Prisma.SortOrder.desc,
     },
   },
-  // Incluimos todas las imágenes
+  // ✅ DESCOMENTADO: Necesitamos ver las fotos en el detalle
   imagenes: {
     select: {
       id: true,
@@ -190,8 +197,7 @@ const tareaDetalladaInclude = {
   },
 };
 
-// 4. Creamos el tipo exacto para la tarea detallada
-// (Este 'type' ahora funcionará porque 'tareaDetalladaInclude' es válido)
+// 4. Tipo exacto
 type TareaDetallada = Prisma.TareaGetPayload<{
   include: typeof tareaDetalladaInclude;
 }>;
@@ -219,6 +225,7 @@ const getTareasQuerySchema = z.object({
   asignadorId: z.coerce.number().int().positive().optional(),
   responsableId: z.coerce.number().int().positive().optional(),
   estatus: z.nativeEnum(Estatus).optional(),
+  viewType: z.enum(["MIS_TAREAS", "ASIGNADAS"]).optional(),
 });
 
 /**
@@ -309,44 +316,51 @@ router.get(
         detalles: queryParse.error.flatten().fieldErrors,
       });
     }
-    const { departamentoId, asignadorId, responsableId, estatus } =
-      queryParse.data;
+    // 🔽 CAMBIO 2: Desestructuramos el nuevo viewType 🔽
+    const { departamentoId, asignadorId, responsableId, estatus, viewType } =
+      queryParse.data; //
 
     // 4. Construir el 'where' base con filtros de query
     const where: Prisma.TareaWhereInput = {};
     if (estatus) where.estatus = estatus;
-    if (asignadorId) where.asignadorId = asignadorId;
 
-    // 🔹 LA CORRECCIÓN:
-    //    Creamos un array separado para las cláusulas 'AND'.
+    // Ajuste: Si el rol es ENCARGADO y la vista es ASIGNADAS, forzaremos asignadorId, así que ignoramos el query param genérico de asignadorId para evitar conflictos.
+    if (user.rol !== "ENCARGADO" || viewType !== "ASIGNADAS") {
+      //
+      if (asignadorId) where.asignadorId = asignadorId;
+    }
+
+    // 🔹 Creamos un array separado para las cláusulas 'AND'.
     const andClauses: Prisma.TareaWhereInput[] = [];
 
-    // 5. Aplicar filtros de AUTORIZACIÓN (Tus Nuevas Reglas de Negocio)
-
     // 🔹 Primero, el filtro de query 'responsableId'
-    //    (se ignora si es INVITADO, ya que ese rol lo sobreescribe)
-    if (responsableId && user.rol !== "INVITADO") {
-      // 🔹 Usamos .push() en nuestro array
+    // Solo se aplica si el rol NO ES INVITADO/USUARIO/ENCARGADO (vista MIS_TAREAS) ya que estos roles ya fuerzan el filtro por responsable.
+    const isRoleFilteringResponsables =
+      user.rol === "INVITADO" ||
+      user.rol === "USUARIO" ||
+      (user.rol === "ENCARGADO" && viewType !== "ASIGNADAS"); //
+
+    if (responsableId && !isRoleFilteringResponsables) {
+      //
       andClauses.push({
         responsables: { some: { usuarioId: responsableId } },
       });
     }
 
     // -----------------------------------------------------------------
-    // 🔹 INICIO DE LA LÓGICA DE ROLES (Modificada para usar andClauses)
+    // 🔹 INICIO DE LA LÓGICA DE ROLES (Modificada para Encargado y Usuario)
     // -----------------------------------------------------------------
     if (user.rol === "SUPER_ADMIN") {
       // "Dios": Ve todo.
       if (departamentoId) where.departamentoId = departamentoId;
-      // No se añaden más 'andClauses'
     } else if (user.rol === "ADMIN") {
-      // ADMIN: Ve tareas de ENCARGADO, USUARIO, INVITADO en su depto.
+      // ADMIN: Ve tareas de ENCARGADO, USUARIO, INVITADO en su depto. (Sin cambios)
       if (!user.departamentoId) {
         return res.status(403).json({ error: "Usuario sin departamento." });
       }
       where.departamentoId = user.departamentoId; // Filtro de depto
 
-      // 🔹 Usamos .push() en nuestro array
+      // Se mantiene la visibilidad amplia del ADMIN (Encargado, Usuario, Invitado en su depto)
       andClauses.push({
         responsables: {
           some: {
@@ -355,58 +369,34 @@ router.get(
         },
       });
     } else if (user.rol === "ENCARGADO") {
-      // ENCARGADO: Ve tareas de USUARIO e INVITADO en su depto.
+      // 🔽--- CAMBIO CLAVE: Lógica de Doble Vista para ENCARGADO ---🔽
       if (!user.departamentoId) {
         return res.status(403).json({ error: "Usuario sin departamento." });
       }
       where.departamentoId = user.departamentoId; // Filtro de depto
 
-      // 🔹 Usamos .push() en nuestro array
-      andClauses.push({
-        responsables: {
-          some: {
-            usuario: { rol: { in: ["USUARIO", "INVITADO"] } },
-          },
-        },
-      });
+      if (viewType === "ASIGNADAS") {
+        // VISTA ASIGNADAS: Tareas que el ENCARGADO creó (ignora filtro de responsable)
+        where.asignadorId = user.id; //
+      } else {
+        // VISTA MIS TAREAS (default/MIS_TAREAS): Tareas donde es responsable.
+        where.responsables = { some: { usuarioId: user.id } }; //
+      }
     } else if (user.rol === "USUARIO") {
-      // USUARIO: Ve tareas de otros USUARIOs en su depto O tareas propias.
+      // 🔽--- CAMBIO CLAVE: Lógica simplificada para USUARIO (Solo sus tareas asignadas) ---🔽
       if (!user.departamentoId) {
         return res.status(403).json({ error: "Usuario sin departamento." });
       }
       where.departamentoId = user.departamentoId; // Filtro de depto
 
-      // 🔹 Usamos .push() en nuestro array
-      andClauses.push({
-        OR: [
-          {
-            // 1. Tareas donde al menos un responsable es USUARIO
-            responsables: {
-              some: {
-                usuario: { rol: "USUARIO" },
-              },
-            },
-          },
-          {
-            // 2. Tareas donde YO (el usuario logueado) soy responsable
-            responsables: {
-              some: {
-                usuarioId: user.id,
-              },
-            },
-          },
-        ],
-      });
+      // Se fuerza a ver SÓLO sus tareas asignadas (cumple con "solo deben ver sus tareas")
+      where.responsables = { some: { usuarioId: user.id } }; //
     } else if (user.rol === "INVITADO") {
-      // INVITADO: Se FUERZA el scope a solo sus tareas asignadas.
-      // Sobreescribe cualquier filtro de responsable.
       where.responsables = { some: { usuarioId: user.id } };
 
       // Aún puede filtrar por depto
       if (departamentoId) where.departamentoId = departamentoId;
     }
-    // -----------------------------------------------------------------
-    // 🔹 FIN DE LA LÓGICA DE ROLES
     // -----------------------------------------------------------------
 
     // 🔹 Finalmente, asignamos el array 'AND' al 'where' si tiene contenido
@@ -415,6 +405,7 @@ router.get(
     }
 
     // 6. Ejecutar la consulta (El resto de tu código es correcto)
+    // 6. Ejecutar la consulta (PESADA / COMPLETA)
     const tareas = await prisma.tarea.findMany({
       where,
       include: {
@@ -427,6 +418,7 @@ router.get(
             },
           },
         },
+        // 🚨 CARGA COMPLETA: Esto traerá todos los datos (puede ser lento)
         imagenes: {
           select: { id: true, url: true, fechaSubida: true },
         },
@@ -439,10 +431,10 @@ router.get(
           },
         },
       },
-      orderBy: { id: "asc" },
+      orderBy: { id: "desc" },
     });
 
-    // 7. Limpiar la respuesta (hacer 'responsables' un array plano)
+    // 7. Limpiar la respuesta
     const tareasLimpio = tareas.map((t) => ({
       ...t,
       responsables: t.responsables.map((r) => r.usuario),
@@ -1147,7 +1139,7 @@ router.post(
   "/:id/upload",
   // 1. Solo roles que pueden crear/editar pueden subir
   verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
-  upload.array("imagenes", 10), // Multer se ejecuta primero
+  upload.array("imagenes", 10), // Multer con Cloudinary Storage se ejecuta
   safeAsync(async (req: Request, res: Response) => {
     // 2. Validar el ID de la URL
     const paramsParse = paramsSchema.safeParse(req.params);
@@ -1186,8 +1178,9 @@ router.post(
     }
 
     // 6. Preparar datos para la BD
-    const imagenesData = (req.files as Express.Multer.File[]).map((file) => ({
-      url: `uploads/${file.filename}`,
+    // Cloudinary Storage agrega el path (URL completa) y el filename (Public ID)
+    const imagenesData = (req.files as any[]).map((file: any) => ({
+      url: file.path, // 🚀 Usamos la URL completa de Cloudinary
       tareaId: tareaId,
     }));
 
@@ -1199,6 +1192,26 @@ router.post(
     res.status(201).json(resultado);
   })
 );
+
+/**
+ * Helper para extraer el Public ID de una URL de Cloudinary (ej. "tareas/unique-id")
+ * @param url La URL completa de Cloudinary (ej. https://res.cloudinary.com/...)
+ * @param folder La carpeta en Cloudinary (ej. "tareas")
+ * @returns El Public ID (ej. "tareas/imagenes-1761...")
+ */
+const getPublicIdFromCloudinaryUrl = (
+  url: string,
+  folder: string
+): string | null => {
+  // El Public ID en Cloudinary es la parte después de '/upload/v[version]/'.
+  // En este caso, el Public ID completo incluye la carpeta: "tareas/nombre-archivo"
+  const regex = new RegExp(`v\\d+\\/(${folder}\\/[^\\/\\.]+)`);
+  const match = url.match(regex);
+  if (match && match[1]) {
+    return match[1];
+  }
+  return null;
+};
 
 /**
  * ✅ Borrar una imagen específica por su ID
@@ -1247,20 +1260,36 @@ router.delete(
       });
     }
 
-    // 5. Borrar el archivo físico
-    const filePath = path.join(__dirname, "..", imagen.url);
-    fs.unlink(filePath, async (err) => {
-      if (err) {
-        console.error("No se pudo borrar el archivo físico:", err.message);
-      }
+    // 🚀 5. Borrar el archivo de Cloudinary (REEMPLAZA fs.unlink)
+    const publicId = getPublicIdFromCloudinaryUrl(imagen.url, "tareas");
 
-      // 6. Borrar el registro de la BD
-      await prisma.imagenTarea.delete({
-        where: { id: imagenId },
-      });
+    if (publicId) {
+      // Borrar el recurso de Cloudinary usando su Public ID
+      await cloudinary.uploader
+        .destroy(publicId)
+        .then(() => {
+          console.log(`✅ Archivo Cloudinary borrado: ${publicId}`);
+        })
+        .catch((err) => {
+          // Si el borrado falla (ej. imagen ya borrada, error de red), solo lo loggeamos
+          console.error(
+            `❌ Error al borrar el archivo de Cloudinary (${publicId}):`,
+            err
+          );
+          // La operación de la base de datos debe continuar
+        });
+    } else {
+      console.warn(
+        `⚠️ No se pudo extraer el Public ID de la URL: ${imagen.url}`
+      );
+    }
 
-      res.json({ message: "Imagen eliminada correctamente" });
+    // 6. Borrar el registro de la BD
+    await prisma.imagenTarea.delete({
+      where: { id: imagenId },
     });
+
+    res.json({ message: "Imagen eliminada correctamente" });
   })
 );
 

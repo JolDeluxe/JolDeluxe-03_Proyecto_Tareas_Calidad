@@ -142,15 +142,11 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   // --- 🚀 NUEVO HANDLER: Borrar Imagen Existente ---
   const handleRemoveImagenExistente = async (imagenId: number) => {
     if (loading) return;
-    // Opcional: Pedir confirmación
-    // if (!window.confirm("¿Seguro que quieres eliminar esta imagen?")) return;
-
     setLoading(true); // Usamos el spinner global
     try {
-      // Usamos el endpoint de borrado de imagen del backend
-      await api.delete(`/tareas/imagen/${imagenId}`);
-      toast.success("Imagen eliminada.");
-      // Actualizamos el estado de imágenes existentes
+      // 🚀 CORRECCIÓN: Usar el servicio en lugar de la llamada directa a 'api'
+      await tareasService.deleteImage(imagenId);
+      toast.success("Imagen eliminada."); // Actualizamos el estado de imágenes existentes
       setImagenesExistentes((prev) =>
         prev.filter((img) => img.id !== imagenId)
       );
@@ -172,9 +168,8 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   // --- 🚀 handleSubmit MODIFICADO PARA UPDATE ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setSubmitted(true); // 1. Validación (Campos básicos)
 
-    // 1. Validación (Campos básicos)
     if (
       !nombre ||
       responsablesIds.length === 0 ||
@@ -184,29 +179,26 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     ) {
       toast.warn("Por favor, completa todos los campos obligatorios.");
       return;
-    }
+    } // 1.A. Validación de Motivo
 
-    // 1.A. Validación de Motivo
     if (fechaHaCambiado && !motivoCambio) {
       toast.warn("Si cambias la fecha, debes seleccionar un motivo.");
       return;
     }
 
-    setLoading(true);
+    setLoading(true); // 2. Validación de Autenticación
 
-    // 2. Validación de Autenticación
-    if (!user || !user.departamentoId) {
-      toast.error(
-        "Error de autenticación: No se pudo identificar tu departamento."
-      );
-      setLoading(false);
-      return;
-    }
-
-    if (user.rol === Rol.SUPER_ADMIN) {
-      toast.error(
-        "El SUPER_ADMIN (aún) no puede editar tareas desde este modal."
-      );
+    if (!user || !user.departamentoId || user.rol === Rol.SUPER_ADMIN) {
+      // La lógica de SUPER_ADMIN es temporalmente restrictiva, solo comprobamos el departamento para los otros roles
+      if (!user || !user.departamentoId) {
+        toast.error(
+          "Error de autenticación: No se pudo identificar tu departamento."
+        );
+      } else if (user.rol === Rol.SUPER_ADMIN) {
+        toast.error(
+          "El SUPER_ADMIN (aún) no puede editar tareas desde este modal."
+        );
+      }
       setLoading(false);
       return;
     }
@@ -228,27 +220,27 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         console.log(
           "📨 PASO 1: Actualizando datos de la tarea...",
           payloadDatos
-        );
+        ); // Usamos 'as any' para saltar el error de tipo TS
 
-        // Usamos 'as any' para saltar el error de tipo TS
         await tareasService.update(tarea.id, payloadDatos as any);
 
-        console.log(`✅ Datos de Tarea ID ${tarea.id} actualizados.`);
+        console.log(`✅ Datos de Tarea ID ${tarea.id} actualizados.`); // PASO 2: Actualizar la fecha y registrar el historial // 🎯 CORRECCIÓN: Añadimos 'fechaAnterior' para evitar el error 400
 
-        // PASO 2: Actualizar la fecha y registrar el historial
-        // 🎯 CORRECCIÓN: Añadimos 'fechaAnterior' para evitar el error 400
+        const nuevaFechaISO = new Date(`${fecha}T12:00:00.000Z`).toISOString();
+
         const payloadHistorial = {
           motivo: motivoCambio,
-          nuevaFecha: new Date(`${fecha}T12:00:00.000Z`).toISOString(),
+          nuevaFecha: nuevaFechaISO,
           fechaAnterior: fechaISOOriginal, // 👈 Se envía la fecha ISO original
         };
 
         console.log(
           "📨 PASO 2: Actualizando fecha y historial...",
           payloadHistorial
-        );
+        ); // 🚀 CORRECCIÓN: Usar el servicio en lugar de la llamada directa a 'api.post'
 
-        await api.post(`/tareas/${tarea.id}/historial`, payloadHistorial);
+        await tareasService.createHistorial(tarea.id, payloadHistorial as any);
+
         console.log(
           `✅ Fecha e Historial de Tarea ID ${tarea.id} actualizados.`
         );
@@ -267,28 +259,25 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         console.log(
           "📨 PASO 1: Actualizando tarea (sin cambio de fecha)...",
           payloadCompleto
-        );
+        ); // Usamos 'as any' aquí también
 
-        // Usamos 'as any' aquí también
         await tareasService.update(tarea.id, payloadCompleto as any);
 
         console.log(`✅ Tarea ID ${tarea.id} actualizada.`);
-      }
+      } // --- 🚀 FIN LÓGICA DE ENVÍO --- 🚀 // 4. PASO 4: Subir Imágenes (NUEVAS)
 
-      // --- 🚀 FIN LÓGICA DE ENVÍO --- 🚀
-
-      // 4. PASO 4: Subir Imágenes (NUEVAS)
       if (archivos.length > 0) {
         console.log(`Subiendo ${archivos.length} imágenes NUEVAS...`);
         const formData = new FormData();
         archivos.forEach((file) => {
           formData.append("imagenes", file);
-        });
-        await api.post(`/tareas/${tarea.id}/upload`, formData);
-        console.log(`✅ Imágenes subidas para Tarea ID: ${tarea.id}`);
-      }
+        }); // 🚀 CORRECCIÓN: Usar el servicio en lugar de la llamada directa a 'api.post'
 
-      // 5. PASO 5: Finalizar
+        await tareasService.uploadImage(tarea.id, formData);
+
+        console.log(`✅ Imágenes subidas para Tarea ID: ${tarea.id}`);
+      } // 5. PASO 5: Finalizar
+
       toast.success("Tarea actualizada correctamente.");
       onTareaActualizada();
       onClose();
@@ -327,6 +316,7 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       setLoading(false);
     }
   };
+
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -505,14 +495,14 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   </span>
                 </label>
                 <input
-                  id="file-upload"
+                  id="file-upload" // ID para la label
                   type="file"
                   multiple
-                  accept="image/*"
-                  capture="environment"
-                  disabled={loading}
-                  onChange={handleFileChange}
-                  className="hidden"
+                  // ❌ ELIMINAR: accept="image/*" para forzar el menú genérico
+                  // ❌ ELIMINAR: capture="environment" (estaba forzando la cámara)
+                  disabled={loading} // 👈 Oculta el input por defecto
+                  onChange={handleFileChange} // 👈 Usa el nuevo handler
+                  className="hidden" // 👈 Oculta el input por defecto
                 />
                 {/* 3. Archivos Nuevos */}
                 {archivos.length > 0 && (

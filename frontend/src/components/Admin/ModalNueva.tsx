@@ -25,6 +25,20 @@ const formatDateToInput = (fecha?: Date | null): string => {
   return `${anio}-${mes}-${dia}`;
 };
 
+const getKaizenPrefix = (): string => {
+  const now = new Date();
+  const year = now.getFullYear().toString().slice(-2); // '25'
+  const month = String(now.getMonth() + 1).padStart(2, "0"); // '11'
+
+  // Cálculo de semana simple
+  const onejan = new Date(now.getFullYear(), 0, 1);
+  const week = Math.ceil(
+    ((now.getTime() - onejan.getTime()) / 86400000 + onejan.getDay() + 1) / 7
+  );
+
+  return `KAIZEN ${year}${month}${week}`;
+};
+
 // --- Constante de Prioridades ---
 const PRIORIDADES_VALIDAS: { value: Urgencia; label: string }[] = [
   { value: "ALTA", label: "Alta" },
@@ -41,6 +55,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
 }) => {
   // --- Estados del formulario ---
   const [nombre, setNombre] = useState("");
+  const [isKaizen, setIsKaizen] = useState(false);
   const [comentario, setComentario] = useState("");
   const [prioridad, setPrioridad] = useState<Urgencia | "">("");
   const [fecha, setFecha] = useState("");
@@ -49,33 +64,35 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   // --- 4. 🚀 ESTADOS DE DATOS REALES ---
   const [responsablesIds, setResponsablesIds] = useState<number[]>([]);
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
+  const [listaInvitados, setListaInvitados] = useState<Usuario[]>([]); // Para tareas Kaizen
   const [loadingUsuarios, setLoadingUsuarios] = useState(true);
 
   // --- Estados de UI ---
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  // const [isResponsableModalOpen, setIsResponsableModalOpen] = useState(false); // ❌ ELIMINADO
-  const [isPrioridadModalOpen, setIsPrioridadModalOpen] = useState(false);
 
   // --- 5. 🚀 Cargar usuarios reales al abrir el modal ---
   useEffect(() => {
     const fetchUsuarios = async () => {
-      if (!user) return; // No hacer nada si no hay usuario
+      if (!user) return;
 
       setLoadingUsuarios(true);
       try {
-        // 1. Obtenemos los usuarios.
-        // El backend (que acabas de mostrar) ya filtra la lista
-        // basándose en el rol del 'user' (vía token).
-        const data = await usuariosService.getAll();
+        // ✅ USAMOS PROMISE.ALL para cargar ambas listas a la vez
+        // listaUsuarios = compañeros del depto (endpoint normal)
+        // listaInvitados = invitados globales (tu nuevo endpoint)
+        const [usersData, invitadosData] = await Promise.all([
+          usuariosService.getAll(),
+          usuariosService.getInvitados(),
+        ]);
 
-        // 2. El backend ya los ordena ("orderBy: { nombre: "asc" }"),
-        // 	  pero re-ordenar aquí es seguro y no causa problemas.
-        const listaOrdenada = data.sort((a, b) =>
-          a.nombre.localeCompare(b.nombre)
+        // Ordenamos ambas listas
+        setListaUsuarios(
+          usersData.sort((a, b) => a.nombre.localeCompare(b.nombre))
         );
-
-        setListaUsuarios(listaOrdenada);
+        setListaInvitados(
+          invitadosData.sort((a, b) => a.nombre.localeCompare(b.nombre))
+        );
       } catch (error) {
         console.error("Error al cargar usuarios:", error);
         toast.error("No se pudo cargar la lista de usuarios.");
@@ -85,7 +102,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     };
 
     fetchUsuarios();
-  }, [user]); // La dependencia 'user' es correcta
+  }, [user]);
 
   // --- Handlers de DatePicker ---
   const getSelectedDate = () => {
@@ -139,12 +156,18 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     // 1. Validación (usando la lógica de estados nueva)
     if (
       !nombre ||
-      responsablesIds.length === 0 || // 👈 VALIDACIÓN CORREGIDA
+      responsablesIds.length === 0 ||
       !prioridad ||
       !fecha ||
       !comentario
     ) {
       toast.warn("Por favor, completa todos los campos obligatorios.");
+      return;
+    }
+
+    // ✅ NUEVA VALIDACIÓN KAIZEN: Si es Kaizen, fuerza a que haya invitados
+    if (isKaizen && responsablesIds.length === 0) {
+      toast.error("Las tareas Kaizen requieren seleccionar un Invitado.");
       return;
     }
 
@@ -177,18 +200,24 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     // A este punto, TypeScript sabe que 'user.departamentoId' es 'number'
 
     try {
+      // ✅ LÓGICA DE NOMBRE KAIZEN
+      let tituloFinal = nombre;
+      if (isKaizen) {
+        // Si el usuario no escribió el código manualmente, se lo agregamos nosotros
+        if (!tituloFinal.startsWith("KAIZEN")) {
+          tituloFinal = `${getKaizenPrefix()} ${nombre}`;
+        }
+      }
+
       // 3. Payload de la Tarea (CORRECTO)
       const nuevaTareaPayload = {
-        tarea: nombre,
+        tarea: tituloFinal, // 👈 USAMOS EL TÍTULO MODIFICADO
         observaciones: comentario || null,
         urgencia: prioridad,
-        fechaLimite: new Date(`${fecha}T12:00:00.000Z`).toISOString(), // Usar ISO
+        fechaLimite: new Date(`${fecha}T12:00:00.000Z`).toISOString(),
         estatus: "PENDIENTE" as Estatus,
-
-        // --- Relaciones (Clave) ---
-        // 'asignadorId' lo toma el backend del token
-        departamentoId: user.departamentoId, // 👈 CORREGIDO: Ahora es tipo 'number'
-        responsables: responsablesIds, // 👈 CORREGIDO: Array de IDs
+        departamentoId: user.departamentoId,
+        responsables: responsablesIds,
       };
 
       console.log("📨 PASO 1: Creando tarea...", nuevaTareaPayload);
@@ -201,11 +230,14 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
       if (archivos.length > 0) {
         console.log(`Subiendo ${archivos.length} imágenes...`);
         const formData = new FormData();
+        // Asegúrese de que la clave sea "imagenes"
         archivos.forEach((file) => {
           formData.append("imagenes", file);
         });
 
-        await api.post(`/tareas/${tareaCreada.id}/upload`, formData);
+        // 🚀 CORRECCIÓN: Usar el servicio que implementa la llamada a /upload
+        await tareasService.uploadImage(tareaCreada.id, formData);
+
         console.log(`✅ Imágenes subidas para Tarea ID: ${tareaCreada.id}`);
       }
 
@@ -218,6 +250,8 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
         "❌ Error en el proceso de creación:",
         error.response?.data || error.message
       );
+      // La lógica de verificación de error sigue siendo válida ya que Axios
+      // aún reportará la URL del servicio de subida.
       const isUploadError = error.config?.url.includes("/upload");
 
       if (isUploadError) {
@@ -270,7 +304,42 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
           {/* 4. BODY (Scrollable) */}
           <div className="flex-grow overflow-y-auto p-6">
             <div className="flex flex-col gap-4 text-gray-800">
-              {/* Nombre (Sin cambios) */}
+              {/* ✅ NUEVO: SWITCH DE TIPO DE TAREA (Solo Calidad/Admin) */}
+              {/* Ajusta la condición "CALIDAD" según el nombre exacto en tu BD */}
+              {(user?.rol === "ADMIN" ||
+                user?.rol === "ENCARGADO" ||
+                user?.rol === "SUPER_ADMIN") && (
+                <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsKaizen(false);
+                      setResponsablesIds([]);
+                    }}
+                    className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${
+                      !isKaizen
+                        ? "bg-white text-blue-700 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    Tarea Estándar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsKaizen(true);
+                      setResponsablesIds([]);
+                    }}
+                    className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${
+                      isKaizen
+                        ? "bg-purple-600 text-white shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    Tarea KAIZEN
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-semibold mb-1">
                   Nombre
@@ -364,8 +433,6 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                   id="file-upload"
                   type="file"
                   multiple
-                  accept="image/*"
-                  capture="environment"
                   disabled={loading}
                   onChange={handleFileChange}
                   className="hidden"
@@ -422,20 +489,22 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                 )}
               </div>
 
+              {/* Responsable */}
               <div>
                 <label
                   htmlFor="responsable-list"
                   className="block text-sm font-semibold mb-1"
                 >
-                  Responsable(s)
+                  {/* Cambiamos el texto dinámicamente */}
+                  {isKaizen ? "Selecciona Invitado(s)" : "Responsable(s)"}
                 </label>
 
                 {loadingUsuarios ? (
                   // Placeholder (un esqueleto)
                   <div
                     className="relative w-full h-32 border rounded-md px-3 py-2 
-                 bg-gray-100 border-gray-300 
-                 flex items-center justify-center"
+                  bg-gray-100 border-gray-300 
+                  flex items-center justify-center"
                   >
                     <p className="text-gray-500">Cargando usuarios...</p>
                   </div>
@@ -445,33 +514,35 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                     id="responsable-list"
                     // 🔹 Damos una altura fija (h-32) y lo hacemos scrollable
                     className={`relative w-full h-32 border rounded-md 
-        overflow-y-auto 
-        focus:ring-2 focus:ring-amber-950 focus:outline-none 
-        ${
-          // Validación (igual que antes)
-          submitted && responsablesIds.length === 0
-            ? "border-red-500"
-            : "border-gray-300"
-        }
-      `}
+                      overflow-y-auto 
+                      focus:ring-2 focus:ring-amber-950 focus:outline-none 
+                      ${
+                        // Validación (igual que antes)
+                        submitted && responsablesIds.length === 0
+                          ? "border-red-500"
+                          : "border-gray-300"
+                      }
+                    `}
                     // tabIndex para que sea navegable con teclado
                     tabIndex={0}
                   >
-                    {/* Mapeamos la lista de usuarios como checkboxes */}
-                    {listaUsuarios.map((u) => (
+                    {/* ✅ LÓGICA CORREGIDA: 
+                        Usamos la lista adecuada según el modo (Kaizen = listaInvitados, Normal = listaUsuarios) 
+                    */}
+                    {(isKaizen ? listaInvitados : listaUsuarios).map((u) => (
                       <label
                         key={u.id}
                         htmlFor={`resp-${u.id}`}
                         className={`
-            flex items-center gap-3 w-full px-3 py-2 
-            cursor-pointer transition-colors
-            ${
-              // Estilo para el item seleccionado
-              responsablesIds.includes(u.id)
-                ? "bg-amber-100 text-amber-900 font-semibold"
-                : "text-gray-800 hover:bg-gray-50"
-            }
-          `}
+                            flex items-center gap-3 w-full px-3 py-2 
+                            cursor-pointer transition-colors
+                            ${
+                              // Estilo para el item seleccionado
+                              responsablesIds.includes(u.id)
+                                ? "bg-amber-100 text-amber-900 font-semibold"
+                                : "text-gray-800 hover:bg-gray-50"
+                            }
+                          `}
                       >
                         <input
                           type="checkbox"
@@ -483,8 +554,24 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                           className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
                         />
                         <span>{u.nombre}</span>
+                        {/* Etiqueta visual extra para confirmar rol en modo Kaizen */}
+                        {isKaizen && (
+                          <span className="text-xs text-gray-400 ml-auto">
+                            (Invitado)
+                          </span>
+                        )}
                       </label>
                     ))}
+
+                    {/* Mensaje si la lista correspondiente está vacía */}
+                    {(isKaizen ? listaInvitados : listaUsuarios).length ===
+                      0 && (
+                      <p className="text-center text-sm text-gray-500 py-4">
+                        {isKaizen
+                          ? "No se encontraron invitados registrados."
+                          : "No hay usuarios disponibles."}
+                      </p>
+                    )}
                   </div>
                 )}
 
