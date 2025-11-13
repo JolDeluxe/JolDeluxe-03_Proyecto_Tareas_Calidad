@@ -609,38 +609,43 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                       <label
                         htmlFor={`prioridad-${p.value}`}
                         className={`
-                        w-full block text-center px-3 py-2 rounded-md 
-                        border text-sm font-semibold cursor-pointer transition-all
-                        ${loading ? "opacity-50 cursor-not-allowed" : ""}
-                        
-                        
-                        ${
-                          p.value === "ALTA" &&
+                          w-full block text-center px-3 py-2 rounded-md 
+                          border text-sm font-semibold cursor-pointer transition-all
+                          ${loading ? "opacity-50 cursor-not-allowed" : ""}
+                          
+                          ${
+                            p.value === "ALTA" &&
+                            `
+                            border-gray-300 bg-gray-50 text-gray-700
+                            peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600
+                            ${
+                              !loading && "hover:bg-red-100 hover:text-gray-700"
+                            }
                           `
-                          border-gray-300 bg-gray-50 text-gray-700
-                          peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600
-                          ${!loading && "hover:bg-red-100"}
-                        `
-                        }
-                        
-                        ${
-                          p.value === "MEDIA" &&
+                          }
+                          ${
+                            p.value === "MEDIA" &&
+                            `
+                            border-gray-300 bg-gray-50 text-gray-700
+                            peer-checked:bg-amber-400 peer-checked:text-white peer-checked:border-amber-400
+                            ${
+                              !loading &&
+                              "hover:bg-amber-100 hover:text-gray-700"
+                            }
                           `
-                          border-gray-300 bg-gray-50 text-gray-700
-                          peer-checked:bg-amber-400 peer-checked:text-white peer-checked:border-amber-400
-                          ${!loading && "hover:bg-amber-100"}
-                        `
-                        }
-
-                        ${
-                          p.value === "BAJA" &&
+                          }
+                          ${
+                            p.value === "BAJA" &&
+                            `
+                            border-gray-300 bg-gray-50 text-gray-700
+                            peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-600
+                            ${
+                              !loading &&
+                              "hover:bg-green-100 hover:text-gray-700"
+                            }
                           `
-                          border-gray-300 bg-gray-50 text-gray-700
-                          peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-600
-                          ${!loading && "hover:bg-blue-100"}
-                        `
-                        }
-                      `}
+                          }
+                        `}
                       >
                         {p.label}
                       </label>

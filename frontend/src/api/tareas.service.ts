@@ -4,7 +4,6 @@ import type { Tarea } from "../types/tarea";
 /**
  * Servicio de acceso a datos para la entidad 'Tareas'.
  * Capa del Modelo (M) en el esquema MVC del frontend.
- * Cada método corresponde a un endpoint de tu backend Express.
  */
 
 type TareaFilters = {
@@ -12,8 +11,11 @@ type TareaFilters = {
   asignadorId?: number;
   responsableId?: number;
   estatus?: "PENDIENTE" | "CONCLUIDA" | "CANCELADA";
-  // Nuevo: el filtro para la lógica del ENCARGADO
-  viewType?: "MIS_TAREAS" | "ASIGNADAS";
+  // ✅ ACTUALIZACIÓN: Agregamos "TODAS" para coincidir con el nuevo backend
+  // "MIS_TAREAS": Solo donde soy responsable
+  // "ASIGNADAS": Solo las que yo creé
+  // "TODAS" (o undefined): Ver todo el departamento (Auditoría)
+  viewType?: "MIS_TAREAS" | "ASIGNADAS" | "TODAS";
 };
 
 export const tareasService = {
@@ -22,7 +24,7 @@ export const tareasService = {
    * Incluye relaciones: historialFechas, imágenes, responsables, etc.
    */
   getAll: async (filters: TareaFilters = {}): Promise<Tarea[]> => {
-    // 💡 CAMBIO CLAVE: Axios automáticamente construye el query string (ej. ?viewType=ASIGNADAS)
+    // Axios automáticamente construye el query string (ej. ?viewType=TODAS)
     const { data } = await api.get("/tareas", {
       params: filters,
     });
@@ -39,7 +41,6 @@ export const tareasService = {
 
   /**
    * 🔹 Crear una nueva tarea (POST /api/tareas)
-   * Requiere token (se agrega automáticamente por el interceptor).
    */
   create: async (payload: Partial<Tarea>): Promise<Tarea> => {
     const { data } = await api.post("/tareas", payload);
@@ -48,20 +49,17 @@ export const tareasService = {
 
   /**
    * 🔹 Crear un nuevo registro de historial de fechas (POST /api/tareas/:id/historial)
-   * Este endpoint se usa cuando un usuario modifica la fecha límite.
    */
   createHistorial: async (
     id: number,
-    payload: { fechaAnterior: Date; nuevaFecha: Date; motivo?: string | null } // Tipos actualizados para reflejar Zod
+    payload: { fechaAnterior: Date; nuevaFecha: Date; motivo?: string | null }
   ): Promise<any> => {
-    // 💡 CORRECCIÓN DE RUTA: Se usa la ruta explícita /:id/historial del backend
     const { data } = await api.post(`/tareas/${id}/historial`, payload);
     return data;
   },
 
   /**
    * 🔹 Actualizar una tarea (PUT /api/tareas/:id)
-   * Permite modificar estatus, responsable, observaciones, etc.
    */
   update: async (id: number, payload: Partial<Tarea>): Promise<Tarea> => {
     const { data } = await api.put(`/tareas/${id}`, payload);
@@ -70,7 +68,6 @@ export const tareasService = {
 
   /**
    * 🔹 Marcar una tarea como CONCLUIDA (PATCH /api/tareas/:id/complete)
-   * El backend se encarga de setear la fecha de conclusión y actualizar historial.
    */
   complete: async (id: number): Promise<Tarea> => {
     const { data } = await api.patch(`/tareas/${id}/complete`);
@@ -85,14 +82,13 @@ export const tareasService = {
     return data;
   },
 
-  // 🚀 NUEVO: Subir imágenes a Cloudinary (POST /api/tareas/:id/upload)
+  // 🚀 Subir imágenes a Cloudinary (POST /api/tareas/:id/upload)
   uploadImage: async (id: number, formData: FormData): Promise<any> => {
-    // Axios maneja automáticamente el Content-Type: multipart/form-data para FormData
     const { data } = await api.post(`/tareas/${id}/upload`, formData);
     return data;
   },
 
-  // 🚀 NUEVO: Borrar imagen de Cloudinary (DELETE /api/tareas/imagen/:id)
+  // 🚀 Borrar imagen de Cloudinary (DELETE /api/tareas/imagen/:id)
   deleteImage: async (imagenId: number): Promise<{ message: string }> => {
     const { data } = await api.delete(`/tareas/imagen/${imagenId}`);
     return data;

@@ -24,9 +24,13 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
   // ✅ 1. NUEVO ESTADO PARA EL MODO KAIZEN
   const [isKaizen, setIsKaizen] = useState(false);
 
-  const [refreshKey, setRefreshKey] = useState(0);
+  // const [refreshKey, setRefreshKey] = useState(0);
   const handleRefresh = () => {
-    setRefreshKey((prevKey) => prevKey + 1);
+    setLoading(true);
+
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
   };
 
   const handleNuevaTarea = () => {
@@ -49,7 +53,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
   useEffect(() => {
     fetchTareas();
-  }, [refreshKey, fetchTareas]);
+  }, [fetchTareas]);
 
   // ✅ 2. LÓGICA DE FILTRADO KAIZEN
   // Separa las tareas antes de enviarlas a la tabla/resumen
@@ -63,12 +67,24 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     <div className="relative mx-auto max-w-7x2 px-6 lg:px-10 py-2">
       <button
         onClick={handleRefresh}
-        className="
-          p-2 bg-blue-600 text-white rounded-full shadow-lg 
-          hover:bg-blue-700 active:scale-95 transition-all
-          fixed bottom-40 right-6 z-50
-          lg:absolute lg:top-20 lg:right-10 lg:bottom-auto
-        "
+        disabled={loading}
+        className={`
+          /* --- Estilos base (comunes) --- */
+          p-3 bg-blue-600 text-white rounded-full shadow-xl 
+          hover:bg-blue-700 transition-all duration-300
+          
+          /* --- Efecto al presionar (Click): Se hunde ligeramente --- */
+          active:scale-90 
+          
+          /* --- Móvil/Tablet: Fijo en la esquina --- */
+          fixed bottom-20 right-6 z-50
+          
+          /* --- Escritorio (lg): Vuelve a su lugar original --- */
+          lg:bottom-180 lg:right-10
+
+          /* --- Opacidad visual si está cargando --- */
+          ${loading ? "opacity-75 cursor-wait" : ""}
+        `}
         aria-label="Actualizar tareas"
       >
         <svg
@@ -77,7 +93,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
           viewBox="0 0 24 24"
           strokeWidth={1.5}
           stroke="currentColor"
-          className="w-8 h-8"
+          className={`w-8 h-8 ${loading ? "animate-spin" : ""}`}
         >
           <path
             strokeLinecap="round"

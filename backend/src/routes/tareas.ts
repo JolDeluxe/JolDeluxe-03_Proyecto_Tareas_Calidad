@@ -368,33 +368,39 @@ router.get(
           responsables: { some: { usuarioId: responsableId } },
         });
     } else if (user.rol === "ENCARGADO") {
-      // ENCARGADO: Aquí está el cambio importante.
+      // ENCARGADO:
       if (!user.departamentoId)
         return res.status(403).json({ error: "Sin departamento." });
       where.departamentoId = user.departamentoId;
 
-      // Definimos su "Visión Normal" (Lo que ve un encargado estándar)
+      // Definimos su "Visión Normal"
       let filtroVisionNormal: Prisma.TareaWhereInput = {};
 
       if (viewType === "ASIGNADAS") {
         filtroVisionNormal = { asignadorId: user.id };
-      } else {
-        // Default: Mis Tareas (donde soy responsable)
+      } else if (viewType === "MIS_TAREAS") {
+        // Si selecciona explícitamente "Mis Tareas"
         filtroVisionNormal = { responsables: { some: { usuarioId: user.id } } };
+      } else {
+        // 🚀 DEFAULT (Ver Todo del Depto EXCEPTO Admin)
+        // Esto permite ver tareas de OTROS encargados y usuarios.
+        filtroVisionNormal = {
+          asignador: {
+            rol: { not: "ADMIN" }, // Ocultar tareas creadas por ADMIN
+          },
+        };
       }
 
       if (esDepartamentoCalidad) {
-        // 🚀 EXCEPCIÓN CALIDAD:
-        // Si es Encargado de Calidad, ve: (Sus tareas normales) O (Cualquier tarea KAIZEN)
+        // EXCEPCIÓN CALIDAD: Ve su visión normal O las tareas KAIZEN
         andClauses.push({
-          OR: [
-            filtroVisionNormal, // Lo que le toca
-            { tarea: { startsWith: "KAIZEN" } }, // Lo que le interesa por ser Calidad
-          ],
+          OR: [filtroVisionNormal, { tarea: { startsWith: "KAIZEN" } }],
         });
       } else {
-        // Encargado Normal: Se aplica la restricción estricta
-        andClauses.push(filtroVisionNormal);
+        // Encargado Normal
+        if (Object.keys(filtroVisionNormal).length > 0) {
+          andClauses.push(filtroVisionNormal);
+        }
       }
     } else if (user.rol === "USUARIO") {
       // USUARIO: Solo ve lo que se le asigna.
@@ -786,13 +792,19 @@ router.put(
     }
     const validatedBody = bodyParse.data;
 
-    // 4. Obtener la tarea y el usuario que edita
+    // 4. Obtener el usuario que hace la petición
     const user = req.user!;
+
+    // 5. Obtener la tarea existente con datos CRUCIALES para la validación
+    // 👁️ IMPORTANTE: Incluimos 'asignador' para ver el rol de quien creó la tarea
     const tareaExistente = await prisma.tarea.findUnique({
       where: { id: tareaId },
       include: {
         responsables: {
           select: { usuarioId: true },
+        },
+        asignador: {
+          select: { id: true, rol: true },
         },
       },
     });
@@ -801,7 +813,7 @@ router.put(
       return res.status(404).json({ error: "Tarea no encontrada" });
     }
 
-    // 5. REGLAS DE PERMISO (¿Quién puede editar esta tarea?)
+    // 6. REGLAS DE PERMISO BASE (Departamento)
     const esSuperAdmin = user.rol === "SUPER_ADMIN";
     const esAdminDepto =
       user.rol === "ADMIN" &&
@@ -810,7 +822,7 @@ router.put(
       user.rol === "ENCARGADO" &&
       tareaExistente.departamentoId === user.departamentoId;
 
-    // Si no es SuperAdmin, ni Admin/Encargado de ese depto, se rechaza
+    // Si no es SuperAdmin, ni Admin/Encargado de ese depto, se rechaza de entrada
     if (!esSuperAdmin && !esAdminDepto && !esEncargadoDepto) {
       return res.status(403).json({
         error: "Acceso denegado",
@@ -818,10 +830,47 @@ router.put(
       });
     }
 
-    // 6. Construir el payload de actualización
+    // ========================================================================
+    // 🔒 7. NUEVA LÓGICA DE RESTRICCIONES PARA 'ENCARGADO'
+    // ========================================================================
+    if (user.rol === "ENCARGADO") {
+      const esMiTarea = tareaExistente.asignadorId === user.id;
+      const rolCreador = tareaExistente.asignador?.rol;
+
+      // CASO A: Tarea creada por un ADMIN (o SUPER_ADMIN)
+      // "La tareas asignadas por un ADMIN no las va a poder editar de nada"
+      if (rolCreador === "ADMIN" || rolCreador === "SUPER_ADMIN") {
+        return res.status(403).json({
+          error: "Edición Bloqueada",
+          detalle:
+            "No puedes editar tareas que fueron asignadas por un Administrador.",
+        });
+      }
+
+      // CASO B: Tarea creada por OTRO Encargado (No soy yo)
+      // "No va a poder cambiar tarea(nombre), estatus, urgencia, observaciones"
+      if (!esMiTarea) {
+        if (
+          validatedBody.tarea !== undefined ||
+          validatedBody.estatus !== undefined ||
+          validatedBody.urgencia !== undefined ||
+          validatedBody.observaciones !== undefined
+        ) {
+          return res.status(403).json({
+            error: "Edición Restringida",
+            detalle:
+              "En tareas de otros Encargados, SOLO puedes modificar la Fecha Límite.",
+          });
+        }
+        // Si llega aquí, es porque solo está intentando cambiar fechaLimite (o responsables)
+      }
+    }
+    // ========================================================================
+
+    // 8. Construir el payload de actualización
     const dataParaActualizar: Prisma.TareaUpdateInput = {};
 
-    // --- Campos Estándar (Todos los roles permitidos pueden cambiar esto) ---
+    // --- Campos Estándar ---
     if (validatedBody.tarea !== undefined)
       dataParaActualizar.tarea = validatedBody.tarea;
     if (validatedBody.observaciones !== undefined)
@@ -831,23 +880,22 @@ router.put(
     if (validatedBody.fechaLimite !== undefined)
       dataParaActualizar.fechaLimite = validatedBody.fechaLimite;
 
-    // --- Campo Especial: Estatus (Reglas de ADMIN vs ENCARGADO) ---
+    // --- Campo Especial: Estatus ---
+    // (La lógica de restricción ya se manejó arriba en el bloque de Encargado)
     if (validatedBody.estatus !== undefined) {
-      const puedeCambiarEstatus =
-        esSuperAdmin || // SuperAdmin siempre puede
-        esAdminDepto || // Admin depto siempre puede
-        // Encargado solo si él asignó la tarea
-        (esEncargadoDepto && tareaExistente.asignadorId === user.id);
-
-      if (!puedeCambiarEstatus) {
+      // Chequeo de seguridad redundante: Si el estatus cambia, verificamos permisos
+      // para asegurar que nadie se saltó el bloque anterior
+      if (
+        validatedBody.estatus !== tareaExistente.estatus &&
+        user.rol === "ENCARGADO" &&
+        tareaExistente.asignadorId !== user.id
+      ) {
         return res.status(403).json({
           error: "Acceso denegado",
-          detalle:
-            "Como Encargado, solo puedes cambiar el estatus de las tareas que tú mismo asignaste.",
+          detalle: "No puedes cambiar el estatus de una tarea que no es tuya.",
         });
       }
 
-      // Si se permite, se actualiza el estatus
       dataParaActualizar.estatus = validatedBody.estatus;
 
       // Lógica de fechaConclusión automática
@@ -861,7 +909,7 @@ router.put(
       }
     }
 
-    // --- Campos de Relación (Requieren lógica de asignación) ---
+    // --- Campos de Relación ---
 
     // Solo SuperAdmin puede cambiar una tarea de departamento
     if (validatedBody.departamentoId !== undefined) {
@@ -877,19 +925,14 @@ router.put(
       };
     }
 
-    // Si se actualizan los responsables, se debe re-validar la lógica de asignación
+    // Si se actualizan los responsables
     if (validatedBody.responsables !== undefined) {
-      const {
-        id: asignadorId,
-        rol: asignadorRol,
-        departamentoId: asignadorDeptoId,
-      } = user;
+      const { rol: asignadorRol, departamentoId: asignadorDeptoId } = user;
 
-      // Se valida contra el depto. al que la tarea pertenece (o pertenecerá si se cambia)
       const targetDeptoId =
         validatedBody.departamentoId ?? tareaExistente.departamentoId;
 
-      // (Lógica de validación copiada de POST /)
+      // Validar que no asigne a otro departamento (si no es SuperAdmin)
       if (
         asignadorRol !== "SUPER_ADMIN" &&
         targetDeptoId !== asignadorDeptoId
@@ -937,29 +980,28 @@ router.put(
         }
       }
 
-      // Si la validación pasa, actualizamos la tabla pivote
+      // Actualizar la tabla pivote
       dataParaActualizar.responsables = {
-        deleteMany: {}, // Borra todos los responsables actuales
+        deleteMany: {}, // Borra anteriores
         create: validatedBody.responsables.map((userId) => ({
-          // Añade los nuevos
           usuario: { connect: { id: userId } },
         })),
       };
     }
 
-    // 7. Ejecutar la actualización en la BD
+    // 9. Ejecutar la actualización en la BD
     const tareaActualizada: TareaCreadaConRelaciones =
       await prisma.tarea.update({
         where: { id: tareaId },
         data: dataParaActualizar,
-        include: tareaConRelacionesInclude, // Devolvemos la tarea con sus relaciones
+        include: tareaConRelacionesInclude,
       });
 
+    // 10. Notificaciones (Solo si cambió el estatus)
     if (
       validatedBody.estatus &&
       validatedBody.estatus !== tareaExistente.estatus
     ) {
-      // Obtiene la lista de IDs de los responsables (de la tarea ANTES de actualizarse)
       const idsResponsables = tareaExistente.responsables.map(
         (r) => r.usuarioId
       );
@@ -971,21 +1013,19 @@ router.put(
         tituloNotificacion = "Tarea Cancelada";
       }
 
-      // Si el título se estableció (o sea, si fue concluida o cancelada), notifica:
       if (tituloNotificacion) {
         await sendNotificationToUsers(
           idsResponsables,
           tituloNotificacion,
-          // Usamos 'tareaActualizada.tarea' para tener el nombre más reciente
           `La tarea "${
             tareaActualizada.tarea
           }" ahora está ${validatedBody.estatus.toLowerCase()}.`,
-          `/admin` // O la ruta que prefieras
+          `/admin`
         );
       }
     }
 
-    // 8. Limpiar y devolver respuesta
+    // 11. Limpiar y devolver respuesta
     const tareaLimpia = {
       ...tareaActualizada,
       responsables: tareaActualizada.responsables.map((r) => r.usuario),

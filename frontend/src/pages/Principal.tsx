@@ -29,10 +29,16 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
   const [loading, setLoading] = useState(true);
 
   // Tu lógica de refresh (¡Correcta!)
-  const [refreshKey, setRefreshKey] = useState(0);
+  // const [refreshKey, setRefreshKey] = useState(0);
+
   const handleRefresh = () => {
-    // Esta función CAMBIA el refreshKey
-    setRefreshKey((prevKey) => prevKey + 1);
+    // 1. Activa la animación del spinner
+    setLoading(true);
+
+    // 2. setTimeout ejecuta lo que está ADENTRO después de 3000ms
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
   };
 
   useEffect(() => {
@@ -66,7 +72,7 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
     };
 
     fetchTareas();
-  }, [refreshKey]);
+  }, []);
 
   const handleFechaChange = (newYear: number, newMonth: number) => {
     setYear(newYear);
@@ -82,17 +88,24 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
     <div className="relative mx-auto max-w-7x2 px-6 lg:px-10 py-2">
       <button
         onClick={handleRefresh}
-        className="
+        disabled={loading}
+        className={`
           /* --- Estilos base (comunes) --- */
-          p-2 bg-blue-600 text-white rounded-full shadow-lg 
-          hover:bg-blue-700 active:scale-95 transition-all
+          p-3 bg-blue-600 text-white rounded-full shadow-xl 
+          hover:bg-blue-700 transition-all duration-300
+          
+          /* --- Efecto al presionar (Click): Se hunde ligeramente --- */
+          active:scale-90 
           
           /* --- Móvil/Tablet: Fijo en la esquina --- */
           fixed bottom-20 right-6 z-50
           
           /* --- Escritorio (lg): Vuelve a su lugar original --- */
-          lg:absolute lg:top-20 lg:right-10 lg:bottom-auto
-        "
+          lg:bottom-180 lg:right-10
+
+          /* --- Opacidad visual si está cargando --- */
+          ${loading ? "opacity-75 cursor-wait" : ""}
+        `}
         aria-label="Actualizar tareas"
       >
         <svg
@@ -101,7 +114,7 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
           viewBox="0 0 24 24"
           strokeWidth={1.5}
           stroke="currentColor"
-          className="w-8 h-8"
+          className={`w-8 h-8 ${loading ? "animate-spin" : ""}`}
         >
           <path
             strokeLinecap="round"

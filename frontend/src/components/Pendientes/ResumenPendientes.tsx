@@ -40,7 +40,7 @@ const useMediaQuery = (query: string) => {
 // 2. Define la interfaz de Props, incluyendo viewType
 interface Props {
   user: Usuario | null;
-  viewType?: "MIS_TAREAS" | "ASIGNADAS"; // Añadir el nuevo prop
+  viewType?: "MIS_TAREAS" | "ASIGNADAS";
 }
 
 // 3. Aplica la interfaz y desestructura 'user' y 'viewType'
