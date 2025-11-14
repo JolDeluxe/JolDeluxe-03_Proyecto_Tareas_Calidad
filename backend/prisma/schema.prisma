@@ -40,7 +40,7 @@ enum EstatusUsuario {
 
 model PushSubscription {
   id        Int      @id @default(autoincrement())
-  endpoint  String   @unique 
+  endpoint  String   @unique @db.VarChar(767) 
   p256dh    String
   auth      String
 
