@@ -225,7 +225,14 @@ const getTareasQuerySchema = z.object({
   asignadorId: z.coerce.number().int().positive().optional(),
   responsableId: z.coerce.number().int().positive().optional(),
   estatus: z.nativeEnum(Estatus).optional(),
-  viewType: z.enum(["MIS_TAREAS", "ASIGNADAS"]).optional(),
+  // 🆕 Añadir viewType al esquema para consistencia, aunque las rutas dedicadas no lo usan
+  viewType: z
+    .union([
+      z.literal("MIS_TAREAS"),
+      z.literal("ASIGNADAS"),
+      z.literal("TODAS"),
+    ])
+    .optional(),
 });
 
 /**
@@ -305,7 +312,6 @@ router.get(
     const user = req.user;
     if (!user) return res.status(401).json({ error: "Usuario no autenticado" });
 
-    // Validar Query Params
     const queryParse = getTareasQuerySchema.safeParse(req.query);
     if (!queryParse.success) {
       return res.status(400).json({
@@ -317,15 +323,11 @@ router.get(
     const { departamentoId, asignadorId, responsableId, estatus, viewType } =
       queryParse.data;
 
-    // --- 1. DETECCIÓN DE "CALIDAD" ---
-    // Necesitamos saber si el usuario pertenece al departamento de Calidad.
+    // 1. DETECCIÓN DE "CALIDAD"
     let esDepartamentoCalidad = false;
-
     if (user.rol === "SUPER_ADMIN") {
-      esDepartamentoCalidad = true; // Super Admin accede a todo
+      esDepartamentoCalidad = true;
     } else if (user.departamentoId) {
-      // Consultamos el nombre del depto si no viene en el token
-      // Nota: Si tu middleware 'verifyToken' ya inyecta el nombre del depto, usa eso para ahorrar la consulta.
       const depto = await prisma.departamento.findUnique({
         where: { id: user.departamentoId },
         select: { nombre: true },
@@ -335,17 +337,16 @@ router.get(
       }
     }
 
-    // --- 2. CONSTRUCCIÓN DEL FILTRO (WHERE) ---
+    // 2. CONSTRUCCIÓN DEL FILTRO (WHERE)
     const where: Prisma.TareaWhereInput = {};
     const andClauses: Prisma.TareaWhereInput[] = [];
 
-    // Filtros básicos
     if (estatus) where.estatus = estatus;
 
-    // --- 3. LÓGICA DE ROLES ---
+    // 3. LÓGICA DE ROLES (JERARQUÍA)
 
     if (user.rol === "SUPER_ADMIN") {
-      // Ve todo. Aplica filtros opcionales si existen.
+      // VE TODO
       if (departamentoId) where.departamentoId = departamentoId;
       if (asignadorId) where.asignadorId = asignadorId;
       if (responsableId)
@@ -353,78 +354,77 @@ router.get(
           responsables: { some: { usuarioId: responsableId } },
         });
     } else if (user.rol === "ADMIN") {
-      // ADMIN: Ve todo lo de su departamento.
+      // VE TODO DE SU DEPTO
       if (!user.departamentoId)
         return res.status(403).json({ error: "Sin departamento." });
       where.departamentoId = user.departamentoId;
 
-      // Si es ADMIN de CALIDAD, automáticamente verá las KAIZEN porque tienen el mismo departamentoId.
-      // El "Blindaje" (paso 4) se encargará de proteger si NO es de calidad.
-
-      // Filtros opcionales del Admin
+      // Filtros opcionales
       if (asignadorId) where.asignadorId = asignadorId;
       if (responsableId)
         andClauses.push({
           responsables: { some: { usuarioId: responsableId } },
         });
     } else if (user.rol === "ENCARGADO") {
-      // ENCARGADO:
       if (!user.departamentoId)
         return res.status(403).json({ error: "Sin departamento." });
       where.departamentoId = user.departamentoId;
 
-      // Definimos su "Visión Normal"
       let filtroVisionNormal: Prisma.TareaWhereInput = {};
 
       if (viewType === "ASIGNADAS") {
         filtroVisionNormal = { asignadorId: user.id };
       } else if (viewType === "MIS_TAREAS") {
-        // Si selecciona explícitamente "Mis Tareas"
         filtroVisionNormal = { responsables: { some: { usuarioId: user.id } } };
       } else {
-        // 🚀 DEFAULT (Ver Todo del Depto EXCEPTO Admin)
-        // Esto permite ver tareas de OTROS encargados y usuarios.
+        // 🚀 REGLA ENCARGADO (DEFAULT):
+        // Ve todo el departamento, EXCEPTO tareas donde un ADMIN sea responsable.
         filtroVisionNormal = {
-          asignador: {
-            rol: { not: "ADMIN" }, // Ocultar tareas creadas por ADMIN
+          responsables: {
+            none: { usuario: { rol: "ADMIN" } },
           },
         };
       }
 
       if (esDepartamentoCalidad) {
-        // EXCEPCIÓN CALIDAD: Ve su visión normal O las tareas KAIZEN
+        // Si es Calidad, ve lo normal O las tareas KAIZEN
         andClauses.push({
           OR: [filtroVisionNormal, { tarea: { startsWith: "KAIZEN" } }],
         });
       } else {
-        // Encargado Normal
         if (Object.keys(filtroVisionNormal).length > 0) {
           andClauses.push(filtroVisionNormal);
         }
       }
     } else if (user.rol === "USUARIO") {
-      // USUARIO: Solo ve lo que se le asigna.
       if (!user.departamentoId)
         return res.status(403).json({ error: "Sin departamento." });
       where.departamentoId = user.departamentoId;
-      where.responsables = { some: { usuarioId: user.id } };
 
-      // Nota: Un USUARIO de Calidad NO ve KAIZEN automáticamente según tu instrucción
-      // (solo dijiste Admin y Encargado), así que se queda con esta lógica estricta.
+      // 🚀 REGLA USUARIO:
+      // Solo ve tareas de otros USUARIOS.
+      // NO puede ver tareas si un ADMIN o un ENCARGADO están asignados (aunque haya un usuario también).
+      andClauses.push({
+        responsables: {
+          none: {
+            usuario: {
+              rol: { in: ["ADMIN", "ENCARGADO"] }, // Bloquea si hay jefes involucrados
+            },
+          },
+        },
+      });
+
+      // Nota: Esto implícitamente deja ver tareas donde los responsables sean "USUARIO" o "INVITADO".
     } else if (user.rol === "INVITADO") {
+      // Solo lo suyo
       where.responsables = { some: { usuarioId: user.id } };
     }
 
-    // --- 4. BLINDAJE ANTI-KAIZEN (Seguridad) ---
-    // Si NO eres del departamento de Calidad (y no eres Super Admin),
-    // NO debes ver tareas KAIZEN a menos que te hayan invitado explícitamente.
+    // 4. BLINDAJE ANTI-KAIZEN (Para todos menos Calidad/SuperAdmin)
     if (!esDepartamentoCalidad) {
       andClauses.push({
         OR: [
-          // Opción A: Es una tarea normal (NO Kaizen)
           { tarea: { not: { startsWith: "KAIZEN" } } },
-
-          // Opción B: Es Kaizen, PERO me invitaron (soy responsable)
           {
             AND: [
               { tarea: { startsWith: "KAIZEN" } },
@@ -435,28 +435,33 @@ router.get(
       });
     }
 
-    // Inyectar todas las cláusulas AND acumuladas
     if (andClauses.length > 0) {
       where.AND = andClauses;
     }
 
-    // Ejecutar consulta
-    const tareas = await prisma.tarea.findMany({
-      where,
-      include: {
-        departamento: { select: { id: true, nombre: true } },
-        asignador: { select: { id: true, nombre: true } },
-        responsables: {
-          select: { usuario: { select: { id: true, nombre: true } } },
+    // 5. EJECUCIÓN (Transacción para Count + Data)
+    // Usamos $transaction para que sea eficiente y atómico
+    const [total, tareas] = await prisma.$transaction([
+      prisma.tarea.count({ where }), // Cuenta total con los filtros aplicados
+      prisma.tarea.findMany({
+        where,
+        include: {
+          departamento: { select: { id: true, nombre: true } },
+          asignador: { select: { id: true, nombre: true, rol: true } },
+          responsables: {
+            select: {
+              usuario: { select: { id: true, nombre: true, rol: true } },
+            }, // Incluímos rol para verificar en frontend si quieres
+          },
+          imagenes: { select: { id: true, url: true, fechaSubida: true } },
+          historialFechas: {
+            include: { modificadoPor: { select: { id: true, nombre: true } } },
+            orderBy: { fechaCambio: "asc" },
+          },
         },
-        imagenes: { select: { id: true, url: true, fechaSubida: true } },
-        historialFechas: {
-          include: { modificadoPor: { select: { id: true, nombre: true } } },
-          orderBy: { fechaCambio: "asc" },
-        },
-      },
-      orderBy: { id: "desc" },
-    });
+        orderBy: { id: "desc" },
+      }),
+    ]);
 
     // Limpiar respuesta
     const tareasLimpio = tareas.map((t) => ({
@@ -464,7 +469,146 @@ router.get(
       responsables: t.responsables.map((r) => r.usuario),
     }));
 
-    res.json(tareasLimpio);
+    // 🚀 RESPUESTA CON CONTADOR
+    // Cambiamos la estructura para devolver { info, data }
+    res.json({
+      info: {
+        total: total,
+        count: tareas.length,
+      },
+      data: tareasLimpio,
+    });
+  })
+);
+
+/* 🆕 [GET /misTareas] Obtener solo tareas donde el usuario logueado es responsable */
+router.get(
+  "/misTareas",
+  verifyToken(),
+  safeAsync(async (req: Request, res: Response) => {
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: "Usuario no autenticado" });
+
+    // 1. Validar los query params opcionales (ej. ?estatus=PENDIENTE)
+    const queryParse = getTareasQuerySchema.safeParse(req.query);
+    if (!queryParse.success) {
+      return res.status(400).json({
+        error: "Query params inválidos",
+        detalles: queryParse.error.flatten().fieldErrors,
+      });
+    }
+    // Solo necesitamos 'estatus' de la query
+    const { estatus } = queryParse.data;
+
+    // 2. CONSTRUCCIÓN DEL FILTRO
+    const where: Prisma.TareaWhereInput = {
+      // 🚀 Corrección: Aplica filtro de estatus SOLO si se proporciona
+      ...(estatus && { estatus: estatus }),
+      responsables: {
+        some: {
+          usuarioId: user.id, // Responsable directo
+        },
+      },
+    };
+
+    // 3. Transacción: total + datos
+    const [total, tareas] = await prisma.$transaction([
+      prisma.tarea.count({ where }),
+      prisma.tarea.findMany({
+        where,
+        include: {
+          departamento: { select: { id: true, nombre: true } },
+          asignador: { select: { id: true, nombre: true, rol: true } },
+          responsables: {
+            select: {
+              usuario: { select: { id: true, nombre: true, rol: true } },
+            },
+          },
+          imagenes: { select: { id: true, url: true, fechaSubida: true } },
+          historialFechas: {
+            include: { modificadoPor: { select: { id: true, nombre: true } } },
+            orderBy: { fechaCambio: "desc" },
+          },
+        },
+        orderBy: { id: "desc" },
+      }),
+    ]);
+
+    // 4. Limpiar responsables (aplanar arreglo)
+    const tareasLimpio = tareas.map((t) => ({
+      ...t,
+      responsables: t.responsables.map((r) => r.usuario),
+    }));
+
+    // 5. RESPUESTA
+    res.json({
+      info: { total, count: tareas.length },
+      data: tareasLimpio,
+    });
+  })
+);
+
+/* 🆕 [GET /asignadas] Obtener solo tareas que el usuario logueado asignó */
+router.get(
+  "/asignadas",
+  // Esta ruta requiere permisos de asignación
+  verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
+  safeAsync(async (req: Request, res: Response) => {
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: "Usuario no autenticado" });
+
+    // 1. Validar los query params opcionales (ej. ?estatus=PENDIENTE)
+    const queryParse = getTareasQuerySchema.safeParse(req.query);
+    if (!queryParse.success) {
+      return res.status(400).json({
+        error: "Query params inválidos",
+        detalles: queryParse.error.flatten().fieldErrors,
+      });
+    }
+    // Solo necesitamos 'estatus' de la query
+    const { estatus } = queryParse.data;
+
+    // 2. CONSTRUCCIÓN DEL FILTRO
+    const where: Prisma.TareaWhereInput = {
+      // 🚀 Corrección: Aplica filtro de estatus SOLO si se proporciona
+      ...(estatus && { estatus: estatus }),
+      asignadorId: user.id, // Asignador directo
+    };
+
+    // 3. Transacción: total + datos
+    const [total, tareas] = await prisma.$transaction([
+      prisma.tarea.count({ where }),
+      prisma.tarea.findMany({
+        where,
+        include: {
+          departamento: { select: { id: true, nombre: true } },
+          asignador: { select: { id: true, nombre: true, rol: true } },
+          responsables: {
+            select: {
+              usuario: { select: { id: true, nombre: true, rol: true } },
+            },
+          },
+          imagenes: { select: { id: true, url: true, fechaSubida: true } },
+          historialFechas: {
+            include: { modificadoPor: { select: { id: true, nombre: true } } },
+            orderBy: { fechaCambio: "desc" },
+          },
+        },
+        orderBy: { id: "desc" },
+      }),
+    ]);
+
+    // 4. Limpiar responsables (aplanar arreglo)
+    const tareasLimpio = tareas.map((t) => ({
+      ...t,
+      responsables: t.responsables.map((r) => r.usuario),
+    }));
+
+    // 5. RESPUESTA
+    res.json({
+      info: { total, count: tareas.length },
+      data: tareasLimpio,
+    });
   })
 );
 
@@ -579,6 +723,81 @@ router.get(
     };
 
     res.json(tareaLimpia);
+  })
+);
+
+/* ✅ [POST] Registrar un cambio de fecha (Crear Historial) */
+
+router.post(
+  "/:id/historial", // 1. Ruta más clara
+
+  // 2. Roles correctos (SUPER_ADMIN, ADMIN, ENCARGADO)
+
+  verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
+
+  safeAsync(async (req: Request, res: Response) => {
+    // 3. Validar el ID de la URL
+
+    const paramsParse = paramsSchema.safeParse(req.params);
+
+    if (!paramsParse.success) {
+      return res.status(400).json({
+        error: "ID de tarea inválido",
+
+        detalles: paramsParse.error.flatten().fieldErrors,
+      });
+    }
+
+    const { id: tareaId } = paramsParse.data;
+
+    // 4. Validar el body (fechas y motivo)
+
+    const bodyParse = historialSchema.safeParse(req.body);
+
+    if (!bodyParse.success) {
+      return res.status(400).json({
+        error: "Datos de historial inválidos",
+
+        detalles: bodyParse.error.flatten().fieldErrors,
+      });
+    }
+
+    // 5. Obtener datos validados y el ID del usuario (del TOKEN)
+
+    const { fechaAnterior, nuevaFecha, motivo } = bodyParse.data;
+
+    const { id: modificadoPorId } = req.user!; // ¡ID del token, no del body!
+
+    // 6. Verificar que la tarea exista
+
+    const tarea = await prisma.tarea.findUnique({ where: { id: tareaId } });
+
+    if (!tarea) {
+      return res.status(404).json({ error: "Tarea no encontrada" });
+    }
+
+    // 7. Crear el registro en la BD
+
+    const nuevoHistorial = await prisma.historialFecha.create({
+      data: {
+        fechaAnterior: fechaAnterior, // Fecha validada por Zod
+
+        nuevaFecha: nuevaFecha, // Fecha validada por Zod
+
+        motivo: motivo ?? null, // Motivo validado por Zod
+
+        // Conectar las relaciones
+
+        tarea: { connect: { id: tareaId } },
+
+        modificadoPor: { connect: { id: modificadoPorId } },
+      },
+      include: {
+        modificadoPor: { select: { nombre: true } },
+      },
+    });
+
+    res.status(201).json(nuevoHistorial);
   })
 );
 
@@ -710,62 +929,6 @@ router.post(
   })
 );
 
-/* ✅ [POST] Registrar un cambio de fecha (Crear Historial) */
-router.post(
-  "/:id/historial", // 1. Ruta más clara
-  // 2. Roles correctos (SUPER_ADMIN, ADMIN, ENCARGADO)
-  verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
-  safeAsync(async (req: Request, res: Response) => {
-    // 3. Validar el ID de la URL
-    const paramsParse = paramsSchema.safeParse(req.params);
-    if (!paramsParse.success) {
-      return res.status(400).json({
-        error: "ID de tarea inválido",
-        detalles: paramsParse.error.flatten().fieldErrors,
-      });
-    }
-    const { id: tareaId } = paramsParse.data;
-
-    // 4. Validar el body (fechas y motivo)
-    const bodyParse = historialSchema.safeParse(req.body);
-    if (!bodyParse.success) {
-      return res.status(400).json({
-        error: "Datos de historial inválidos",
-        detalles: bodyParse.error.flatten().fieldErrors,
-      });
-    }
-
-    // 5. Obtener datos validados y el ID del usuario (del TOKEN)
-    const { fechaAnterior, nuevaFecha, motivo } = bodyParse.data;
-    const { id: modificadoPorId } = req.user!; // ¡ID del token, no del body!
-
-    // 6. Verificar que la tarea exista
-    const tarea = await prisma.tarea.findUnique({ where: { id: tareaId } });
-    if (!tarea) {
-      return res.status(404).json({ error: "Tarea no encontrada" });
-    }
-
-    // 7. Crear el registro en la BD
-    const nuevoHistorial = await prisma.historialFecha.create({
-      data: {
-        fechaAnterior: fechaAnterior, // Fecha validada por Zod
-        nuevaFecha: nuevaFecha, // Fecha validada por Zod
-        motivo: motivo ?? null, // Motivo validado por Zod
-
-        // Conectar las relaciones
-        tarea: { connect: { id: tareaId } },
-        modificadoPor: { connect: { id: modificadoPorId } }, // Se usa el ID del token
-      },
-      // Incluir el nombre de quién lo modificó para la respuesta
-      include: {
-        modificadoPor: { select: { nombre: true } },
-      },
-    });
-
-    res.status(201).json(nuevoHistorial);
-  })
-);
-
 /* ✅ [PUT /:id] Actualizar una tarea existente (Con Lógica de Permisos) */
 router.put(
   "/:id",
@@ -831,39 +994,24 @@ router.put(
     }
 
     // ========================================================================
-    // 🔒 7. NUEVA LÓGICA DE RESTRICCIONES PARA 'ENCARGADO'
+    // 🔒 7. LÓGICA DE RESTRICCIONES PARA 'ENCARGADO'
     // ========================================================================
     if (user.rol === "ENCARGADO") {
-      const esMiTarea = tareaExistente.asignadorId === user.id;
       const rolCreador = tareaExistente.asignador?.rol;
 
-      // CASO A: Tarea creada por un ADMIN (o SUPER_ADMIN)
-      // "La tareas asignadas por un ADMIN no las va a poder editar de nada"
+      // CASO A: Tarea creada por un ADMIN (o SUPER_ADMIN) -> BLOQUEO TOTAL
+      // "A las tareas de ADMIN no se va a poder hacer nada"
       if (rolCreador === "ADMIN" || rolCreador === "SUPER_ADMIN") {
         return res.status(403).json({
           error: "Edición Bloqueada",
           detalle:
-            "No puedes editar tareas que fueron asignadas por un Administrador.",
+            "No puedes editar tareas que fueron asignadas por un Administrador. Solo el Admin puede modificarlas.",
         });
       }
 
-      // CASO B: Tarea creada por OTRO Encargado (No soy yo)
-      // "No va a poder cambiar tarea(nombre), estatus, urgencia, observaciones"
-      if (!esMiTarea) {
-        if (
-          validatedBody.tarea !== undefined ||
-          validatedBody.estatus !== undefined ||
-          validatedBody.urgencia !== undefined ||
-          validatedBody.observaciones !== undefined
-        ) {
-          return res.status(403).json({
-            error: "Edición Restringida",
-            detalle:
-              "En tareas de otros Encargados, SOLO puedes modificar la Fecha Límite.",
-          });
-        }
-        // Si llega aquí, es porque solo está intentando cambiar fechaLimite (o responsables)
-      }
+      // CASO B: Tarea creada por OTRO Encargado (o por mí) -> PERMITIDO TODO
+      // "De las tareas que haya agregado otro ENCARGADO va a poder editar todo también"
+      // Por lo tanto, no agregamos restricciones de campos (else) aquí.
     }
     // ========================================================================
 
@@ -881,24 +1029,12 @@ router.put(
       dataParaActualizar.fechaLimite = validatedBody.fechaLimite;
 
     // --- Campo Especial: Estatus ---
-    // (La lógica de restricción ya se manejó arriba en el bloque de Encargado)
+    // Nota: Aunque permitimos editar estatus aquí, la validación/cancelación "oficial"
+    // con lógica de negocio compleja suele hacerse en los endpoints PATCH.
     if (validatedBody.estatus !== undefined) {
-      // Chequeo de seguridad redundante: Si el estatus cambia, verificamos permisos
-      // para asegurar que nadie se saltó el bloque anterior
-      if (
-        validatedBody.estatus !== tareaExistente.estatus &&
-        user.rol === "ENCARGADO" &&
-        tareaExistente.asignadorId !== user.id
-      ) {
-        return res.status(403).json({
-          error: "Acceso denegado",
-          detalle: "No puedes cambiar el estatus de una tarea que no es tuya.",
-        });
-      }
-
       dataParaActualizar.estatus = validatedBody.estatus;
 
-      // Lógica de fechaConclusión automática
+      // Lógica básica de fechaConclusión automática si se cambia por aquí
       if (
         validatedBody.estatus === "CONCLUIDA" &&
         tareaExistente.estatus !== "CONCLUIDA"

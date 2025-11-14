@@ -9,11 +9,14 @@ import type {
   Urgencia,
   ImagenTarea,
 } from "../../types/tarea";
-import type { Usuario } from "../../types/usuario"; // 1. Importar Usuario
+import type { Usuario } from "../../types/usuario";
 
 // Importar los componentes hijos
 import TablaPendientesMobile from "./TablaPendientesMobile";
 import ModalGaleria from "../Principal/ModalGaleria";
+
+// Tipo de vista de tareas (debe coincidir con Pendientes.tsx)
+type ActiveView = "MIS_TAREAS" | "ASIGNADAS" | "TODAS";
 
 // --- Funciones Helper (Sin cambios) ---
 const formateaFecha = (fecha?: Date | string | null): string => {
@@ -41,6 +44,7 @@ const getRowClass = (estatus: Estatus): string => {
 
 const getFechaFinalObj = (row: Tarea): Date | string | null => {
   if (row.historialFechas && row.historialFechas.length > 0) {
+    // La fecha más reciente del historial es la nueva fecha límite
     return row.historialFechas[row.historialFechas.length - 1].nuevaFecha;
   }
   return row.fechaLimite;
@@ -85,7 +89,7 @@ const useMediaQuery = (query: string) => {
 // 2. Definir la interfaz de Props con el nuevo viewType
 interface Props {
   user: Usuario | null;
-  viewType?: "MIS_TAREAS" | "ASIGNADAS"; // Añadido para diferenciar vistas del ENCARGADO
+  viewType?: ActiveView; // Usamos el nuevo tipo
 }
 
 // 3. Aplicar la interfaz y desestructurar 'user' y 'viewType'
@@ -100,9 +104,8 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
 
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  // 5. Modificar fetchTareas para que use 'user' y aplique filtros
+  // 5. Modificar fetchTareas para que use el endpoint correcto
   const fetchTareas = async () => {
-    // 5a. Si no hay usuario, no hacer nada
     if (!user) {
       setTareasPendientes([]);
       setLoading(false);
@@ -110,8 +113,18 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
     }
 
     try {
-      // 💡 CAMBIO CLAVE: Llama al servicio y pasa el filtro viewType al backend
-      const tareasDesdeServicio = await tareasService.getAll({ viewType });
+      let tareasDesdeServicio: Tarea[] = [];
+      const filters = { estatus: "PENDIENTE" as const };
+
+      // 💡 LÓGICA CLAVE: Seleccionar el endpoint del servicio
+      if (viewType === "ASIGNADAS") {
+        tareasDesdeServicio = await tareasService.getAsignadas(filters);
+      } else if (viewType === "MIS_TAREAS") {
+        tareasDesdeServicio = await tareasService.getMisTareas(filters);
+      } else {
+        // "TODAS" (o undefined si por error no se pasa, lo cual usa getAll)
+        tareasDesdeServicio = await tareasService.getAll(filters);
+      }
 
       // (Tu lógica de mapeo de fechas es correcta)
       const tareasConFechas = tareasDesdeServicio.map((t: any) => ({
@@ -131,7 +144,6 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
       }));
 
       // 💡 ÚNICO FILTRO NECESARIO: Filtrar por estatus PENDIENTE en el cliente.
-      // El filtro de rol/responsable/asignador ya fue manejado por el backend.
       const tareasFiltradas = tareasConFechas.filter(
         (t: Tarea) => t.estatus === "PENDIENTE"
       );

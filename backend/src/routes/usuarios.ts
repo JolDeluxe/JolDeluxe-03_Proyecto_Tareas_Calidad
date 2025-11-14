@@ -363,6 +363,114 @@ router.get(
   })
 );
 
+// 🆕 NUEVA RUTA 1: Obtener solo usuarios con ROL=USUARIO
+/* ✅ [READ] Obtener solo usuarios con ROL=USUARIO */
+router.get(
+  "/usuarios",
+  // Acceso: SUPER_ADMIN, ADMIN, ENCARGADO
+  verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
+  safeAsync(async (req: Request, res: Response) => {
+    // 1. Validar el query param 'estatus' (ej. ?estatus=INACTIVO)
+    const queryParseResult = querySchema.safeParse(req.query);
+
+    if (!queryParseResult.success) {
+      return res.status(400).json({
+        error: "Query param inválido",
+        detalles: queryParseResult.error.flatten().fieldErrors,
+      });
+    }
+
+    // 2. Obtenemos 'estatus'. Ignoramos cualquier otro query param.
+    const { estatus } = queryParseResult.data;
+
+    // 3. Definir el filtro de la consulta
+    const where: Prisma.UsuarioWhereInput = {
+      // Regla Clave: Forzar el rol a USUARIO
+      rol: "USUARIO",
+
+      // Regla de Estatus: Permitir filtrar por 'ACTIVO' (default) o 'INACTIVO'
+      estatus: estatus ?? "ACTIVO",
+    };
+
+    // 4. Ejecutar la consulta
+    const usuarios = await prisma.usuario.findMany({
+      where: where,
+      select: {
+        id: true,
+        nombre: true,
+        username: true,
+        rol: true,
+        estatus: true,
+        fechaCreacion: true,
+        departamento: {
+          select: {
+            id: true,
+            nombre: true,
+          },
+        },
+      },
+      orderBy: { nombre: "asc" },
+    });
+
+    res.json(usuarios);
+  })
+);
+
+// 🆕 NUEVA RUTA 2: Obtener usuarios con ROL=ENCARGADO o ROL=USUARIO
+/* ✅ [READ] Obtener solo usuarios con ROL=ENCARGADO o ROL=USUARIO */
+router.get(
+  "/encargados-y-usuarios",
+  // Acceso: SUPER_ADMIN, ADMIN, ENCARGADO
+  verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
+  safeAsync(async (req: Request, res: Response) => {
+    // 1. Validar el query param 'estatus' (ej. ?estatus=INACTIVO)
+    const queryParseResult = querySchema.safeParse(req.query);
+
+    if (!queryParseResult.success) {
+      return res.status(400).json({
+        error: "Query param inválido",
+        detalles: queryParseResult.error.flatten().fieldErrors,
+      });
+    }
+
+    // 2. Obtenemos 'estatus'. Ignoramos cualquier otro query param.
+    const { estatus } = queryParseResult.data;
+
+    // 3. Definir el filtro de la consulta
+    const where: Prisma.UsuarioWhereInput = {
+      // Regla Clave: Forzar el rol a ENCARGADO o USUARIO
+      rol: {
+        in: ["ENCARGADO", "USUARIO"],
+      },
+
+      // Regla de Estatus: Permitir filtrar por 'ACTIVO' (default) o 'INACTIVO'
+      estatus: estatus ?? "ACTIVO",
+    };
+
+    // 4. Ejecutar la consulta
+    const usuarios = await prisma.usuario.findMany({
+      where: where,
+      select: {
+        id: true,
+        nombre: true,
+        username: true,
+        rol: true,
+        estatus: true,
+        fechaCreacion: true,
+        departamento: {
+          select: {
+            id: true,
+            nombre: true,
+          },
+        },
+      },
+      orderBy: { nombre: "asc" },
+    });
+
+    res.json(usuarios);
+  })
+);
+
 /* ✅ [READ BY ID] Obtener un usuario por su ID */
 router.get(
   "/:id",

@@ -71,25 +71,83 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // --- 5. 🚀 Cargar usuarios reales al abrir el modal ---
+  const isUserInCalidad = user?.departamento?.nombre
+    ?.toUpperCase()
+    .includes("CALIDAD");
+
+  const getDisplayName = (userToDisplay: Usuario): string => {
+    // 1. Si es Kaizen o el usuario logueado no es de Calidad, no se aplica el sufijo especial.
+    if (isKaizen || !isUserInCalidad) {
+      return userToDisplay.nombre;
+    }
+
+    // 2. Si la tarea es estándar Y el usuario logueado es de Calidad, aplicamos el sufijo.
+    if (userToDisplay.rol === Rol.ENCARGADO) {
+      return `${userToDisplay.nombre} (Coordinador)`;
+    }
+    if (userToDisplay.rol === Rol.USUARIO) {
+      return `${userToDisplay.nombre} (Inspector)`;
+    }
+
+    return userToDisplay.nombre;
+  };
+
+  /**
+   * 🆕 NUEVA FUNCIÓN: Devuelve la clase de color basada en el rol.
+   */
+  const getRoleColorClass = (userToDisplay: Usuario): string => {
+    if (userToDisplay.rol === Rol.ENCARGADO) {
+      return "text-blue-600 font-semibold"; // Azul fuerte para ENCARGADO
+    }
+    if (userToDisplay.rol === Rol.USUARIO) {
+      return "text-red-700 font-semibold"; // Rojo Oscuro/Ginda para USUARIO
+    }
+    return "";
+  };
+
+  // --- 5. 🚀 Cargar usuarios reales al abrir el modal (MODIFICADO) ---
   useEffect(() => {
     const fetchUsuarios = async () => {
       if (!user) return;
 
       setLoadingUsuarios(true);
       try {
+        // 1. 🚨 LÓGICA DE FETCHING POR ROL (ya implementada)
+        let mainUsersPromise: Promise<Usuario[]>;
+
+        switch (user.rol) {
+          case Rol.ADMIN:
+            // ADMIN puede asignar a ENCARGADO y USUARIO
+            mainUsersPromise = usuariosService.getEncargadosYUsuarios();
+            break;
+          case Rol.ENCARGADO:
+            // ENCARGADO solo puede asignar a USUARIO
+            mainUsersPromise = usuariosService.getUsuarios();
+            break;
+          default:
+            mainUsersPromise = usuariosService.getAll();
+        }
+
         // ✅ USAMOS PROMISE.ALL para cargar ambas listas a la vez
-        // listaUsuarios = compañeros del depto (endpoint normal)
-        // listaInvitados = invitados globales (tu nuevo endpoint)
         const [usersData, invitadosData] = await Promise.all([
-          usuariosService.getAll(),
-          usuariosService.getInvitados(),
+          mainUsersPromise, // <-- Lista filtrada por rol
+          usuariosService.getInvitados(), // <-- Invitados se queda igual
         ]);
 
-        // Ordenamos ambas listas
-        setListaUsuarios(
-          usersData.sort((a, b) => a.nombre.localeCompare(b.nombre))
-        );
+        // 2. 🚀 ORDENAMIENTO: ENCARGADO antes que USUARIO
+        const sortedUsers = usersData.sort((a, b) => {
+          const rolA = a.rol;
+          const rolB = b.rol;
+
+          // Regla: ENCARGADO (antes) antes que USUARIO (después)
+          if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return -1;
+          if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return 1;
+
+          // Orden alfabético por nombre para los demás (mismo rol o rol no especificado)
+          return a.nombre.localeCompare(b.nombre);
+        });
+
+        setListaUsuarios(sortedUsers);
         setListaInvitados(
           invitadosData.sort((a, b) => a.nombre.localeCompare(b.nombre))
         );
@@ -536,26 +594,28 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                         key={u.id}
                         htmlFor={`resp-${u.id}`}
                         className={`
-                            flex items-center gap-3 w-full px-3 py-2 
-                            cursor-pointer transition-colors
-                            ${
-                              // Estilo para el item seleccionado
-                              responsablesIds.includes(u.id)
-                                ? "bg-amber-100 text-amber-900 font-semibold"
-                                : "text-gray-800 hover:bg-gray-50"
-                            }
-                          `}
+                          flex items-center gap-3 w-full px-3 py-2 
+                          cursor-pointer transition-colors
+                          ${
+                            responsablesIds.includes(u.id)
+                              ? "bg-amber-100 text-amber-900 font-semibold"
+                              : "text-gray-800 hover:bg-gray-50"
+                          }
+                        `}
                       >
                         <input
                           type="checkbox"
                           id={`resp-${u.id}`}
                           checked={responsablesIds.includes(u.id)}
-                          // 🔹 Usamos un handler de 'toggle' (cambiar)
                           onChange={() => handleToggleResponsable(u.id)}
                           disabled={loading}
                           className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
                         />
-                        <span>{u.nombre}</span>
+                        {/* 🚨 CAMBIO AQUÍ: Aplicar la clase de color */}
+                        <span className={getRoleColorClass(u)}>
+                          {getDisplayName(u)}
+                        </span>
+
                         {/* Etiqueta visual extra para confirmar rol en modo Kaizen */}
                         {isKaizen && (
                           <span className="text-xs text-gray-400 ml-auto">

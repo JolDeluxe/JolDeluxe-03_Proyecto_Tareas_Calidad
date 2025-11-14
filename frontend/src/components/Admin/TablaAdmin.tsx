@@ -51,7 +51,7 @@ const getRowClass = (status: Estatus): string => {
       return "bg-green-50 border-l-4 border-green-500";
     case "CANCELADA":
       return "bg-red-50 border-l-4 border-red-500";
-    default: // PENDIENTE
+    default:
       return "bg-blue-50 border-l-4 border-blue-500";
   }
 };
@@ -537,6 +537,16 @@ const TablaAdmin: React.FC<TablaProps> = ({
                   user.rol === Rol.ADMIN ||
                   (user.rol === Rol.ENCARGADO && row.asignadorId === user.id));
 
+              const asignadorEsAdmin =
+                row.asignador?.rol === Rol.ADMIN ||
+                row.asignador?.rol === Rol.SUPER_ADMIN;
+
+              const puedeEditar =
+                user &&
+                (user.rol === Rol.SUPER_ADMIN ||
+                  user.rol === Rol.ADMIN ||
+                  (user.rol === Rol.ENCARGADO && !asignadorEsAdmin));
+
               return (
                 <div
                   key={row.id}
@@ -779,23 +789,25 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         )}
 
                         {/* 🚀 BOTÓN EDITAR (Visible para todos) */}
-                        <button
-                          onClick={() => abrirModalEditar(row)}
-                          className="flex flex-col items-center text-amber-700 hover:text-amber-800 transition"
-                          title="Editar tarea"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 -960 960 960"
-                            className="w-6 h-6 text-amber-700"
-                            fill="currentColor"
+                        {puedeEditar && (
+                          <button
+                            onClick={() => abrirModalEditar(row)}
+                            className="flex flex-col items-center text-amber-700 hover:text-amber-800 transition"
+                            title="Editar tarea"
                           >
-                            <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z" />
-                          </svg>
-                          <span className="text-[11px] font-semibold">
-                            Editar
-                          </span>
-                        </button>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 -960 960 960"
+                              className="w-6 h-6 text-amber-700"
+                              fill="currentColor"
+                            >
+                              <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z" />
+                            </svg>
+                            <span className="text-[11px] font-semibold">
+                              Editar
+                            </span>
+                          </button>
+                        )}
 
                         {/* 🚀 BOTÓN VALIDAR (Usa la nueva lógica 'puedeValidar') */}
                         {puedeValidar && (

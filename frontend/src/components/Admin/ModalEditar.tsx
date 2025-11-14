@@ -93,21 +93,99 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // --- Cargar usuarios (sin cambios) ---
+  const isUserInCalidad = user?.departamento?.nombre
+    ?.toUpperCase()
+    .includes("CALIDAD");
+
+  /**
+   * 🆕 NUEVA FUNCIÓN: Devuelve la clase de color basada en el rol.
+   */
+  const getRoleColorClass = (userToDisplay: Usuario): string => {
+    if (userToDisplay.rol === Rol.ENCARGADO) {
+      return "text-blue-600 font-semibold"; // Azul para ENCARGADO
+    }
+    if (userToDisplay.rol === Rol.USUARIO) {
+      return "text-red-700 font-semibold"; // Rojo Oscuro/Ginda para USUARIO
+    }
+    return "";
+  };
+
+  /**
+   * 🆕 NUEVA FUNCIÓN: Devuelve el nombre de usuario con el sufijo (Coordinador) o (Inspector)
+   * si la tarea NO es Kaizen Y el usuario logueado es del departamento CALIDAD.
+   */
+  const getDisplayName = (userToDisplay: Usuario): string => {
+    // 1. Si es Kaizen o el usuario logueado no es de Calidad, no se aplica el sufijo especial.
+    if (isKaizen || !isUserInCalidad) {
+      return userToDisplay.nombre;
+    }
+
+    // 2. Si la tarea es estándar Y el usuario logueado es de Calidad, aplicamos el sufijo.
+    if (userToDisplay.rol === Rol.ENCARGADO) {
+      return `${userToDisplay.nombre} (Coordinador)`;
+    }
+    if (userToDisplay.rol === Rol.USUARIO) {
+      return `${userToDisplay.nombre} (Inspector)`;
+    }
+
+    return userToDisplay.nombre;
+  };
+
+  // --- Cargar usuarios (CON CAMBIOS DE ORDENAMIENTO) ---
   useEffect(() => {
     const fetchUsuarios = async () => {
       if (!user) return;
+
       setLoadingUsuarios(true);
       try {
-        // ✅ Cargamos AMBAS listas en paralelo
+        // 1. Lógica de fetching
+        let mainUsersPromise: Promise<Usuario[]>;
+
+        switch (user.rol) {
+          case Rol.ADMIN:
+            // ADMIN puede asignar a ENCARGADO y USUARIO
+            mainUsersPromise = usuariosService.getEncargadosYUsuarios();
+            break;
+          case Rol.ENCARGADO:
+            // ENCARGADO solo puede asignar a USUARIO
+            mainUsersPromise = usuariosService.getUsuarios();
+            break;
+          case Rol.SUPER_ADMIN:
+            // El SUPER_ADMIN ve a todos los que no son INVITADO (por defecto de getAll)
+            mainUsersPromise = usuariosService.getAll();
+            break;
+          default:
+            // USUARIO, INVITADO u otros roles
+            mainUsersPromise = usuariosService.getAll();
+            break;
+        }
+
         const [usersData, invitadosData] = await Promise.all([
-          usuariosService.getAll(), // Compañeros del depto
-          usuariosService.getInvitados(), // Invitados externos
+          mainUsersPromise,
+          usuariosService.getInvitados(),
         ]);
 
-        setListaUsuarios(
-          usersData.sort((a, b) => a.nombre.localeCompare(b.nombre))
-        );
+        // 2. 🚀 LÓGICA DE ORDENAMIENTO AVANZADA:
+        const sortedUsers = usersData.sort((a, b) => {
+          const isASelected = responsablesIds.includes(a.id);
+          const isBSelected = responsablesIds.includes(b.id);
+
+          // GRUPO 1: Priorizar Seleccionados (sin importar rol)
+          if (isASelected && !isBSelected) return -1;
+          if (!isASelected && isBSelected) return 1;
+
+          // GRUPO 2: Ordenar por Rol (Encargado antes que Usuario)
+          const rolA = a.rol;
+          const rolB = b.rol;
+
+          if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return -1;
+          if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return 1;
+
+          // GRUPO 3: Orden alfabético (para usuarios del mismo rol)
+          return a.nombre.localeCompare(b.nombre);
+        });
+
+        setListaUsuarios(sortedUsers);
         setListaInvitados(
           invitadosData.sort((a, b) => a.nombre.localeCompare(b.nombre))
         );
@@ -119,8 +197,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       }
     };
 
+    // Importante: Depende de 'user' Y 'responsablesIds' para reordenar al inicio y al cambiar una selección
     fetchUsuarios();
-  }, [user]);
+  }, [user, responsablesIds]);
 
   // --- Handlers de DatePicker (sin cambios) ---
   const getSelectedDate = () => {
@@ -605,14 +684,14 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                         key={u.id}
                         htmlFor={`resp-${u.id}`}
                         className={`
-                          flex items-center gap-3 w-full px-3 py-2 
-                          cursor-pointer transition-colors
-                          ${
-                            responsablesIds.includes(u.id)
-                              ? "bg-amber-100 text-amber-900 font-semibold"
-                              : "text-gray-800 hover:bg-gray-50"
-                          }
-                        `}
+                        flex items-center gap-3 w-full px-3 py-2 
+                        cursor-pointer transition-colors
+                        ${
+                          responsablesIds.includes(u.id)
+                            ? "bg-amber-100 text-amber-900 font-semibold"
+                            : "text-gray-800 hover:bg-gray-50"
+                        }
+                      `}
                       >
                         <input
                           type="checkbox"
@@ -622,9 +701,11 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                           disabled={loading}
                           className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
                         />
-                        <span>{u.nombre}</span>
-
-                        {/* Etiqueta visual extra para confirmar (opcional) */}
+                        {/* 🚨 CAMBIO AQUÍ: Aplicar la clase de color y el nombre */}
+                        <span className={getRoleColorClass(u)}>
+                          {getDisplayName(u)}
+                        </span>
+                        {/* Etiqueta visual extra para confirmar (opcional) */} 
                         {isKaizen && (
                           <span className="text-xs text-gray-400 ml-auto">
                             (Invitado)

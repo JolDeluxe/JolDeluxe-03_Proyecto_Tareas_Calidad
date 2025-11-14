@@ -74,6 +74,7 @@ export interface Tarea {
   asignador: {
     id: number;
     nombre: string;
+    rol?: string;
   };
 
   // 👇 CORRECCIÓN: Debe usar el tipo ResponsableLimpio

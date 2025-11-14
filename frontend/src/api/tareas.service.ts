@@ -1,33 +1,62 @@
 import api from "./01_axiosInstance";
 import type { Tarea } from "../types/tarea";
 
-/**
- * Servicio de acceso a datos para la entidad 'Tareas'.
- * Capa del Modelo (M) en el esquema MVC del frontend.
- */
-
 type TareaFilters = {
   departamentoId?: number;
   asignadorId?: number;
   responsableId?: number;
   estatus?: "PENDIENTE" | "CONCLUIDA" | "CANCELADA";
-  // ✅ ACTUALIZACIÓN: Agregamos "TODAS" para coincidir con el nuevo backend
-  // "MIS_TAREAS": Solo donde soy responsable
-  // "ASIGNADAS": Solo las que yo creé
-  // "TODAS" (o undefined): Ver todo el departamento (Auditoría)
   viewType?: "MIS_TAREAS" | "ASIGNADAS" | "TODAS";
 };
+type EstatusFilter = { estatus?: "PENDIENTE" | "CONCLUIDA" | "CANCELADA" };
 
 export const tareasService = {
   /**
    * 🔹 Obtener todas las tareas (GET /api/tareas)
-   * Incluye relaciones: historialFechas, imágenes, responsables, etc.
    */
   getAll: async (filters: TareaFilters = {}): Promise<Tarea[]> => {
-    // Axios automáticamente construye el query string (ej. ?viewType=TODAS)
     const { data } = await api.get("/tareas", {
       params: filters,
     });
+
+    // 🚀 AJUSTE: Si el backend devuelve { info, data }, extraemos 'data'.
+    // Si devolviera directo el array (versión vieja), usamos 'data' tal cual.
+    if (data.data && Array.isArray(data.data)) {
+      console.log(`📚 Tareas cargadas: ${data.info.total}`); // Log del contador para ti
+      return data.data;
+    }
+
+    return data;
+  },
+
+  getMisTareas: async (filters: EstatusFilter = {}): Promise<Tarea[]> => {
+    const { data } = await api.get("/tareas/misTareas", {
+      params: filters,
+    });
+
+    // Manejar la estructura de respuesta { info, data }
+    if (data.data && Array.isArray(data.data)) {
+      return data.data;
+    }
+
+    return data;
+  },
+
+  // 🆕 NUEVO: Obtener solo tareas que el usuario logueado asignó
+  /**
+   * 🔹 Obtener solo tareas que el usuario logueado asignó (GET /api/tareas/asignadas)
+   * Acepta filtro por estatus.
+   */
+  getAsignadas: async (filters: EstatusFilter = {}): Promise<Tarea[]> => {
+    const { data } = await api.get("/tareas/asignadas", {
+      params: filters,
+    });
+
+    // Manejar la estructura de respuesta { info, data }
+    if (data.data && Array.isArray(data.data)) {
+      return data.data;
+    }
+
     return data;
   },
 

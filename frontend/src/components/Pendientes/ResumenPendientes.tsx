@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { tareasService } from "../../api/tareas.service";
 import type { Tarea } from "../../types/tarea";
-import type { Usuario } from "../../types/usuario"; // 1. Importa Usuario
+import type { Usuario } from "../../types/usuario";
 
-// ... (El componente Dot SVG se queda igual) ...
+// Tipo de vista de tareas (debe coincidir con Pendientes.tsx)
+type ActiveView = "MIS_TAREAS" | "ASIGNADAS" | "TODAS";
+
 const Dot: React.FC<{ className?: string; title?: string }> = ({
   className = "",
   title,
@@ -20,9 +22,7 @@ const Dot: React.FC<{ className?: string; title?: string }> = ({
   </svg>
 );
 
-// 🔹 1. AÑADIMOS EL HOOK 'useMediaQuery' (lg = 1024px)
 const useMediaQuery = (query: string) => {
-  // Asegurarse de que window exista (para SSR)
   const [matches, setMatches] = useState(
     typeof window !== "undefined" ? window.matchMedia(query).matches : false
   );
@@ -37,13 +37,12 @@ const useMediaQuery = (query: string) => {
   return matches;
 };
 
-// 2. Define la interfaz de Props, incluyendo viewType
+// 2. Define la interfaz de Props, incluyendo ActiveView
 interface Props {
   user: Usuario | null;
-  viewType?: "MIS_TAREAS" | "ASIGNADAS";
+  viewType?: ActiveView; // Usamos el nuevo tipo
 }
 
-// 3. Aplica la interfaz y desestructura 'user' y 'viewType'
 const ResumenPendientes: React.FC<Props> = ({ user, viewType }) => {
   const [totalPendientes, setTotalPendientes] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
@@ -51,7 +50,6 @@ const ResumenPendientes: React.FC<Props> = ({ user, viewType }) => {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   const fetchPendientes = async () => {
-    // 4. Si no hay usuario, no hacemos nada
     if (!user) {
       setLoading(false);
       return;
@@ -60,12 +58,21 @@ const ResumenPendientes: React.FC<Props> = ({ user, viewType }) => {
     try {
       setLoading(true);
 
-      // 💡 CAMBIO CLAVE 1: Llama al servicio y pasa el viewType al backend
-      const todasLasTareas = await tareasService.getAll({ viewType });
+      let tareasDesdeServicio: Tarea[] = [];
+      const filters = { estatus: "PENDIENTE" as const };
 
-      // 💡 CAMBIO CLAVE 2: Solo filtramos por estatus PENDIENTE.
-      // El backend ya se encargó de filtrar por rol, asignador, o responsable.
-      const pendientes = todasLasTareas.filter((t: Tarea) => {
+      // 💡 LÓGICA CLAVE: Seleccionar el endpoint del servicio según viewType
+      if (viewType === "ASIGNADAS") {
+        tareasDesdeServicio = await tareasService.getAsignadas(filters);
+      } else if (viewType === "MIS_TAREAS") {
+        tareasDesdeServicio = await tareasService.getMisTareas(filters);
+      } else {
+        // "TODAS" (para ADMIN/SUPER_ADMIN) o undefined (en caso de que no se pase)
+        tareasDesdeServicio = await tareasService.getAll(filters);
+      }
+
+      // Solo filtramos por estatus PENDIENTE, aunque ya viene prefiltrado por la API
+      const pendientes = tareasDesdeServicio.filter((t: Tarea) => {
         return t.estatus === "PENDIENTE";
       });
 
@@ -88,9 +95,7 @@ const ResumenPendientes: React.FC<Props> = ({ user, viewType }) => {
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
     if (isDesktop) {
-      // Solo activa el intervalo si es escritorio
       intervalId = setInterval(() => {
-        // console.log("🔄 [Desktop] Recargando resumen de pendientes...");
         fetchPendientes();
       }, 30000);
     }
@@ -104,13 +109,12 @@ const ResumenPendientes: React.FC<Props> = ({ user, viewType }) => {
   }, [user, isDesktop, viewType]); // Depende del usuario y la vista
 
   // Lógica para el título en escritorio
-  const isPersonalRole = user?.rol === "USUARIO" || user?.rol === "INVITADO";
   const desktopTitle =
     viewType === "ASIGNADAS"
       ? "Pendientes Asignadas"
-      : isPersonalRole
-      ? "Mis Pendientes"
-      : "Total Pendientes";
+      : viewType === "TODAS"
+      ? "Total Pendientes"
+      : "Mis Pendientes"; // Por defecto MIS_TAREAS
 
   return (
     <>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { api } from "../data/api";
+// 1. 🚀 Importar el servicio en lugar de la instancia de API antigua
+import { tareasService } from "../../api/tareas.service";
 
 interface FechasProps {
   onChange?: (year: number, month: number) => void;
@@ -15,12 +16,14 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
   useEffect(() => {
     const fetchTareas = async () => {
       try {
-        const res = await api.get("/tareas");
-        setTareas(res.data);
+        // 2. 🚀 USAR EL NUEVO SERVICIO tareasService.getAll()
+        const tareasData = await tareasService.getAll();
+        setTareas(tareasData); // tareasData es el array limpio de tareas
 
         // Extrae años únicos de las fechas ISO
         const uniqueYears = new Set<number>();
-        res.data.forEach((t: any) => {
+        // Usar tareasData para extraer los años
+        tareasData.forEach((t: any) => {
           const fechas = [
             t.fechaRegistro,
             t.fechaLimite,
@@ -109,7 +112,7 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
             value={year}
             onChange={handleYearChange}
             className="border border-gray-300 rounded-lg px-4 py-2 text-sm shadow-sm font-sans
-                       focus:ring-2 focus:ring-gray-200 focus:border-gray-300 transition cursor-pointer"
+                        focus:ring-2 focus:ring-gray-200 focus:border-gray-300 transition cursor-pointer"
           >
             {years.map((y) => (
               <option key={y} value={y}>
@@ -168,8 +171,8 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
               onChange?.(newYear, month);
             }}
             className="w-full appearance-none bg-white border border-gray-300 rounded-md py-2.5 pl-4 pr-10
-                      text-[15px] font-medium text-gray-800 focus:border-amber-700 focus:ring-amber-700
-                      focus:ring-2 shadow focus:shadow-md transition-all"
+                       text-[15px] font-medium text-gray-800 focus:border-amber-700 focus:ring-amber-700
+                       focus:ring-2 shadow focus:shadow-md transition-all"
           >
             {years.map((y) => (
               <option key={y} value={y}>
@@ -212,8 +215,8 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
               onChange?.(year, newMonth);
             }}
             className="w-full appearance-none bg-white border border-gray-300 rounded-md py-2.5 pl-4 pr-10
-                      text-[15px] font-medium text-gray-800 focus:border-amber-700 focus:ring-amber-700
-                      focus:ring-2 shadow focus:shadow-md transition-all"
+                       text-[15px] font-medium text-gray-800 focus:border-amber-700 focus:ring-amber-700
+                       focus:ring-2 shadow focus:shadow-md transition-all"
           >
             <option value={0}>Todos</option>
             {meses.map((m) => (

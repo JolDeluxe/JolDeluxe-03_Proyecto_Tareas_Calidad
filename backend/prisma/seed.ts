@@ -1,113 +1,175 @@
 // prisma/seed.ts
-import { PrismaClient, Rol, Tipo } from "@prisma/client";
+import { PrismaClient, Rol } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
-// Inicializa Prisma
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("🌱 Iniciando el script de seed...");
 
-  // 1. Hashear la contraseña (123456) una sola vez
+  // 1. Hashear la contraseña (123456) una sola vez para todos
   const hashedPassword = await bcrypt.hash("123456", 10);
-  console.log("🔑 Contraseña hasheada.");
+  console.log("🔑 Contraseña '123456' hasheada.");
 
-  // 2. Crear Departamentos (usamos upsert para evitar duplicados)
-  // Necesitamos que "Calidad" exista para los roles de ese depto.
+  // ------------------------------------------------------------------
+  // 2. CREACIÓN DE DEPARTAMENTOS
+  // ------------------------------------------------------------------
+
   const deptoCalidad = await prisma.departamento.upsert({
     where: { nombre: "Calidad" },
     update: {},
-    create: {
-      nombre: "Calidad",
-      tipo: "OPERATIVO",
-    },
+    create: { nombre: "Calidad", tipo: "OPERATIVO" },
   });
 
-  // Creamos un segundo depto. para pruebas de asignación cruzada si quieres
   const deptoSistemas = await prisma.departamento.upsert({
     where: { nombre: "Sistemas" },
     update: {},
-    create: {
-      nombre: "Sistemas",
-      tipo: "ADMINISTRATIVO",
-    },
+    create: { nombre: "Sistemas", tipo: "ADMINISTRATIVO" },
   });
+
   console.log(
-    `🏭 Departamentos creados/actualizados: ${deptoCalidad.nombre}, ${deptoSistemas.nombre}.`
+    `🏭 Deptos listos: ${deptoCalidad.nombre}, ${deptoSistemas.nombre}`
   );
 
-  // 3. Crear los 5 usuarios (usamos upsert para poder correr el seed varias veces)
+  // ------------------------------------------------------------------
+  // 3. HELPER PARA CREAR USUARIOS
+  // ------------------------------------------------------------------
+  const crearUsuario = async (
+    nombre: string,
+    username: string,
+    rol: Rol,
+    deptoId: number | null
+  ) => {
+    const usuario = await prisma.usuario.upsert({
+      where: { username },
+      update: {
+        rol,
+        departamentoId: deptoId,
+        estatus: "ACTIVO",
+      },
+      create: {
+        nombre,
+        username,
+        password: hashedPassword,
+        rol,
+        departamentoId: deptoId,
+        estatus: "ACTIVO",
+      },
+    });
+    console.log(`👤 Usuario procesado: [${rol}] ${username}`);
+    return usuario;
+  };
 
-  // SUPER_ADMIN (Rol: SUPER_ADMIN, Depto: null)
-  await prisma.usuario.upsert({
-    where: { username: "super_admin" },
-    update: {},
-    create: {
-      nombre: "Usuario Super Admin",
-      username: "super_admin",
-      password: hashedPassword,
-      rol: "SUPER_ADMIN",
-      departamentoId: null, // Los SUPER_ADMIN no tienen depto (según tu lógica)
-    },
-  });
+  // ------------------------------------------------------------------
+  // 4. USUARIOS GLOBALES (Super Admin e Invitado)
+  // ------------------------------------------------------------------
 
-  // ADMIN (Rol: ADMIN, Depto: Calidad)
-  await prisma.usuario.upsert({
-    where: { username: "admin_calidad" },
-    update: {},
-    create: {
-      nombre: "Usuario Admin Calidad",
-      username: "admin_calidad",
-      password: hashedPassword,
-      rol: "ADMIN",
-      departamentoId: deptoCalidad.id,
-    },
-  });
+  await crearUsuario(
+    "Joel Isaac Rodriguez Lopez",
+    "super_admin",
+    "SUPER_ADMIN",
+    null
+  );
+  await crearUsuario(
+    "Visitante Externo Auditor",
+    "invitado_externo",
+    "INVITADO",
+    null
+  );
 
-  // ENCARGADO (Rol: ENCARGADO, Depto: Calidad)
-  await prisma.usuario.upsert({
-    where: { username: "encargado_calidad" },
-    update: {},
-    create: {
-      nombre: "Usuario Encargado Calidad",
-      username: "encargado_calidad",
-      password: hashedPassword,
-      rol: "ENCARGADO",
-      departamentoId: deptoCalidad.id,
-    },
-  });
+  // ------------------------------------------------------------------
+  // 5. DEPARTAMENTO DE CALIDAD
+  // ------------------------------------------------------------------
+  console.log("\n--- Sembrando Depto. CALIDAD ---");
 
-  // USUARIO (Rol: USUARIO, Depto: Calidad)
-  await prisma.usuario.upsert({
-    where: { username: "usuario_calidad" },
-    update: {},
-    create: {
-      nombre: "Usuario Normal Calidad",
-      username: "usuario_calidad",
-      password: hashedPassword,
-      rol: "USUARIO",
-      departamentoId: deptoCalidad.id,
-    },
-  });
+  // 1 Admin
+  await crearUsuario(
+    "Director de Calidad",
+    "admin_calidad",
+    "ADMIN",
+    deptoCalidad.id
+  );
 
-  // INVITADO (Rol: INVITADO, Depto: null)
-  await prisma.usuario.upsert({
-    where: { username: "invitado_externo" },
-    update: {},
-    create: {
-      nombre: "Usuario Invitado",
-      username: "invitado_externo",
-      password: hashedPassword,
-      rol: "INVITADO",
-      departamentoId: null, // Los INVITADO no tienen depto (según tu lógica)
-    },
-  });
+  // 3 Encargados
+  const nombresEncargadosCalidad = [
+    "Roberto Gomez",
+    "Laura Torres",
+    "Carlos Ruiz",
+  ];
+  for (let i = 0; i < 3; i++) {
+    const num = String(i + 1).padStart(2, "0"); // 01, 02, 03
+    await crearUsuario(
+      nombresEncargadosCalidad[i]!, // 👈 ¡Agregado el '!' aquí!
+      `encargado_calidad_${num}`,
+      "ENCARGADO",
+      deptoCalidad.id
+    );
+  }
 
-  console.log("👤 Usuarios creados/actualizados.");
-  console.log("✅ Seed completado exitosamente.");
+  // 7 Usuarios
+  const nombresUsuariosCalidad = [
+    "Ana Lopez",
+    "Miguel Angel",
+    "Sofia Vergara",
+    "Pedro Pascal",
+    "Elena Nito",
+    "Armando Paredes",
+    "Esteban Quito",
+  ];
+  for (let i = 0; i < 7; i++) {
+    const num = String(i + 1).padStart(2, "0"); // 01...07
+    await crearUsuario(
+      nombresUsuariosCalidad[i]!, // 👈 ¡Agregado el '!' aquí!
+      `usuario_calidad_${num}`,
+      "USUARIO",
+      deptoCalidad.id
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 6. DEPARTAMENTO DE SISTEMAS
+  // ------------------------------------------------------------------
+  console.log("\n--- Sembrando Depto. SISTEMAS ---");
+
+  // 1 Admin
+  await crearUsuario(
+    "Gerente de TI",
+    "admin_sistemas",
+    "ADMIN",
+    deptoSistemas.id
+  );
+
+  // 2 Encargados
+  const nombresEncargadosSistemas = ["Bill Gates", "Steve Jobs"];
+  for (let i = 0; i < 2; i++) {
+    const num = String(i + 1).padStart(2, "0");
+    await crearUsuario(
+      nombresEncargadosSistemas[i]!, // 👈 ¡Agregado el '!' aquí!
+      `encargado_sistemas_${num}`,
+      "ENCARGADO",
+      deptoSistemas.id
+    );
+  }
+
+  // 3 Usuarios
+  const nombresUsuariosSistemas = [
+    "Linus Torvalds",
+    "Ada Lovelace",
+    "Alan Turing",
+  ];
+  for (let i = 0; i < 3; i++) {
+    const num = String(i + 1).padStart(2, "0");
+    await crearUsuario(
+      nombresUsuariosSistemas[i]!, // 👈 ¡Agregado el '!' aquí!
+      `usuario_sistemas_${num}`,
+      "USUARIO",
+      deptoSistemas.id
+    );
+  }
+
+  console.log("\n✅ Seed completado exitosamente.");
 }
 
-// Ejecutar el script y desconectar Prisma
 main()
   .catch((e) => {
     console.error("❌ Error durante el seed:", e);

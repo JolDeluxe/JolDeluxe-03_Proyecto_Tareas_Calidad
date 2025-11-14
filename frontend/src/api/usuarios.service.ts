@@ -75,6 +75,31 @@ export const usuariosService = {
     return data;
   },
 
+  // 🆕 Nuevo: Obtener solo usuarios con ROL=USUARIO
+  /**
+   * 🔹 Obtener solo usuarios con ROL=USUARIO (GET /api/usuarios/usuarios)
+   */
+  getUsuarios: async (params?: {
+    estatus?: EstatusUsuario;
+  }): Promise<Usuario[]> => {
+    const { data } = await api.get<Usuario[]>("/usuarios/usuarios", { params });
+    return data;
+  },
+
+  // 🆕 Nuevo: Obtener solo usuarios con ROL=ENCARGADO o ROL=USUARIO
+  /**
+   * 🔹 Obtener usuarios con ROL=ENCARGADO o ROL=USUARIO (GET /api/usuarios/encargados-y-usuarios)
+   */
+  getEncargadosYUsuarios: async (params?: {
+    estatus?: EstatusUsuario;
+  }): Promise<Usuario[]> => {
+    const { data } = await api.get<Usuario[]>(
+      "/usuarios/encargados-y-usuarios",
+      { params }
+    );
+    return data;
+  },
+
   /**
    * 🔹 Obtener un usuario por ID (GET /api/usuarios/:id)
    */

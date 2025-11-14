@@ -1,10 +1,8 @@
 import React from "react";
-// 1. Importamos los tipos necesarios
-import { type Tarea, Estatus } from "../../types/tarea";
+import { type Tarea } from "../../types/tarea";
 import { type Usuario, Rol } from "../../types/usuario";
 
 interface AccionesProps {
-  // 2. Modificamos las props para recibir la tarea completa y el usuario
   tarea: Tarea;
   user: Usuario;
   onCompletar?: () => void;
@@ -13,49 +11,54 @@ interface AccionesProps {
 }
 
 const Acciones: React.FC<AccionesProps> = ({
-  // 3. Actualizamos la desestructuración de props
   tarea,
   user,
   onCompletar,
   onEditar,
   onBorrar,
 }) => {
-  // 4. 🚀 LÓGICA DE PERMISOS
-  // Permiso para Validar (Completar)
-  const puedeValidar =
-    user.rol === Rol.SUPER_ADMIN ||
-    user.rol === Rol.ADMIN ||
-    (user.rol === Rol.ENCARGADO && tarea.asignadorId === user.id);
+  // --- LÓGICA DE PERMISOS ---
 
-  // 🚀 NUEVA LÓGICA: Permiso para Cancelar (Borrar)
-  const puedeCancelar =
-    user.rol === Rol.SUPER_ADMIN ||
-    user.rol === Rol.ADMIN ||
-    (user.rol === Rol.ENCARGADO && tarea.asignadorId === user.id);
+  const esSuperAdmin = user.rol === Rol.SUPER_ADMIN;
+  const esAdmin = user.rol === Rol.ADMIN;
+  const esEncargado = user.rol === Rol.ENCARGADO;
+  const esPropietario = tarea.asignadorId === user.id;
+
+  // 1. VALIDAR y CANCELAR:
+  // Admin/SuperAdmin siempre pueden. Encargado solo si es dueño.
+  const puedeGestionarEstado =
+    esSuperAdmin || esAdmin || (esEncargado && esPropietario);
+
+  // Detectar si quien asignó la tarea es un jefe (Admin o SuperAdmin)
+  const asignadorEsAdmin =
+    tarea.asignador?.rol === Rol.ADMIN ||
+    tarea.asignador?.rol === Rol.SUPER_ADMIN;
+
+  // 2. EDITAR:
+  // Admin/SuperAdmin siempre.
+  // Encargado puede editar, EXCEPTO si la tarea la creó un Admin (Bloqueo).
+  const puedeEditar =
+    esSuperAdmin || esAdmin || (esEncargado && !asignadorEsAdmin);
 
   return (
     <td className="w-[7%] px-4 py-3 text-center">
       {/* Contenedor con altura fija para evitar "saltos" */}
       <div className="flex items-center justify-center gap-3 h-7">
-        {/* --- CASO 1: Tarea PENDIENTE (Muestra botones condicionales) --- */}
-        {/* 5. Usamos tarea.estatus en lugar de solo estatus */}
+        {/* --- CASO 1: Tarea PENDIENTE --- */}
         {tarea.estatus === "PENDIENTE" && (
           <>
-            {/* ✅ Completar / checklist */}
-            {/* 6. 🚀 APLICAMOS LA LÓGICA
-                El botón de completar AHORA solo se muestra si 'puedeValidar' es true 
-            */}
-            {puedeValidar && (
+            {/* ✅ Completar */}
+            {puedeGestionarEstado && (
               <button
                 onClick={onCompletar}
                 title="Marcar como completada"
-                className="w-7 h-7 flex items-center justify-center rounded-md border border-green-400 text-geen-700 hover:bg-geen-100 transition-all duration-200"
+                // 🔧 CORRECCIÓN: 'geen' -> 'green'
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-green-400 text-green-700 hover:bg-green-100 transition-all duration-200"
               >
-                {/* Icono caja vacía (de la vista móvil) */}
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 -960 960 960"
-                  className="w-5 h-5 text-green-700" /* Ajustado el color */
+                  className="w-5 h-5 text-green-700"
                   fill="currentColor"
                 >
                   <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Z" />
@@ -64,37 +67,36 @@ const Acciones: React.FC<AccionesProps> = ({
             )}
 
             {/* ✏️ Editar */}
-            <button
-              onClick={onEditar}
-              title="Editar tarea"
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-amber-400 text-amber-600 
-                         hover:bg-amber-600 hover:text-white transition-all duration-200"
-            >
-              {/* Icono editar (de la vista móvil) */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 -960 960 960"
-                className="w-5 h-5" /* Tamaño ajustado */
-                fill="currentColor"
+            {puedeEditar && (
+              <button
+                onClick={onEditar}
+                title="Editar tarea"
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-amber-400 text-amber-600 
+                           hover:bg-amber-600 hover:text-white transition-all duration-200"
               >
-                <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z" />
-              </svg>
-            </button>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 -960 960 960"
+                  className="w-5 h-5"
+                  fill="currentColor"
+                >
+                  <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z" />
+                </svg>
+              </button>
+            )}
 
-            {/* 🗑️ Cancelar (AHORA CONDICIONAL) */}
-            {/* 🚀 APLICAMOS LA LÓGICA 'puedeCancelar' */}
-            {puedeCancelar && (
+            {/* 🗑️ Cancelar */}
+            {puedeGestionarEstado && (
               <button
                 onClick={onBorrar}
                 title="Cancelar tarea"
                 className="w-7 h-7 flex items-center justify-center rounded-md border border-red-400 text-red-600 
                            hover:bg-red-600 hover:text-white transition-all duration-200"
               >
-                {/* Icono basura (de la vista móvil) */}
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 -960 960 960"
-                  className="w-5 h-5" /* Tamaño ajustado */
+                  className="w-5 h-5"
                   fill="currentColor"
                 >
                   <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
@@ -104,18 +106,16 @@ const Acciones: React.FC<AccionesProps> = ({
           </>
         )}
 
-        {/* --- CASO 2: Tarea CONCLUIDA (Muestra solo el check) --- */}
-        {/* 5. Usamos tarea.estatus */}
+        {/* --- CASO 2: Tarea CONCLUIDA --- */}
         {tarea.estatus === "CONCLUIDA" && (
           <div
             className="flex items-center justify-center"
             title="Tarea completada"
           >
-            {/* Icono check (de la vista móvil) */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 -960 960 960"
-              className="w-6 h-6 text-green-700" /* Tamaño ajustado */
+              className="w-6 h-6 text-green-700"
               fill="currentColor"
             >
               <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q8 0 15 1.5t14 4.5l-74 74H200v560h560v-266l80-80v346q0 33-23.5 56.5T760-120H200Zm261-160L235-506l56-56 170 170 367-367 57 55-424 424Z" />
@@ -123,14 +123,12 @@ const Acciones: React.FC<AccionesProps> = ({
           </div>
         )}
 
-        {/* --- CASO 3: Tarea CANCELADA (Muestra icono 'X') --- */}
-        {/* 5. Usamos tarea.estatus */}
+        {/* --- CASO 3: Tarea CANCELADA --- */}
         {tarea.estatus === "CANCELADA" && (
           <div
             className="flex items-center justify-center"
             title="Tarea cancelada"
           >
-            {/* 'X' SVG (de la vista móvil) */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
