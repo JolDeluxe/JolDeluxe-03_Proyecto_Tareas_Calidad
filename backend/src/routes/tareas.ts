@@ -397,27 +397,19 @@ router.get(
         }
       }
     } else if (user.rol === "USUARIO") {
-      if (!user.departamentoId)
-        return res.status(403).json({ error: "Sin departamento." });
-      where.departamentoId = user.departamentoId;
-
-      // 🚀 REGLA USUARIO:
-      // Solo ve tareas de otros USUARIOS.
-      // NO puede ver tareas si un ADMIN o un ENCARGADO están asignados (aunque haya un usuario también).
+      // ✅ REGLA ESTRICTA USUARIO:
+      // Sólo ve tareas donde él es responsable (incluye tareas compartidas).
+      // Se elimina el filtro de departamento para ver tareas asignadas por cualquier depto.
       andClauses.push({
-        responsables: {
-          none: {
-            usuario: {
-              rol: { in: ["ADMIN", "ENCARGADO"] }, // Bloquea si hay jefes involucrados
-            },
-          },
-        },
+        responsables: { some: { usuarioId: user.id } },
       });
-
-      // Nota: Esto implícitamente deja ver tareas donde los responsables sean "USUARIO" o "INVITADO".
     } else if (user.rol === "INVITADO") {
-      // Solo lo suyo
-      where.responsables = { some: { usuarioId: user.id } };
+      // ✅ REGLA ESTRICTA INVITADO:
+      // Sólo ve tareas donde él es responsable (incluye tareas compartidas).
+      // Se eliminan todos los filtros opcionales para mantener la visibilidad simple y estricta.
+      andClauses.push({
+        responsables: { some: { usuarioId: user.id } },
+      });
     }
 
     // 4. BLINDAJE ANTI-KAIZEN (Para todos menos Calidad/SuperAdmin)

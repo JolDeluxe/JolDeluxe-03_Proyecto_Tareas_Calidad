@@ -367,13 +367,12 @@ router.get(
 );
 
 // 🆕 NUEVA RUTA 1: Obtener solo usuarios con ROL=USUARIO
-/* ✅ [READ] Obtener solo usuarios con ROL=USUARIO */
+/* ✅ [READ] Obtener solo usuarios con ROL=USUARIO (Filtrado por Depto) */
 router.get(
-  "/usuarios",
-  // Acceso: SUPER_ADMIN, ADMIN, ENCARGADO
+  "/usuarios", // Acceso: SUPER_ADMIN, ADMIN, ENCARGADO
   verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
   safeAsync(async (req: Request, res: Response) => {
-    // 1. Validar el query param 'estatus' (ej. ?estatus=INACTIVO)
+    // 1. Validar el query param 'estatus'
     const queryParseResult = querySchema.safeParse(req.query);
 
     if (!queryParseResult.success) {
@@ -381,21 +380,30 @@ router.get(
         error: "Query param inválido",
         detalles: queryParseResult.error.flatten().fieldErrors,
       });
-    }
+    } // 2. Obtenemos 'estatus' y el objeto user
 
-    // 2. Obtenemos 'estatus'. Ignoramos cualquier otro query param.
     const { estatus } = queryParseResult.data;
+    // 🔽🔽🔽 CORRECCIÓN 1: Declarar el objeto user del token 🔽🔽🔽
+    const user = req.user!; // 3. Definir el filtro de la consulta
 
-    // 3. Definir el filtro de la consulta
     const where: Prisma.UsuarioWhereInput = {
       // Regla Clave: Forzar el rol a USUARIO
-      rol: "USUARIO",
+      rol: "USUARIO", // Regla de Estatus: Permitir filtrar por 'ACTIVO' (default) o 'INACTIVO'
 
-      // Regla de Estatus: Permitir filtrar por 'ACTIVO' (default) o 'INACTIVO'
       estatus: estatus ?? "ACTIVO",
     };
 
-    // 4. Ejecutar la consulta
+    // 🔽🔽🔽 CORRECCIÓN 2: Aplicar la lógica de restricción por departamento 🔽🔽🔽
+    if (user.rol !== "SUPER_ADMIN") {
+      if (!user.departamentoId) {
+        return res
+          .status(403)
+          .json({ error: "Tu usuario no está asignado a un departamento." });
+      } // Aplica filtro: solo usuarios del mismo departamento que el ADMIN/ENCARGADO
+      where.departamentoId = user.departamentoId;
+    } // 4. Ejecutar la consulta
+    // 🔼🔼🔼
+
     const usuarios = await prisma.usuario.findMany({
       where: where,
       select: {
@@ -420,13 +428,12 @@ router.get(
 );
 
 // 🆕 NUEVA RUTA 2: Obtener usuarios con ROL=ENCARGADO o ROL=USUARIO
-/* ✅ [READ] Obtener solo usuarios con ROL=ENCARGADO o ROL=USUARIO */
+/* ✅ [READ] Obtener solo usuarios con ROL=ENCARGADO o ROL=USUARIO (Filtrado por Depto) */
 router.get(
-  "/encargados-y-usuarios",
-  // Acceso: SUPER_ADMIN, ADMIN, ENCARGADO
+  "/encargados-y-usuarios", // Acceso: SUPER_ADMIN, ADMIN, ENCARGADO
   verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
   safeAsync(async (req: Request, res: Response) => {
-    // 1. Validar el query param 'estatus' (ej. ?estatus=INACTIVO)
+    // 1. Validar el query param 'estatus'
     const queryParseResult = querySchema.safeParse(req.query);
 
     if (!queryParseResult.success) {
@@ -434,23 +441,33 @@ router.get(
         error: "Query param inválido",
         detalles: queryParseResult.error.flatten().fieldErrors,
       });
-    }
+    } // 2. Obtenemos 'estatus' y el objeto user
 
-    // 2. Obtenemos 'estatus'. Ignoramos cualquier otro query param.
     const { estatus } = queryParseResult.data;
+    // 🔽🔽🔽 CORRECCIÓN 1: Declarar el objeto user del token 🔽🔽🔽
+    const user = req.user!; // 3. Definir el filtro de la consulta
 
-    // 3. Definir el filtro de la consulta
     const where: Prisma.UsuarioWhereInput = {
       // Regla Clave: Forzar el rol a ENCARGADO o USUARIO
       rol: {
         in: ["ENCARGADO", "USUARIO"],
-      },
+      }, // Regla de Estatus: Permitir filtrar por 'ACTIVO' (default) o 'INACTIVO'
 
-      // Regla de Estatus: Permitir filtrar por 'ACTIVO' (default) o 'INACTIVO'
       estatus: estatus ?? "ACTIVO",
     };
 
-    // 4. Ejecutar la consulta
+    // 🔽🔽🔽 CORRECCIÓN 2: Aplicar la lógica de restricción por departamento 🔽🔽🔽
+    if (user.rol !== "SUPER_ADMIN") {
+      if (!user.departamentoId) {
+        return res
+          .status(403)
+          .json({ error: "Tu usuario no está asignado a un departamento." });
+      }
+      // Aplica filtro: solo usuarios del mismo departamento que el ADMIN/ENCARGADO
+      where.departamentoId = user.departamentoId;
+    } // 4. Ejecutar la consulta
+    // 🔼🔼🔼
+
     const usuarios = await prisma.usuario.findMany({
       where: where,
       select: {

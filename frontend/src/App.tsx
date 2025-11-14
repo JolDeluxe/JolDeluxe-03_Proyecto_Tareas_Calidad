@@ -1,10 +1,10 @@
-// 📍 src/App.tsx
-import React, { useState, useEffect } from "react"; // 1. Importar hooks
+// 📍 src/App.tsx (Código modificado para incluir la restricción de roles en /admin)
+import React, { useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
   Routes,
   Route,
-  Navigate,
+  Navigate, // Importación necesaria para la redirección
 } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import Pendientes from "./pages/Pendientes";
@@ -16,7 +16,7 @@ import LoginPage from "./pages/LoginPage";
 import { authService } from "./api/auth.service";
 import type { Usuario } from "./types/usuario";
 
-// 🔽 --- 1. IMPORTAR LA LÓGICA DE SUSCRIPCIÓN --- 🔽
+// 🔽 --- IMPORTAR LA LÓGICA DE SUSCRIPCIÓN --- 🔽
 import { subscribeUser } from "./push-subscription";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -33,10 +33,6 @@ const AppLayout: React.FC = () => {
           const res = await authService.verify();
           if (res.valid && res.usuario) {
             setUser(res.usuario);
-
-            // 🔽 --- 2. LLAMAR A LA SUSCRIPCIÓN AQUÍ --- 🔽
-            // Una vez que sabemos quién es el usuario, intentamos suscribirlo.
-            // Esto se ejecutará cada vez que la app cargue y el usuario esté logueado.
             subscribeUser(res.usuario.id);
           }
         } catch (error) {
@@ -48,16 +44,12 @@ const AppLayout: React.FC = () => {
     };
 
     verifyUser();
-  }, []); // El array vacío asegura que solo se ejecute una vez
+  }, []);
 
   if (loading) {
     return (
-      // 🚀 CORRECCIÓN: Usar h-screen y flex/grid para centrar en toda la vista
       <div className="flex flex-col justify-center items-center h-screen bg-gray-50">
-        {/* 🚀 SPINNER MÁS GRANDE: h-12 w-12 */}
         <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600 mb-4"></div>
-
-        {/* Mensaje */}
         <span className="text-xl text-gray-900 font-bold">
           Cargando aplicacion...
         </span>
@@ -65,16 +57,23 @@ const AppLayout: React.FC = () => {
     );
   }
 
+  const allowedRoles = ["SUPER_ADMIN", "ADMIN", "ENCARGADO"];
+
+  const adminElement =
+    user && allowedRoles.includes(user.rol) ? (
+      <Admin user={user} />
+    ) : (
+      <Navigate to="/pendientes" replace />
+    );
+  // 🔼🔼🔼
+
   return (
     <Layout user={user}>
       <Routes>
         <Route path="/" element={<Navigate to="/pendientes" replace />} />
         <Route path="/todas" element={<Principal user={user} />} />
         <Route path="/pendientes" element={<Pendientes user={user} />} />
-        {/* Tu App.tsx original tenía "/admin" apuntando a <Admin .../>
-          Asegúrate de que la ruta y el componente sean correctos.
-        */}
-        <Route path="/admin" element={<Admin user={user} />} />
+        <Route path="/admin" element={adminElement} />
         <Route path="*" element={<Navigate to="/pendientes" replace />} />
       </Routes>
     </Layout>
@@ -84,14 +83,12 @@ const AppLayout: React.FC = () => {
 function App() {
   return (
     <Router>
-      {/* 🔽 --- 3. AÑADIR EL CONTENEDOR DE TOASTS (para las alertas) --- 🔽 */}
       <ToastContainer
         position="bottom-right"
         autoClose={2000}
         theme="colored"
         pauseOnHover
       />
-
       <Routes>
         <Route
           path="/login"
@@ -101,7 +98,6 @@ function App() {
             </PublicRoute>
           }
         />
-
         <Route
           path="/*"
           element={
