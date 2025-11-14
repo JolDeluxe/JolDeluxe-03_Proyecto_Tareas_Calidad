@@ -17,6 +17,7 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: true,
         navigateFallbackDenylist: [/^\/api/],
+        importScripts: ["/push-handler.js"],
       },
       manifest: {
         name: "Tareas Calidad MBC",

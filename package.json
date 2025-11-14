@@ -5,8 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build:frontend": "npm run build --prefix frontend",
-    "build:backend": "npm run build --prefix backend",
-    "build:all": "npm run build:frontend && npm run build:backend",
+    "build:backend": "npm run build --prefix backen",
     "start:prod": "npm run build:all && node backend/dist/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

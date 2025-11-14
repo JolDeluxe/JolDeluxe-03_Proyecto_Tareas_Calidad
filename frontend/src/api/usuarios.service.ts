@@ -1,6 +1,7 @@
 // 📍 src/api/usuarios.service.ts
 import api from "./01_axiosInstance";
-import type { Usuario, Rol, EstatusUsuario } from "../types/usuario"; // Asegúrate de que Rol y EstatusUsuario estén exportados en tus tipos
+// Asegúrate de que Usuario, Rol y EstatusUsuario estén exportados en tus tipos
+import type { Usuario, Rol, EstatusUsuario } from "../types/usuario";
 
 // ===================================================================
 // TIPOS DE PAYLOAD (Basados en tus Zod Schemas del backend)
@@ -33,17 +34,16 @@ export type ActualizarEstatusPayload = {
   estatus: EstatusUsuario;
 };
 
-/**
- * Payload para registrar una suscripción Push.
- * Basado en `subscriptionSchema`.
- */
-export type PushSubscriptionPayload = {
+// Interfaces para tipado de Push (si no las tiene ya en un archivo de tipos)
+export interface PushSubscriptionKeys {
+  p256dh: string;
+  auth: string;
+}
+
+export interface PushSubscriptionPayload {
   endpoint: string;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
-};
+  keys: PushSubscriptionKeys;
+}
 
 // ===================================================================
 // SERVICIO DE USUARIOS
@@ -69,7 +69,7 @@ export const usuariosService = {
     return data;
   },
 
-  getInvitados: async () => {
+  getInvitados: async (): Promise<Usuario[]> => {
     // Asumiendo que tu ruta base es /usuarios y el endpoint es /invitados
     const { data } = await api.get<Usuario[]>("/usuarios/invitados");
     return data;

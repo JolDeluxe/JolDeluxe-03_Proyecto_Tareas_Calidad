@@ -1,8 +1,10 @@
-// 📍 src/components/Login.tsx (NUEVO ARCHIVO)
+// 📍 src/components/Login.tsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authService } from "../api/auth.service";
 import { toast } from "react-toastify";
+// 🚀 IMPORTAR la función de suscripción
+import { subscribeUser } from "../push-subscription";
 
 interface LoginProps {
   onShowRegister: () => void;
@@ -19,14 +21,26 @@ const Login: React.FC<LoginProps> = ({ onShowRegister }) => {
     try {
       const { token, usuario } = await authService.login(form);
 
+      // 1. Almacenar datos del usuario
       localStorage.setItem("token", token);
       localStorage.setItem("usuario", JSON.stringify(usuario));
       window.dispatchEvent(new Event("storage"));
+
+      // 2. 🚀 CORRECCIÓN CLAVE: Ejecutar la suscripción en segundo plano.
+      // Ya NO usamos 'await' para que el login pueda continuar inmediatamente.
+      subscribeUser(usuario.id).catch((err) => {
+        // Capturamos el error solo para loguearlo sin afectar el flujo principal
+        console.warn(
+          "Error en suscripción Push (flujo en segundo plano):",
+          err
+        );
+      });
 
       toast.success(`Bienvenido ${usuario.nombre}`, {
         autoClose: 2000,
       });
 
+      // 3. Redireccionar al dashboard (Ahora se ejecuta sin esperar la suscripción)
       navigate("/");
     } catch (error: any) {
       console.error(error.response?.data || error.message);
@@ -34,6 +48,7 @@ const Login: React.FC<LoginProps> = ({ onShowRegister }) => {
         autoClose: 2500,
       });
     } finally {
+      // El loading se quita si hay error. Si el login fue exitoso, el navigate se encarga.
       setLoading(false);
     }
   };

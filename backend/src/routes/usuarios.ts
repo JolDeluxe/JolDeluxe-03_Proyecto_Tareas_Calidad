@@ -177,10 +177,13 @@ const estatusSchema = z.object({
 });
 
 const subscriptionSchema = z.object({
-  endpoint: z.string().url("Endpoint de suscripción inválido"),
+  // El endpoint debe ser una URL válida
+  endpoint: z.string().url("El endpoint debe ser una URL válida"),
+
+  // Las claves (keys) deben ser un objeto con p256dh y auth
   keys: z.object({
-    p256dh: z.string().nonempty("Key p256dh requerida"),
-    auth: z.string().nonempty("Key auth requerida"),
+    p256dh: z.string().min(1, "La clave p256dh es requerida"),
+    auth: z.string().min(1, "La clave auth es requerida"),
   }),
 });
 
