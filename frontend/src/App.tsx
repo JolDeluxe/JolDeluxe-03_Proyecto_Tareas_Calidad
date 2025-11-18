@@ -48,11 +48,12 @@ const AppLayout: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-col justify-center items-center h-screen bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600 mb-4"></div>
-        <span className="text-xl text-gray-900 font-bold">
-          Cargando aplicacion...
-        </span>
+      <div className="flex flex-col justify-center items-center h-screen bg-gray-50 px-4">
+        <img
+          src="/img/01_Cuadra.webp"
+          alt="Cargando aplicación"
+          className="w-48 sm:w-64 md:w-80 lg:w-96 h-auto object-contain animate-pulse"
+        />
       </div>
     );
   }

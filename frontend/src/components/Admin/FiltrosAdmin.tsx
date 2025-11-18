@@ -383,8 +383,8 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
               `}
             >
               {/* Texto visible (Usamos el helper para mostrar el nombre real) */}
-              <span className="text-sm font-medium truncate mr-2">
-                {loading ? "Cargando..." : getSelectedUsuarioNombre()}
+              <span className="text-2xl font-extrabold text-blue-900">
+                {loading ? "..." : getSelectedUsuarioNombre()}
               </span>
 
               {/* Icono */}

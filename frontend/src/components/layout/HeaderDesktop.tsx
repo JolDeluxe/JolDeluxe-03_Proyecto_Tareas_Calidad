@@ -108,18 +108,33 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
           )}
 
           <div className="absolute right-4 sm:right-6 top-1/2 -translate-y-1/2">
-            {/* 9. Usar 'user' para mostrar el botón de logout */}
             {user && (
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 ... (tus clases)"
+                // Nota: Moví 'text-red-600' aquí al padre para que coloree TANTO el icono COMO el texto
+                className="group flex items-center gap-2 px-3 py-2 rounded-full border border-transparent hover:bg-red-100 hover:border-red-200 text-red-600 hover:text-red-800 transition-all duration-300 active:scale-95"
               >
-                <img
-                  src="/img/logout.svg"
-                  alt="Cerrar sesión"
-                  className="w-5 h-5 sm:hidden"
-                />
-                <span className="hidden sm:inline">CERRAR SESIÓN</span>
+                {/* SVG Inline (Icono de Salida) */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2} // Un poco más grueso para que se vea bien
+                  stroke="currentColor"
+                  // Las mismas clases de animación que tenías antes
+                  className="w-5 h-5 opacity-70 group-hover:opacity-100 transition-opacity"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+                  />
+                </svg>
+
+                {/* Texto */}
+                <span className="hidden sm:inline text-sm font-bold tracking-wide">
+                  Cerrar Sesión
+                </span>
               </button>
             )}
           </div>

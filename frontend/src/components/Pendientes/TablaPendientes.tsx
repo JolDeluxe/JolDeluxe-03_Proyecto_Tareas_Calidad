@@ -216,8 +216,15 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
     <div className="w-full pb-2 text-sm font-sans">
       {/* 9. El resto del render usa 'pendientesOrdenados', lo cual es correcto */}
       {loading ? (
-        <div className="flex justify-center items-center h-40 text-gray-500 italic">
-          Cargando tareas...
+        // ✅ CAMBIO: Aquí integramos el Spinner animado
+        <div className="flex flex-col justify-center items-center h-40 text-gray-500 italic">
+          {/* El Spinner */}
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+
+          {/* Mensaje */}
+          <span className="text-gray-600 font-semibold">
+            Cargando tareas...
+          </span>
         </div>
       ) : pendientesOrdenados.length > 0 ? (
         <>

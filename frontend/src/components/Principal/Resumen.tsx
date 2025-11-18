@@ -86,8 +86,8 @@ const ResumenPrincipal: React.FC<ResumenPrincipalProps> = ({
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-32 text-gray-500 italic">
-        Cargando resumen...
+      <div className="text-2xl font-extrabold text-blue-900 justify-center text-center">
+        ...
       </div>
     );
   }
