@@ -20,9 +20,9 @@ export default defineConfig({
         importScripts: ["/push-handler.js"],
       },
       manifest: {
-        name: "Tareas Calidad MBC",
-        short_name: "Tareas Calidad",
-        description: "Aplicación para la gestión de tareas de calidad en MBC",
+        name: "Tareas MBC",
+        short_name: "Tareas MBC",
+        description: "Aplicación para la gestión de tareas en MBC",
         start_url: ".",
         display: "standalone",
         background_color: "#ffffff",
