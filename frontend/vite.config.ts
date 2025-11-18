@@ -349,7 +349,7 @@ export default defineConfig({
             sizes: "256x256",
           },
           {
-            src: "android/android-launchericon-512-512.png",
+            src: "img/android/android-launchericon-512-512.png",
             sizes: "512x512",
           },
           {
