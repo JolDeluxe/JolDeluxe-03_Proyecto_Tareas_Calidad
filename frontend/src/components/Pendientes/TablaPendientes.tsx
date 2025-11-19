@@ -269,10 +269,10 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
                           ))}
                         </ul>
                       </td>
-                      <td className="px-3 py-1.5 text-left font-semibold text-lg">
-                        {row.tarea}
+                      <td className="px-3 py-1.5 text-left font-semibold text-lg align-top">
+                        <div className="text-gray-800">{row.tarea}</div>
                         {row.observaciones && (
-                          <p className="text-md text-gray-600 italic">
+                          <p className="text-sm text-gray-500 italic mt-1 break-words max-w-xl leading-snug">
                             {row.observaciones}
                           </p>
                         )}

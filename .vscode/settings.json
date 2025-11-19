@@ -12,5 +12,8 @@
     "**/node_modules": true,
     "**/dist": true,
     "**/build": true
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
   }
 }
