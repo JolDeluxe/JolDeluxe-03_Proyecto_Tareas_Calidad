@@ -16,44 +16,64 @@ const SECRET: Secret = process.env.JWT_SECRET ?? "default_secret";
 
 /* 🧱 Helper genérico para capturar errores async */
 const safeAsync =
-  (
-    fn: (
-      req: Request,
-      res: Response,
-      next: NextFunction
-    ) => Promise<void | Response> | void
-  ) =>
-  async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void | Response> => {
-    try {
-      await fn(req, res, next);
-    } catch (error: any) {
-      console.error("❌ Error inesperado:", error);
+  (
+    fn: (
+      req: Request,
+      res: Response,
+      next: NextFunction
+    ) => Promise<void | Response> | void
+  ) =>
+  async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void | Response> => {
+    try {
+      await fn(req, res, next);
+    } catch (error: any) {
+      console.error("❌ Error inesperado:", error);
 
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === "P2002") {
-          const target = (error.meta?.target as string[])?.join(", ");
-          return res.status(409).json({
-            error: "Conflicto de datos",
-            detalle: `El campo '${target}' ya existe y debe ser único.`,
-          });
-        }
-        if (error.code === "P2025") {
-          return res.status(404).json({ error: "Recurso no encontrado" });
-        }
-      }
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === "P2002") {
+          // 🔑 FIX: Manejar cuando target es string o array para evitar TypeError
+          const targetMeta = error.meta?.target;
+          let target: string = "";
 
-      if (!res.headersSent) {
-        res.status(500).json({
-          error: "Ocurrió un error inesperado en el servidor",
-          detalle: error?.message ?? error,
-        });
-      }
-    }
-  };
+          if (Array.isArray(targetMeta)) {
+            target = targetMeta.join(", ");
+          } else if (typeof targetMeta === 'string') {
+            target = targetMeta;
+          } else {
+            target = "campo(s) desconocido(s)";
+          }
+
+          // Manejo específico para el error de Suscripción Push (P2002)
+          if (target.includes('PushSubscription_endpoint_key')) {
+            return res.status(409).json({
+              error: "Conflicto de Suscripción",
+              detalle: "Este dispositivo ya está registrado para recibir notificaciones push. Por favor, verifica tu suscripción.",
+            });
+          }
+          
+          // Respuesta genérica para otros P2002 (ej. username duplicado)
+          return res.status(409).json({
+            error: "Conflicto de datos",
+            detalle: `El campo **${target}** ya existe y debe ser único.`,
+          });
+        }
+        if (error.code === "P2025") {
+          return res.status(404).json({ error: "Recurso no encontrado" });
+        }
+      }
+
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Ocurrió un error inesperado en el servidor",
+          detalle: error?.message ?? error,
+        });
+      }
+    }
+  };
 
 // ===================================================================
 // ESQUEMAS DE VALIDACIÓN (ZOD)

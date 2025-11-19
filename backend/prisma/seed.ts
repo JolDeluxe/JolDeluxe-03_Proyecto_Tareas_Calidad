@@ -1,34 +1,46 @@
 // prisma/seed.ts
-import { PrismaClient, Rol } from "@prisma/client";
+import { PrismaClient, Rol, Tipo } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
+// Inicializa Prisma
 const prisma = new PrismaClient();
+
+// Contraseñas
+const DEFAULT_PASSWORD = "123456"; // Para Super Admin y Admins
+const RICARDO_PASSWORD = "vaq123";
+const VICTOR_PASSWORD = "143614";
+const ROBERTO_PASSWORD = "rocago23";
 
 async function main() {
   console.log("🌱 Iniciando el script de seed...");
 
-  // 1. Hashear la contraseña (123456) una sola vez para todos
-  const hashedPassword = await bcrypt.hash("123456", 10);
-  console.log("🔑 Contraseña '123456' hasheada.");
+  // 1. Hashear las contraseñas necesarias
+  const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+  const ricardoHashedPassword = await bcrypt.hash(RICARDO_PASSWORD, 10);
+  const victorHashedPassword = await bcrypt.hash(VICTOR_PASSWORD, 10);
+  const robertoHashedPassword = await bcrypt.hash(ROBERTO_PASSWORD, 10);
+  console.log("🔑 Contraseñas hasheadas.");
 
   // ------------------------------------------------------------------
   // 2. CREACIÓN DE DEPARTAMENTOS
   // ------------------------------------------------------------------
 
+  // Crear o actualizar Calidad (OPERATIVO)
   const deptoCalidad = await prisma.departamento.upsert({
     where: { nombre: "Calidad" },
-    update: {},
+    update: { tipo: "OPERATIVO" },
     create: { nombre: "Calidad", tipo: "OPERATIVO" },
   });
 
-  const deptoSistemas = await prisma.departamento.upsert({
-    where: { nombre: "Sistemas" },
-    update: {},
-    create: { nombre: "Sistemas", tipo: "ADMINISTRATIVO" },
+  // Crear o actualizar Diseño (ADMINISTRATIVO, asumiendo este tipo)
+  const deptoDiseno = await prisma.departamento.upsert({
+    where: { nombre: "Diseño" },
+    update: { tipo: "ADMINISTRATIVO" },
+    create: { nombre: "Diseño", tipo: "ADMINISTRATIVO" },
   });
 
   console.log(
-    `🏭 Deptos listos: ${deptoCalidad.nombre}, ${deptoSistemas.nombre}`
+    `🏭 Deptos listos: ${deptoCalidad.nombre}, ${deptoDiseno.nombre}`
   );
 
   // ------------------------------------------------------------------
@@ -38,19 +50,22 @@ async function main() {
     nombre: string,
     username: string,
     rol: Rol,
+    contrasenaHash: string, // Ahora recibe el hash
     deptoId: number | null
   ) => {
+    // Si el usuario ya existe, al actualizar se mantiene el departamentoId y estatus
     const usuario = await prisma.usuario.upsert({
       where: { username },
       update: {
         rol,
+        password: contrasenaHash, // Actualiza la contraseña si se cambia el rol/depto
         departamentoId: deptoId,
         estatus: "ACTIVO",
       },
       create: {
         nombre,
         username,
-        password: hashedPassword,
+        password: contrasenaHash,
         rol,
         departamentoId: deptoId,
         estatus: "ACTIVO",
@@ -61,115 +76,86 @@ async function main() {
   };
 
   // ------------------------------------------------------------------
-  // 4. USUARIOS GLOBALES (Super Admin e Invitado)
+  // 4. USUARIO SUPER_ADMIN (Global, sin departamento)
   // ------------------------------------------------------------------
 
   await crearUsuario(
     "Joel Isaac Rodriguez Lopez",
     "super_admin",
     "SUPER_ADMIN",
+    hashedPassword,
     null
   );
+
+  // ------------------------------------------------------------------
+  // 5. USUARIOS ADMIN POR DEPARTAMENTO
+  // ------------------------------------------------------------------
+
+  // ADMIN Calidad (Contraseña: 123456)
+  await crearUsuario(
+    "Admin Calidad",
+    "admin_calidad",
+    "ADMIN",
+    hashedPassword,
+    deptoCalidad.id
+  );
+
+  // ADMIN Diseño (Contraseña: 123456)
+  await crearUsuario(
+    "Admin Diseño",
+    "admin_diseno",
+    "ADMIN",
+    hashedPassword,
+    deptoDiseno.id
+  );
+
+  // ------------------------------------------------------------------
+  // 6. ENCARGADOS DE CALIDAD (con contraseñas específicas)
+  // ------------------------------------------------------------------
+  console.log("\n--- Sembrando ENCARGADOS de CALIDAD ---");
+
+  // Ricardo Ojeda (Contraseña: vaq123)
+  await crearUsuario(
+    "Ricardo Ojeda",
+    "ricardoojeda",
+    "ENCARGADO",
+    ricardoHashedPassword,
+    deptoCalidad.id
+  );
+
+  // Victor De Haro (Contraseña: 143614)
+  await crearUsuario(
+    "Victor De Haro",
+    "victordeharo",
+    "ENCARGADO",
+    victorHashedPassword,
+    deptoCalidad.id
+  );
+
+  // Roberto Torres (Contraseña: rocago23)
+  await crearUsuario(
+    "Roberto Torres",
+    "robertotorres",
+    "ENCARGADO",
+    robertoHashedPassword,
+    deptoCalidad.id
+  );
+
+  // ------------------------------------------------------------------
+  // 7. INVITADO (Opcional - manteniéndolo por si lo necesita)
+  // ------------------------------------------------------------------
   await crearUsuario(
     "Visitante Externo Auditor",
     "invitado_externo",
     "INVITADO",
+    hashedPassword, // Contraseña 123456 por defecto
     null
   );
-
-  // ------------------------------------------------------------------
-  // 5. DEPARTAMENTO DE CALIDAD
-  // ------------------------------------------------------------------
-  console.log("\n--- Sembrando Depto. CALIDAD ---");
-
-  // 1 Admin
-  await crearUsuario(
-    "Director de Calidad",
-    "admin_calidad",
-    "ADMIN",
-    deptoCalidad.id
-  );
-
-  // 3 Encargados
-  const nombresEncargadosCalidad = [
-    "Roberto Gomez",
-    "Laura Torres",
-    "Carlos Ruiz",
-  ];
-  for (let i = 0; i < 3; i++) {
-    const num = String(i + 1).padStart(2, "0"); // 01, 02, 03
-    await crearUsuario(
-      nombresEncargadosCalidad[i]!, // 👈 ¡Agregado el '!' aquí!
-      `encargado_calidad_${num}`,
-      "ENCARGADO",
-      deptoCalidad.id
-    );
-  }
-
-  // 7 Usuarios
-  const nombresUsuariosCalidad = [
-    "Ana Lopez",
-    "Miguel Angel",
-    "Sofia Vergara",
-    "Pedro Pascal",
-    "Elena Nito",
-    "Armando Paredes",
-    "Esteban Quito",
-  ];
-  for (let i = 0; i < 7; i++) {
-    const num = String(i + 1).padStart(2, "0"); // 01...07
-    await crearUsuario(
-      nombresUsuariosCalidad[i]!, // 👈 ¡Agregado el '!' aquí!
-      `usuario_calidad_${num}`,
-      "USUARIO",
-      deptoCalidad.id
-    );
-  }
-
-  // ------------------------------------------------------------------
-  // 6. DEPARTAMENTO DE SISTEMAS
-  // ------------------------------------------------------------------
-  console.log("\n--- Sembrando Depto. SISTEMAS ---");
-
-  // 1 Admin
-  await crearUsuario(
-    "Gerente de TI",
-    "admin_sistemas",
-    "ADMIN",
-    deptoSistemas.id
-  );
-
-  // 2 Encargados
-  const nombresEncargadosSistemas = ["Bill Gates", "Steve Jobs"];
-  for (let i = 0; i < 2; i++) {
-    const num = String(i + 1).padStart(2, "0");
-    await crearUsuario(
-      nombresEncargadosSistemas[i]!, // 👈 ¡Agregado el '!' aquí!
-      `encargado_sistemas_${num}`,
-      "ENCARGADO",
-      deptoSistemas.id
-    );
-  }
-
-  // 3 Usuarios
-  const nombresUsuariosSistemas = [
-    "Linus Torvalds",
-    "Ada Lovelace",
-    "Alan Turing",
-  ];
-  for (let i = 0; i < 3; i++) {
-    const num = String(i + 1).padStart(2, "0");
-    await crearUsuario(
-      nombresUsuariosSistemas[i]!, // 👈 ¡Agregado el '!' aquí!
-      `usuario_sistemas_${num}`,
-      "USUARIO",
-      deptoSistemas.id
-    );
-  }
 
   console.log("\n✅ Seed completado exitosamente.");
 }
 
+// Ejecutar el script y desconectar Prisma
 main()
   .catch((e) => {
     console.error("❌ Error durante el seed:", e);

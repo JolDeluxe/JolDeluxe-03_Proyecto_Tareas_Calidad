@@ -2,7 +2,7 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     // File Layout
-    "rootDir": ".",
+    "rootDir": "src", // 👈 CAMBIO: "src" en lugar de "."
     "outDir": "./dist",
 
     // Environment Settings
@@ -43,5 +43,5 @@
     "skipLibCheck": true
   },
   "exclude": ["node_modules"],
-  "include": ["src", "prisma"]
+  "include": ["src"] // 👈 CAMBIO: Solo incluir "src"
 }
