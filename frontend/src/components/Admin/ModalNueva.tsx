@@ -16,6 +16,9 @@ interface ModalNuevaProps {
   tarea?: Tarea;
 }
 
+const MAX_NOMBRE_LENGTH = 50;
+const MAX_OBSERVACIONES_LENGTH = 160;
+
 // --- Helper para formatear Date a YYYY-MM-DD ---
 const formatDateToInput = (fecha?: Date | null): string => {
   if (!fecha || !(fecha instanceof Date) || isNaN(fecha.getTime())) return "";
@@ -206,6 +209,17 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     );
   };
 
+  const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    if (newValue.length <= MAX_NOMBRE_LENGTH) {
+      setNombre(newValue);
+    } else {
+      // Trunca el valor si se pega texto largo
+      setNombre(newValue.slice(0, MAX_NOMBRE_LENGTH));
+      toast.warn(`Máximo ${MAX_NOMBRE_LENGTH} caracteres para el nombre.`);
+    }
+  };
+
   // --- 7. 🚀 handleSubmit TOTALMENTE REFACTORIZADO ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,6 +234,20 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
       !comentario
     ) {
       toast.warn("Por favor, completa todos los campos obligatorios.");
+      return;
+    }
+
+    // Validación de longitud de nombre (doble chequeo)
+    if (nombre.length > MAX_NOMBRE_LENGTH) {
+        toast.error(`El Nombre excede el máximo permitido (${MAX_NOMBRE_LENGTH}).`);
+        setLoading(false);
+        return;
+    }
+
+    if (comentario.length > MAX_OBSERVACIONES_LENGTH) {
+      // Aunque el input lo restringe, esta es una capa extra de seguridad (ej. si se inyecta por consola)
+      toast.error(`El texto de Indicaciones excede el máximo permitido (${MAX_OBSERVACIONES_LENGTH}).`);
+      setLoading(false);
       return;
     }
 
@@ -401,54 +429,72 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                 </div>
               )}
               <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Nombre
-                </label>
-                <input
-                  type="text"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  placeholder="Ej. Revisar reporte de calidad"
-                  required
-                  disabled={loading}
-                  className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
-                    ${
-                      submitted && !nombre.trim()
-                        ? "border-red-500"
-                        : "border-gray-300"
-                    }`}
-                />
-                {submitted && !nombre.trim() && (
-                  <p className="text-red-600 text-xs mt-1">
-                    El nombre es obligatorio.
-                  </p>
-                )}
-              </div>
+                <label className="block text-sm font-semibold mb-1 flex justify-between">
+                  <span>Nombre</span>
+                    {/* 🎯 NUEVO CONTADOR PARA EL NOMBRE */}
+                  <span className={`text-xs ${nombre.length > MAX_NOMBRE_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                    {nombre.length}/{MAX_NOMBRE_LENGTH}
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={nombre}
+                  onChange={handleNombreChange} // 🎯 Usamos el nuevo handler
+                  placeholder="Ej. Revisar reporte de calidad"
+                  required
+                  disabled={loading}
+                  className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
+                    ${
+                      submitted && !nombre.trim()
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    }`}
+                />
+                {submitted && !nombre.trim() && (
+                  <p className="text-red-600 text-xs mt-1">
+                    El nombre es obligatorio.
+                  </p>
+                )}
+              </div>
 
               {/* Indicaciones (Sin cambios) */}
               <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Indicaciones
-                </label>
-                <textarea
-                  value={comentario}
-                  onChange={(e) => setComentario(e.target.value)}
-                  placeholder="Agrega indicaciones o detalles..."
-                  disabled={loading}
-                  required
-                  className={`w-full border rounded-md px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
-                    ${
-                      submitted && !comentario.trim()
-                        ? "border-red-500"
-                        : "border-gray-300"
-                    }`}
-                />
-                {submitted && !comentario.trim() && (
-                  <p className="text-red-600 text-xs mt-1">
-                    Las indicaciones son obligatorias.
-                  </p>
-                )}
-              </div>
+                <label className="block text-sm font-semibold mb-1 flex justify-between">
+                  <span>Indicaciones</span>
+                  {/* 🎯 CONTADOR DE CARACTERES */}
+                  <span className={`text-xs ${comentario.length > MAX_OBSERVACIONES_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                    {comentario.length}/{MAX_OBSERVACIONES_LENGTH}
+                  </span>
+                </label>
+                <textarea
+                  value={comentario}
+                  // 🎯 LÓGICA DE LÍMITE DE CARACTERES EN EL FRONTEND
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    if (newValue.length <= MAX_OBSERVACIONES_LENGTH) {
+                      setComentario(newValue);
+                    } else {
+                      // Si se pega texto largo, se trunca para no exceder el límite visual y lógico.
+                      setComentario(newValue.slice(0, MAX_OBSERVACIONES_LENGTH));
+                      toast.warn(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres permitidos.`);
+                    }
+                  }}
+                  placeholder="Agrega indicaciones o detalles..."
+                  disabled={loading}
+                  required
+                  className={`w-full border rounded-md px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
+                    ${
+                      submitted && !comentario.trim()
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    }`}
+                />
+                {submitted && !comentario.trim() && (
+                  <p className="text-red-600 text-xs mt-1">
+                    Las indicaciones son obligatorias.
+                  </p>
+                )}
+              </div>
 
               {/* Evidencia (Sin cambios) */}
               <div>
