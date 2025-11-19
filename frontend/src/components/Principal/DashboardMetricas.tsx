@@ -495,7 +495,11 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
           <h4 className="text-lg font-bold text-gray-800">🏆 Rendimiento de Responsables</h4>
           <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">Ordenado por Volumen</span>
         </div>
-        <div className="overflow-x-auto">
+
+        {/* ==========================================
+            VISTA ESCRITORIO (Tabla Tradicional) 
+           ========================================== */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
               <tr>
@@ -533,6 +537,55 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* ==========================================
+            VISTA MÓVIL (Tarjetas Compactas)
+           ========================================== */}
+        <div className="md:hidden bg-gray-50 p-2 space-y-2">
+          {rankingUsuarios.length > 0 ? (
+            rankingUsuarios.map((user, idx) => {
+              const colorClass = user.rol === 'ENCARGADO' ? COLOR_ROL.ENCARGADO : user.rol === 'USUARIO' ? COLOR_ROL.USUARIO : COLOR_ROL.OTROS;
+              const eficacia = Math.round((user.aTiempo / user.total) * 100);
+              const rolDisplay = ROLE_LABELS[user.rol] || user.rol;
+
+              return (
+                <div key={idx} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+                  {/* Fila Superior: Nombre, Rol y Eficacia */}
+                  <div className="flex justify-between items-start mb-3 border-b border-gray-100 pb-2">
+                    <div>
+                      <div className={`text-sm ${colorClass}`}>{user.nombre}</div>
+                      <div className="text-[10px] text-gray-400 font-normal uppercase">{rolDisplay}</div>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] text-gray-400 font-semibold mb-0.5">Eficacia</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${eficacia >= 80 ? 'bg-green-100 text-green-800' : eficacia >= 60 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+                        {eficacia}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Fila Inferior: Métricas en Grid de 3 columnas */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-gray-50 rounded p-1 border border-gray-100">
+                      <span className="block text-[10px] text-gray-400 uppercase font-bold">Total</span>
+                      <span className="text-sm font-black text-gray-700">{user.total}</span>
+                    </div>
+                    <div className="bg-green-50 rounded p-1 border border-green-100">
+                      <span className="block text-[10px] text-green-600 uppercase font-bold">A Tiempo</span>
+                      <span className="text-sm font-black text-green-700">{user.aTiempo}</span>
+                    </div>
+                    <div className="bg-red-50 rounded p-1 border border-red-100">
+                      <span className="block text-[10px] text-red-600 uppercase font-bold">Tarde</span>
+                      <span className="text-sm font-black text-red-700">{user.retrasadas}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="py-8 text-center text-gray-400 italic text-xs">No hay datos disponibles.</div>
+          )}
         </div>
       </div>
 
