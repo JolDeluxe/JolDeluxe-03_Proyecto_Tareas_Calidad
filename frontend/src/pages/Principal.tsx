@@ -98,15 +98,25 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
     return isKaizen ? esKaizen : !esKaizen;
   });
 
-  // 💡 COMPONENTE DE SWITCH (Igual a Pendientes.tsx)
+  // 💡 COMPONENTE DE SWITCH MEJORADO
   const renderSwitch = () => {
     if (!canViewMetrics) {
       return null;
     }
 
     const buttons = [
-      { type: "TAREAS", label: "Gestión Tareas" },
-      { type: "INDICADORES", label: "Métricas" },
+      {
+        type: "TAREAS",
+        label: "Gestión Tareas",
+        // Icono de lista
+        icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+      },
+      {
+        type: "INDICADORES",
+        label: "Métricas",
+        // Icono de gráfica
+        icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+      },
     ];
 
     return (
@@ -115,27 +125,30 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
           className="
                 flex w-full max-w-md mx-auto 
                 md:max-w-none lg:w-auto lg:mx-0 
-                p-1 bg-gray-100 rounded-lg shadow-inner
+                p-1.5 bg-white border border-gray-200 rounded-xl shadow-sm
             "
         >
-          {buttons.map((btn) => (
-            <button
-              key={btn.type}
-              onClick={() => setViewMode(btn.type as ViewMode)}
-              className={`
-                    flex-1 text-center 
-                    px-4 py-2 
-                    text-sm md:text-base font-bold rounded-md transition-all duration-200
-                    ${
-                      viewMode === btn.type
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "bg-transparent text-gray-700 hover:bg-white hover:text-blue-600"
-                    }
+          {buttons.map((btn) => {
+            const isActive = viewMode === btn.type;
+            return (
+              <button
+                key={btn.type}
+                onClick={() => setViewMode(btn.type as ViewMode)}
+                className={`
+                    flex-1 flex items-center justify-center gap-2
+                    px-4 py-2.5 
+                    text-sm md:text-base font-bold rounded-lg transition-all duration-300
+                    ${isActive
+                    ? "bg-blue-600 text-white shadow-md transform scale-[1.02]"
+                    : "bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-blue-600 border border-transparent hover:border-gray-200"
+                  }
                 `}
-            >
-              {btn.label}
-            </button>
-          ))}
+              >
+                {btn.icon}
+                <span>{btn.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -194,14 +207,14 @@ const Principal: React.FC<PrincipalProps> = ({ user }) => {
         // --- VISTA 2: INDICADORES (MÉTRICAS) ---
         <div className="mt-4">
           <ResumenPrincipalDash
-              year={year}
-              month={month}
-              responsable={filtroUsuarioId}
-              query={query}
-              tareas={tareasFiltradasPorModo}
-              loading={loading}
-              user={user}
-            />
+            year={year}
+            month={month}
+            responsable={filtroUsuarioId}
+            query={query}
+            tareas={tareasFiltradasPorModo}
+            loading={loading}
+            user={user}
+          />
 
           <DashboardMetricas
             tareas={tareasFiltradasPorModo}

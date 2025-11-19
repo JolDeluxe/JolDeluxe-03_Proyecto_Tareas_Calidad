@@ -94,8 +94,8 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
       pendientes: 0,
 
       // Métricas Generales
-      aTiempoReal: 0,     // vs Fecha Original (Indicador Maestro)
-      aTiempoAjustado: 0, // vs Fecha Final (Indicador Secundario)
+      aTiempoReal: 0,     // vs Fecha Original (Sin cambios)
+      aTiempoAjustado: 0, // vs Fecha Efectiva (Original O Reprogramada) -> PARA EL KPI MAESTRO
       retrasadas: 0,
 
       // Nuevas Métricas Divididas
@@ -150,28 +150,29 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
         }
 
         // Evaluaciones de Tiempo
+        // AJUSTADO: Compara contra la fecha vigente (sea la original o la nueva)
         const cumplioAjustado = fechaLimiteFinal > 0 && fechaFin <= fechaLimiteFinal;
+        // REAL: Compara estrictamente contra la fecha original
         const cumplioReal = fechaLimiteOriginal > 0 && fechaFin <= fechaLimiteOriginal;
 
-        // 1. Llenado de Indicador Maestro
         if (cumplioReal) contadores.aTiempoReal++;
 
-        // 2. Llenado de Indicador Secundario (General Ajustado - Legacy)
+        // Llenado de Indicador Maestro (Usamos el Ajustado para el Global)
         if (cumplioAjustado) contadores.aTiempoAjustado++;
         else contadores.retrasadas++;
 
-        // 3. Llenado de Desglose (NUEVO REQUERIMIENTO)
+        // Llenado de Desglose
         if (tieneCambios) {
           contadores.conCambiosTotal++;
-          // Para reprogramadas, "Ok" significa cumplir la NUEVA fecha (Ajustado)
+          // Para reprogramadas, "Ok" significa cumplir la NUEVA fecha
           if (cumplioAjustado) contadores.conCambiosOk++;
         } else {
           contadores.sinCambiosTotal++;
-          // Para sin cambios, "Ok" significa cumplir la ORIGINAL (que es la misma que la final)
+          // Para sin cambios, "Ok" significa cumplir la ORIGINAL
           if (cumplioReal) contadores.sinCambiosOk++;
         }
 
-        // Mapeo de usuarios
+        // Mapeo de usuarios (Usamos el ajustado para ser justos con el usuario)
         t.responsables.forEach((resp: any) => {
           const key = resp.id;
           if (!userMap[key]) {
@@ -232,12 +233,15 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
 
   // --- PORCENTAJES PARA EL DASHBOARD ---
 
-  const pctEficienciaReal = contadores.concluidas > 0
-    ? Math.round((contadores.aTiempoReal / contadores.concluidas) * 100) : 0;
+  // 1. Maestro: Eficiencia GLOBAL (Considera válidas las reprogramaciones)
+  const pctEficienciaGlobal = contadores.concluidas > 0
+    ? Math.round((contadores.aTiempoAjustado / contadores.concluidas) * 100) : 0;
 
+  // 2. Desglose A: Eficiencia en tareas SIN cambios
   const pctSinCambios = contadores.sinCambiosTotal > 0
     ? Math.round((contadores.sinCambiosOk / contadores.sinCambiosTotal) * 100) : 0;
 
+  // 3. Desglose B: Eficiencia en tareas CON cambios (Cumplimiento de prórroga)
   const pctConCambios = contadores.conCambiosTotal > 0
     ? Math.round((contadores.conCambiosOk / contadores.conCambiosTotal) * 100) : 0;
 
@@ -258,14 +262,15 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
               <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded border border-blue-200">Maestro</span>
             </div>
             <div className="flex items-baseline gap-2 mt-2">
-              <h3 className="text-5xl font-black text-gray-800">{pctEficienciaReal}%</h3>
-              <span className="text-sm text-gray-500 font-medium">eficiencia real</span>
+              {/* 🔥 Muestra el porcentaje GLOBAL (Ajustado) */}
+              <h3 className="text-5xl font-black text-gray-800">{pctEficienciaGlobal}%</h3>
+              <span className="text-sm text-gray-500 font-medium">eficiencia total</span>
             </div>
             <div className="mt-4 w-full bg-gray-100 rounded-full h-2">
-              <div className={`h-2 rounded-full transition-all duration-500 ${pctEficienciaReal >= 80 ? 'bg-green-500' : pctEficienciaReal >= 60 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${pctEficienciaReal}%` }}></div>
+              <div className={`h-2 rounded-full transition-all duration-500 ${pctEficienciaGlobal >= 80 ? 'bg-green-500' : pctEficienciaGlobal >= 60 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${pctEficienciaGlobal}%` }}></div>
             </div>
             <p className="text-xs text-gray-400 mt-3 italic">
-              Mide el éxito sobre la fecha original.
+              Mide el éxito total considerando la fecha vigente (original o reprogramada).
             </p>
           </div>
         </div>
@@ -278,6 +283,7 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
           </div>
 
           <div className="flex-grow flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-gray-100">
+            {/* Lado Izquierdo: Tareas que nunca cambiaron de fecha */}
             <div className="flex-1 p-4 flex flex-col justify-center items-center text-center hover:bg-gray-50 transition">
               <div className="text-xs font-semibold text-green-600 mb-1 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-green-500"></span>
@@ -289,6 +295,7 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
               </p>
             </div>
 
+            {/* Lado Derecho: Tareas que se reprogramaron y se cumplió la nueva fecha */}
             <div className="flex-1 p-4 flex flex-col justify-center items-center text-center hover:bg-gray-50 transition">
               <div className="text-xs font-semibold text-purple-600 mb-1 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-purple-500"></span>
@@ -303,7 +310,6 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
         </div>
 
         {/* 🔴 KPI: VENCIDAS Y PRÓXIMAS (4 Columnas en total, divididas en 2) */}
-        {/* ✅ CAMBIO: Usamos un grid interno para ponerlas una al lado de la otra */}
         <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
 
           {/* TARJETA VENCIDAS */}
@@ -321,7 +327,6 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
               <p className="text-[11px] text-gray-400 mt-2">Requieren atención inmediata.</p>
             </div>
 
-            {/* Lista Desplegable Vencidas */}
             {listaVencidas.length > 0 && (
               <div className="mt-auto">
                 <button
@@ -363,7 +368,6 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
               <p className="text-[11px] text-gray-400 mt-2">Vencen en menos de 48 horas.</p>
             </div>
 
-            {/* Lista Desplegable Próximas */}
             {listaProximas.length > 0 && (
               <div className="mt-auto">
                 <button

@@ -51,22 +51,43 @@ const Pendientes: React.FC<Props> = ({ user }) => {
     }
   }, [esRolPersonal, activeView]);
 
-  // 💡 COMPONENTE DE SWITCH (Tabs)
+  // 💡 COMPONENTE DE SWITCH MEJORADO (Con Iconos)
   const renderSwitch = () => {
     if (!isManagementRole) {
       return null;
     }
 
+    // Definimos los botones dinámicamente según el rol
     const buttons = esEncargado
       ? [
-          { type: "MIS_TAREAS", label: "Mis Tareas" },
-          { type: "ASIGNADAS", label: "Asignadas por Mí" },
-        ]
+        {
+          type: "MIS_TAREAS",
+          label: "Mis Tareas",
+          // Icono de Usuario
+          icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+        },
+        {
+          type: "ASIGNADAS",
+          label: "Asignadas por Mí",
+          // Icono de Lista/Clipboard
+          icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+        },
+      ]
       : [
-          // ADMIN, SUPER_ADMIN
-          { type: "TODAS", label: "Todas" },
-          { type: "ASIGNADAS", label: "Asignadas por Mí" },
-        ];
+        // ADMIN, SUPER_ADMIN
+        {
+          type: "TODAS",
+          label: "Todas",
+          // Icono de Colección/Stack
+          icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+        },
+        {
+          type: "ASIGNADAS",
+          label: "Asignadas por Mí",
+          // Icono de Lista/Clipboard
+          icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+        },
+      ];
 
     return (
       <div className="mb-6 px-2 lg:px-0">
@@ -74,27 +95,32 @@ const Pendientes: React.FC<Props> = ({ user }) => {
           className="
                 flex w-full max-w-md mx-auto 
                 md:max-w-none lg:w-auto lg:mx-0 
-                p-1 bg-gray-100 rounded-lg shadow-inner
+                p-1.5 bg-white border border-gray-200 rounded-xl shadow-sm
             "
         >
-          {buttons.map((btn) => (
-            <button
-              key={btn.type}
-              onClick={() => setActiveView(btn.type as ActiveView)}
-              className={`
-                            flex-1 text-center 
-                            px-4 py-2 
-                            text-sm md:text-base font-bold rounded-md transition-all duration-200
-                            ${
-                              activeView === btn.type
-                                ? "bg-blue-600 text-white shadow-md"
-                                : "bg-transparent text-gray-700 hover:bg-white hover:text-blue-600"
-                            }
-                        `}
-            >
-              {btn.label}
-            </button>
-          ))}
+          {buttons.map((btn) => {
+            // ⚠️ Nota: Aquí usamos activeView en lugar de viewMode
+            const isActive = activeView === btn.type;
+
+            return (
+              <button
+                key={btn.type}
+                onClick={() => setActiveView(btn.type as ActiveView)}
+                className={`
+                    flex-1 flex items-center justify-center gap-2
+                    px-4 py-2.5 
+                    text-sm md:text-base font-bold rounded-lg transition-all duration-300
+                    ${isActive
+                    ? "bg-blue-600 text-white shadow-md transform scale-[1.02]"
+                    : "bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-blue-600 border border-transparent hover:border-gray-200"
+                  }
+                `}
+              >
+                {btn.icon}
+                <span>{btn.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -102,7 +128,7 @@ const Pendientes: React.FC<Props> = ({ user }) => {
 
   // Función helper para renderizar la sección principal (sin título)
   const renderSectionContent = (currentViewType: ActiveView) => (
-    <div key={currentViewType} className="mb-8">
+    <div key={currentViewType} className="mb-8 animate-fade-in-up">
       <div className="shadow-lg rounded-lg border border-gray-400 bg-white overflow-visible pb-5 sm:pb-0">
         <div className="lg:static sticky top-[40px] md:top-[70px] z-40 bg-white border-b border-gray-200 m-1 px-1 pt-4 pb-1 lg:pb-4">
           {/* Se pasa el viewType correcto al Resumen */}
