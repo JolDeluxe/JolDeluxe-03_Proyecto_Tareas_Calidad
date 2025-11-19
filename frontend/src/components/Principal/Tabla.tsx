@@ -47,8 +47,7 @@ const isRetrasada = (
 
   // Convierte ambos a objetos Date para comparar
   const limiteDate = typeof limite === "string" ? new Date(limite) : limite;
-  const conclusionDate =
-    typeof conclusion === "string" ? new Date(conclusion) : conclusion;
+  const conclusionDate = typeof conclusion === "string" ? new Date(conclusion) : conclusion;
 
   if (
     !(limiteDate instanceof Date) ||
@@ -56,10 +55,20 @@ const isRetrasada = (
     !(conclusionDate instanceof Date) ||
     isNaN(conclusionDate.getTime())
   ) {
-    return false; // No se puede comparar si alguno es inválido
+    return false;
   }
 
-  return conclusionDate > limiteDate;
+  // 🚀 FIX: Crear copias de las fechas y resetear la hora a 00:00:00
+  // Esto asegura que comparemos solo el DÍA calendario y no la hora exacta.
+  const l = new Date(limiteDate);
+  l.setHours(0, 0, 0, 0);
+
+  const c = new Date(conclusionDate);
+  c.setHours(0, 0, 0, 0);
+
+  // Ahora si: 20/11 (00:00) > 20/11 (00:00) es False (A tiempo)
+  // 21/11 (00:00) > 20/11 (00:00) es True (Retrasada)
+  return c.getTime() > l.getTime();
 };
 
 // 4. ✅ El componente AHORA recibe las props del padre
@@ -183,13 +192,13 @@ const Tabla: React.FC<TablaProps> = ({
                   const fechaLimiteObj =
                     row.historialFechas && row.historialFechas.length > 0
                       ? new Date(
-                          row.historialFechas[
-                            row.historialFechas.length - 1
-                          ].nuevaFecha!
-                        )
+                        row.historialFechas[
+                          row.historialFechas.length - 1
+                        ].nuevaFecha!
+                      )
                       : row.fechaLimite
-                      ? new Date(row.fechaLimite)
-                      : null;
+                        ? new Date(row.fechaLimite)
+                        : null;
 
                   if (fechaLimiteObj) fechaLimiteObj.setHours(0, 0, 0, 0);
 
@@ -286,19 +295,17 @@ const Tabla: React.FC<TablaProps> = ({
                       {/* === Celda Fecha límite e historial === */}
                       <td className="px-1 py-4 text-center font-semibold whitespace-nowrap w-[10%]">
                         <div
-                          className={`flex flex-col items-center ${
-                            row.historialFechas &&
+                          className={`flex flex-col items-center ${row.historialFechas &&
                             row.historialFechas.length > 0
-                              ? "justify-start"
-                              : "justify-center h-full"
-                          } min-h-[50px]`}
+                            ? "justify-start"
+                            : "justify-center h-full"
+                            } min-h-[50px]`}
                         >
                           <p
-                            className={`font-semibold ${
-                              vencida
-                                ? "text-red-600 font-bold"
-                                : "text-gray-800"
-                            }`}
+                            className={`font-semibold ${vencida
+                              ? "text-red-600 font-bold"
+                              : "text-gray-800"
+                              }`}
                           >
                             {fechaLimiteFinalStr}
                             {vencida && (
@@ -389,9 +396,8 @@ const Tabla: React.FC<TablaProps> = ({
 
                       {/* Columna Conclusión */}
                       <td
-                        className={`px-3 py-3 text-center w-[7%] ${
-                          retrasada ? "text-red-600 font-bold" : "text-gray-800"
-                        }`}
+                        className={`px-3 py-3 text-center w-[7%] ${retrasada ? "text-red-600 font-bold" : "text-gray-800"
+                          }`}
                       >
                         {row.fechaConclusion
                           ? formateaFecha(row.fechaConclusion)
@@ -401,13 +407,12 @@ const Tabla: React.FC<TablaProps> = ({
                       {/* Columna Estatus */}
                       <td className="px-4 py-4 text-center w-[7%]">
                         <span
-                          className={`px-3 py-1 text-md font-bold ${
-                            row.estatus === "CONCLUIDA"
-                              ? "text-green-700"
-                              : row.estatus === "CANCELADA"
+                          className={`px-3 py-1 text-md font-bold ${row.estatus === "CONCLUIDA"
+                            ? "text-green-700"
+                            : row.estatus === "CANCELADA"
                               ? "text-red-700"
                               : "text-blue-700"
-                          }`}
+                            }`}
                         >
                           {row.estatus}
                         </span>
@@ -429,7 +434,7 @@ const Tabla: React.FC<TablaProps> = ({
               const fechaLimiteObj =
                 row.historialFechas && row.historialFechas.length > 0
                   ? row.historialFechas[row.historialFechas.length - 1]
-                      .nuevaFecha
+                    .nuevaFecha
                   : row.fechaLimite;
 
               const fechaLimiteDate =
@@ -449,10 +454,7 @@ const Tabla: React.FC<TablaProps> = ({
                   fechaLimiteNormalizada < hoy && row.estatus !== "CONCLUIDA";
               }
 
-              const retrasada = isRetrasada(
-                row.fechaLimite,
-                row.fechaConclusion
-              );
+              const retrasada = isRetrasada(row.fechaLimite, row.fechaConclusion);
 
               return (
                 <div
@@ -466,20 +468,19 @@ const Tabla: React.FC<TablaProps> = ({
                       {row.tarea}
                     </h3>
                     <span
-                      className={`flex-shrink-0 px-2 py-0.5 text-xs font-semibold ${
-                        row.urgencia === "ALTA"
-                          ? "bg-red-100 text-red-700 border border-red-300 rounded-full"
-                          : row.urgencia === "MEDIA"
+                      className={`flex-shrink-0 px-2 py-0.5 text-xs font-semibold ${row.urgencia === "ALTA"
+                        ? "bg-red-100 text-red-700 border border-red-300 rounded-full"
+                        : row.urgencia === "MEDIA"
                           ? "bg-amber-100 text-amber-700 border border-amber-300 rounded-full"
                           : "bg-green-100 text-green-700 border border-green-300 rounded-full"
-                      }`}
+                        }`}
                     >
                       {/* Mostramos el valor literal */}
                       {row.urgencia === "ALTA"
                         ? "Alta"
                         : row.urgencia === "MEDIA"
-                        ? "Media"
-                        : "Baja"}
+                          ? "Media"
+                          : "Baja"}
                     </span>
                   </div>
 
@@ -514,9 +515,8 @@ const Tabla: React.FC<TablaProps> = ({
                         Límite:
                       </span>{" "}
                       <span
-                        className={`ml-1 font-semibold ${
-                          vencida ? "text-red-600" : "text-gray-800"
-                        }`}
+                        className={`ml-1 font-semibold ${vencida ? "text-red-600" : "text-gray-800"
+                          }`}
                       >
                         {/* 💡 CORREGIDO: Usar formateador */}
                         {formateaFecha(fechaLimiteObj)}
@@ -544,13 +544,12 @@ const Tabla: React.FC<TablaProps> = ({
                         Estatus:
                       </span>{" "}
                       <span
-                        className={`text-xs font-bold ${
-                          row.estatus === "CONCLUIDA"
-                            ? "text-green-700"
-                            : row.estatus === "CANCELADA"
+                        className={`text-xs font-bold ${row.estatus === "CONCLUIDA"
+                          ? "text-green-700"
+                          : row.estatus === "CANCELADA"
                             ? "text-red-700"
                             : "text-blue-700"
-                        }`}
+                          }`}
                       >
                         {row.estatus}
                       </span>
@@ -559,11 +558,10 @@ const Tabla: React.FC<TablaProps> = ({
 
                   {row.fechaConclusion && (
                     <p
-                      className={`mt-2 text-xs flex items-center ${
-                        retrasada
-                          ? "text-red-600 font-semibold"
-                          : "text-gray-700"
-                      }`}
+                      className={`mt-2 text-xs flex items-center ${retrasada
+                        ? "text-red-600 font-semibold"
+                        : "text-gray-700"
+                        }`}
                     >
                       <span className="font-semibold text-gray-700">
                         Conclusión:
