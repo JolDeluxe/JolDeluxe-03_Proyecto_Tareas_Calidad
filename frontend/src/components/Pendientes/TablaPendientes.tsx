@@ -258,9 +258,8 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
                   return (
                     <tr
                       key={row.id}
-                      className={`${getRowClass(row.estatus)} transition ${
-                        vencida ? "bg-red-50/60" : ""
-                      }`}
+                      className={`${getRowClass(row.estatus)} transition ${vencida ? "bg-red-50/60" : ""
+                        }`}
                     >
                       <td className="px-2 py-1 text-left text-lg font-semibold text-blue-700">
                         <ul className="list-disc list-inside m-0 p-0">
@@ -293,13 +292,12 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
                         )}
                       </td>
                       <td
-                        className={`px-2 py-1 text-center text-lg font-bold ${
-                          vencida
+                        className={`px-2 py-1 text-center text-lg font-bold ${vencida
                             ? "text-red-600"
                             : proxima
-                            ? "text-amber-600"
-                            : "text-gray-800"
-                        }`}
+                              ? "text-amber-600"
+                              : "text-gray-800"
+                          }`}
                       >
                         {formateaFecha(fechaFinalObj) || "—"}
                         {(vencida || proxima) && (
@@ -307,9 +305,8 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 24 24"
                             fill="currentColor"
-                            className={`w-3 h-3 ml-1 inline ${
-                              vencida ? "text-red-500" : "text-amber-500"
-                            }`}
+                            className={`w-3 h-3 ml-1 inline ${vencida ? "text-red-500" : "text-amber-500"
+                              }`}
                           >
                             <path
                               fillRule="evenodd"
@@ -325,16 +322,19 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
               </tbody>
             </table>
 
-            {/* Paginación (solo para escritorio) */}
+            {/* ✅ MODIFICACIÓN: Paginación Interactiva */}
             {totalPaginas > 1 && (
               <div className="flex justify-center mt-2 space-x-1">
                 {Array.from({ length: totalPaginas }).map((_, i) => (
-                  <div
+                  <button
                     key={i}
-                    className={`w-4 h-4 rounded-full ${
-                      i === pagina ? "bg-amber-700" : "bg-gray-300"
-                    } transition-all duration-500`}
-                  ></div>
+                    onClick={() => setPagina(i)}
+                    className={`w-4 h-4 rounded-full focus:outline-none ${i === pagina
+                        ? "bg-amber-700 scale-110"
+                        : "bg-gray-300 hover:bg-gray-400"
+                      } transition-all duration-300 cursor-pointer`}
+                    title={`Ir a página ${i + 1}`}
+                  />
                 ))}
               </div>
             )}
