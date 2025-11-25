@@ -302,6 +302,12 @@ const historialSchema = z.object({
   motivo: z.string().trim().optional().nullable(),
 });
 
+const revisionTareaSchema = z.object({
+  decision: z.enum(["APROBAR", "RECHAZAR"]), 
+  feedback: z.string().trim().optional(),
+  nuevaFechaLimite: z.coerce.date().optional(),
+});
+
 // --- Rutas de Tareas ---
 
 /* ✅ [GET] Obtener todas las tareas (Con filtros y seguridad por Rol) */
@@ -1311,6 +1317,203 @@ router.patch(
       responsables: tareaActualizada.responsables.map((r) => r.usuario),
     };
     res.json(tareaLimpia);
+  })
+);
+
+
+/* ✅ [POST /:id/entregar] El Usuario entrega la tarea (Sube evidencia y congela tiempo) */
+router.post(
+  "/:id/entregar",
+  verifyToken(),
+  upload.array("evidencias", 5),
+  safeAsync(async (req: Request, res: Response) => {
+    // 1. Validar ID
+    const paramsParse = paramsSchema.safeParse(req.params);
+    if (!paramsParse.success) return res.status(400).json({ error: "ID inválido" });
+    const { id: tareaId } = paramsParse.data;
+    const user = req.user!;
+
+    // 2. Buscar la tarea
+    const tarea = await prisma.tarea.findUnique({
+      where: { id: tareaId },
+      include: {
+        responsables: { select: { usuarioId: true } },
+        asignador: true,
+      },
+    });
+
+    if (!tarea) return res.status(404).json({ error: "Tarea no encontrada" });
+
+    // 3. Validar Permisos
+    const esResponsable = tarea.responsables.some((r) => r.usuarioId === user.id);
+    const esSuperAdmin = user.rol === "SUPER_ADMIN";
+
+    if (!esResponsable && !esSuperAdmin) {
+      return res.status(403).json({
+        error: "No puedes entregar esta tarea porque no estás asignado a ella.",
+      });
+    }
+
+    // 4. Validar Estatus
+    if (tarea.estatus !== "PENDIENTE") {
+      return res.status(400).json({
+        error: `No se puede entregar. La tarea está actualmente ${tarea.estatus}.`,
+      });
+    }
+
+    // 5. Procesar Imágenes
+    let imagenesData: any[] = [];
+    if (req.files && (req.files as any[]).length > 0) {
+      imagenesData = (req.files as any[]).map((file: any) => ({
+        url: file.path,
+        tareaId: tareaId,
+      }));
+    }
+
+    // 6. Transacción
+    const comentario = req.body.comentarioEntrega || "Tarea marcada como entregada.";
+
+    const tareaActualizada = await prisma.$transaction(async (tx) => {
+      if (imagenesData.length > 0) {
+        await tx.imagenTarea.createMany({ data: imagenesData });
+      }
+
+      return await tx.tarea.update({
+        where: { id: tareaId },
+        data: {
+          estatus: "EN_REVISION",
+          fechaEntrega: new Date(),
+          comentarioEntrega: comentario,
+        },
+      });
+    });
+
+    // 7. Notificación
+    await sendNotificationToUsers(
+      [tarea.asignadorId],
+      `Tarea Entregada 📩`,
+      `${user.nombre} ha enviado evidencias para la tarea: "${tarea.tarea}".`,
+      `/admin`
+    );
+
+    res.json({
+      message: "Tarea enviada a revisión correctamente.",
+      tarea: tareaActualizada,
+    });
+  })
+);
+
+/* ✅ [POST /:id/revision] El Jefe Aprueba o Rechaza la entrega */
+router.post(
+  "/:id/revision",
+  verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
+  safeAsync(async (req: Request, res: Response) => {
+    // 1. Validar ID y Body
+    const paramsParse = paramsSchema.safeParse(req.params);
+    const bodyParse = revisionTareaSchema.safeParse(req.body);
+
+    if (!paramsParse.success) return res.status(400).json({ error: "ID inválido" });
+    if (!bodyParse.success) {
+      return res.status(400).json({
+        error: "Datos inválidos",
+        detalles: bodyParse.error.flatten().fieldErrors,
+      });
+    }
+
+    const { id: tareaId } = paramsParse.data;
+    const { decision, feedback, nuevaFechaLimite } = bodyParse.data;
+    const user = req.user!;
+
+    // 2. Buscar Tarea
+    const tarea = await prisma.tarea.findUnique({
+      where: { id: tareaId },
+      include: {
+        responsables: { select: { usuarioId: true } },
+      },
+    });
+
+    if (!tarea) return res.status(404).json({ error: "Tarea no encontrada" });
+
+    // 3. Validar Permisos
+    const esAsignador = tarea.asignadorId === user.id;
+    const esSuperAdmin = user.rol === "SUPER_ADMIN";
+    const esAdminDepto =
+      user.rol === "ADMIN" && tarea.departamentoId === user.departamentoId;
+
+    if (!esAsignador && !esSuperAdmin && !esAdminDepto) {
+      return res.status(403).json({
+        error: "No tienes permiso para revisar esta tarea.",
+      });
+    }
+
+    // 4. Validar Estatus
+    if (tarea.estatus !== "EN_REVISION") {
+      return res.status(400).json({
+        error: "Esta tarea no está esperando revisión.",
+      });
+    }
+
+    // 5. Lógica de Decisión
+    let tareaActualizada;
+    const idsResponsables = tarea.responsables.map((r) => r.usuarioId);
+
+    if (decision === "APROBAR") {
+      tareaActualizada = await prisma.tarea.update({
+        where: { id: tareaId },
+        data: {
+          estatus: "CONCLUIDA",
+          fechaConclusion: new Date(),
+          fechaRevision: new Date(),
+          feedbackRevision: feedback ?? "Aprobada.",
+        },
+      });
+
+      await sendNotificationToUsers(
+        idsResponsables,
+        "✅ Tarea Aprobada",
+        `Tu entrega de "${tarea.tarea}" ha sido validada.`,
+        `/mis-tareas`
+      );
+    } else {
+      // RECHAZO
+      if (nuevaFechaLimite) {
+        await prisma.historialFecha.create({
+          data: {
+            fechaAnterior: tarea.fechaLimite,
+            nuevaFecha: nuevaFechaLimite,
+            motivo: `Rechazo: ${feedback || "Correcciones"}`,
+            tareaId: tareaId,
+            modificadoPorId: user.id,
+          },
+        });
+      }
+
+      // CORRECCIÓN 2: Uso del spread operator (...) para la fecha límite
+      // Esto evita pasar 'undefined' explícitamente, lo cual TypeScript odia en strict mode.
+      tareaActualizada = await prisma.tarea.update({
+        where: { id: tareaId },
+        data: {
+          estatus: "PENDIENTE",
+          fechaEntrega: null, // Reset del reloj
+          fechaRevision: new Date(),
+          feedbackRevision: feedback ?? null,
+          // Si nuevaFechaLimite existe, agregamos la propiedad al objeto. Si no, no la ponemos.
+          ...(nuevaFechaLimite && { fechaLimite: nuevaFechaLimite }),
+        },
+      });
+
+      await sendNotificationToUsers(
+        idsResponsables,
+        "⚠️ Tarea Rechazada",
+        `Se requiere corrección. Motivo: ${feedback || "Ver detalles"}`,
+        `/mis-tareas`
+      );
+    }
+
+    res.json({
+      message: `Tarea ${decision} exitosamente.`,
+      tarea: tareaActualizada,
+    });
   })
 );
 

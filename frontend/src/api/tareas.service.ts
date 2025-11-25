@@ -5,10 +5,12 @@ type TareaFilters = {
   departamentoId?: number;
   asignadorId?: number;
   responsableId?: number;
-  estatus?: "PENDIENTE" | "CONCLUIDA" | "CANCELADA";
+  estatus?: "PENDIENTE" | "EN_REVISION" | "CONCLUIDA" | "CANCELADA";
   viewType?: "MIS_TAREAS" | "ASIGNADAS" | "TODAS";
 };
-type EstatusFilter = { estatus?: "PENDIENTE" | "CONCLUIDA" | "CANCELADA" };
+type EstatusFilter = { 
+  estatus?: "PENDIENTE" | "EN_REVISION" | "CONCLUIDA" | "CANCELADA" 
+};
 
 export const tareasService = {
   /**
@@ -122,4 +124,35 @@ export const tareasService = {
     const { data } = await api.delete(`/tareas/imagen/${imagenId}`);
     return data;
   },
+
+  entregar: async (id: number, comentario: string, archivos: File[]): Promise<any> => {
+    const formData = new FormData();
+    formData.append("comentarioEntrega", comentario);
+    
+    // Agregamos cada archivo al FormData con el nombre 'evidencias' (que espera Multer)
+    archivos.forEach((archivo) => {
+      formData.append("evidencias", archivo);
+    });
+
+    const { data } = await api.post(`/tareas/${id}/entregar`, formData);
+    return data;
+  },
+
+  /**
+   * ✅ REVISAR TAREA (Jefe/Admin)
+   * Aprueba o Rechaza la entrega.
+   */
+  revisar: async (
+    id: number, 
+    decision: "APROBAR" | "RECHAZAR", 
+    feedback?: string, 
+    nuevaFechaLimite?: Date
+  ): Promise<any> => {
+    const { data } = await api.post(`/tareas/${id}/revision`, {
+      decision,
+      feedback,
+      nuevaFechaLimite // Axios lo envía como string ISO automáticamente
+    });
+    return data;
+  }
 };

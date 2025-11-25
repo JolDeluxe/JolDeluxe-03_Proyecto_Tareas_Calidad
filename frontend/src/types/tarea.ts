@@ -63,6 +63,11 @@ export interface Tarea {
   urgencia: Urgencia;
   observaciones: string | null;
 
+  fechaEntrega: Date | string | null;      // Congela el reloj
+  comentarioEntrega: string | null;        // Evidencia texto del usuario
+  fechaRevision: Date | string | null;     // Cuándo revisó el admin
+  feedbackRevision: string | null;         // Comentario del admin
+
   // --- Relaciones ---
   departamentoId: number;
   departamento: {

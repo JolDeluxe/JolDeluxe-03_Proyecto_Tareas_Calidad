@@ -293,10 +293,10 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
                       </td>
                       <td
                         className={`px-2 py-1 text-center text-lg font-bold ${vencida
-                            ? "text-red-600"
-                            : proxima
-                              ? "text-amber-600"
-                              : "text-gray-800"
+                          ? "text-red-600"
+                          : proxima
+                            ? "text-amber-600"
+                            : "text-gray-800"
                           }`}
                       >
                         {formateaFecha(fechaFinalObj) || "—"}
@@ -330,8 +330,8 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
                     key={i}
                     onClick={() => setPagina(i)}
                     className={`w-4 h-4 rounded-full focus:outline-none ${i === pagina
-                        ? "bg-amber-700 scale-110"
-                        : "bg-gray-300 hover:bg-gray-400"
+                      ? "bg-amber-700 scale-110"
+                      : "bg-gray-300 hover:bg-gray-400"
                       } transition-all duration-300 cursor-pointer`}
                     title={`Ir a página ${i + 1}`}
                   />

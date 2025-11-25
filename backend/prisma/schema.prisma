@@ -10,6 +10,7 @@ generator client {
 // --- ENUMS ---
 enum Estatus {
   PENDIENTE
+  EN_REVISION
   CONCLUIDA
   CANCELADA
 }
@@ -93,6 +94,11 @@ model Tarea {
   estatus         Estatus
   urgencia        Urgencia
   observaciones   String?
+
+  fechaEntrega      DateTime? 
+  comentarioEntrega String?   @db.Text 
+  fechaRevision     DateTime? 
+  feedbackRevision  String?   @db.Text 
 
   departamentoId Int
   departamento   Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)

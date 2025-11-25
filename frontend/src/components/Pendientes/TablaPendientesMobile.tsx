@@ -56,20 +56,19 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
                 {row.tarea}
               </h3>
               <span
-                className={`flex-shrink-0 px-2 py-0.5 text-xs font-semibold ${
-                  row.urgencia === "ALTA"
+                className={`flex-shrink-0 px-2 py-0.5 text-xs font-semibold ${row.urgencia === "ALTA"
                     ? "bg-red-100 text-red-700 border border-red-300 rounded-full"
                     : row.urgencia === "MEDIA"
-                    ? "bg-amber-100 text-amber-700 border border-amber-300 rounded-full"
-                    : "bg-green-100 text-green-700 border border-green-300 rounded-full"
-                }`}
+                      ? "bg-amber-100 text-amber-700 border border-amber-300 rounded-full"
+                      : "bg-green-100 text-green-700 border border-green-300 rounded-full"
+                  }`}
               >
                 {/* Mostramos el valor literal */}
                 {row.urgencia === "ALTA"
                   ? "Alta"
                   : row.urgencia === "MEDIA"
-                  ? "Media"
-                  : "Baja"}
+                    ? "Media"
+                    : "Baja"}
               </span>
             </div>
 
@@ -87,13 +86,12 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
             <div className="text-sm text-gray-700 mb-1 flex items-center">
               <span className="font-semibold">Límite:</span>
               <span
-                className={`ml-1.5 font-bold ${
-                  vencida
+                className={`ml-1.5 font-bold ${vencida
                     ? "text-red-600"
                     : proxima
-                    ? "text-amber-600"
-                    : "text-gray-800"
-                }`}
+                      ? "text-amber-600"
+                      : "text-gray-800"
+                  }`}
               >
                 {formateaFecha(fechaFinalObj) || "—"}
               </span>
@@ -102,9 +100,8 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
                   fill="currentColor"
-                  className={`w-4 h-4 ml-1 ${
-                    vencida ? "text-red-500" : "text-amber-500"
-                  }`}
+                  className={`w-4 h-4 ml-1 ${vencida ? "text-red-500" : "text-amber-500"
+                    }`}
                 >
                   <path
                     fillRule="evenodd"
@@ -125,9 +122,8 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
             {/* 6. AÑADIR BLOQUE DE HISTORIAL */}
             {row.historialFechas && row.historialFechas.length > 0 && (
               <details
-                className={`mt-3 pt-3 text-xs transition-all duration-300 open:pb-2 ${
-                  hayObservaciones ? "border-t border-blue-100" : ""
-                }`}
+                className={`mt-3 pt-3 text-xs transition-all duration-300 open:pb-2 ${hayObservaciones ? "border-t border-blue-100" : ""
+                  }`}
               >
                 <summary className="cursor-pointer select-none font-semibold text-blue-600 hover:underline flex items-center gap-1">
                   <svg
@@ -186,11 +182,10 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
             )}
             {row.imagenes && row.imagenes.length > 0 && (
               <div
-                className={`mt-3 pt-3 flex justify-center ${
-                  hayObservaciones || hayHistorial || hayImagenes
+                className={`mt-3 pt-3 flex justify-center ${hayObservaciones || hayHistorial || hayImagenes
                     ? "border-t border-blue-100"
                     : ""
-                }`}
+                  }`}
               >
                 <button
                   onClick={() => onVerImagenes(row.imagenes)}

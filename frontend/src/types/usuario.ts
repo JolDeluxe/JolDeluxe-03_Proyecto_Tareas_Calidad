@@ -6,6 +6,7 @@
 
 export const Estatus = {
   PENDIENTE: "PENDIENTE",
+  EN_REVISION: "EN_REVISION",
   CONCLUIDA: "CONCLUIDA",
   CANCELADA: "CANCELADA",
 } as const;
