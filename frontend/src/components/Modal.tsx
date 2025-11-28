@@ -1,35 +1,44 @@
 import React from "react";
 
 interface ModalProps {
-  isOpen: boolean;
+  // Se elimina 'isOpen' ya que el componente padre lo controla
   onClose: () => void;
   children: React.ReactNode;
+  // ✅ PROPIEDAD AÑADIDA para resolver el error
+  title: string;
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
-  if (!isOpen) return null;
+// Se desestructura el nuevo prop 'title'
+const Modal: React.FC<ModalProps> = ({ onClose, children, title }) => {
+  // Se elimina el chequeo de if (!isOpen) return null;
 
   return (
     <div
-      className="fixed inset-0 bg-white/40 backdrop-blur-sm flex items-center justify-center z-50"
+      // Se añade p-4 para un mejor espaciado en móviles
+      className="fixed inset-0 bg-white/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-[90%] max-w-md"
+        // Se añade overflow-hidden para asegurar bordes redondeados limpios
+        className="bg-white rounded-lg shadow-xl w-[90%] max-w-md overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Botón cerrar */}
-        <div className="flex justify-end p-2">
+        {/* ✅ Encabezado con título y botón de cierre */}
+        <div className="flex justify-between items-center p-4 border-b border-gray-200">
+          <h2 className="text-xl font-bold text-gray-800">{title}</h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-800 text-lg font-bold cursor-pointer"
+            // Usamos &times; para un ícono de cierre más profesional
+            className="text-gray-500 hover:text-gray-800 text-2xl font-bold cursor-pointer leading-none ml-4"
           >
-            x
+            &times;
           </button>
         </div>
 
         {/* Contenido del modal */}
-        {children}
+        <div className="p-0">
+          {children}
+        </div>
       </div>
     </div>
   );

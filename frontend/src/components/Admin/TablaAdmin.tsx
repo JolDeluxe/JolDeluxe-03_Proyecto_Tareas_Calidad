@@ -344,15 +344,15 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       <td className="px-1 py-4 text-center font-semibold whitespace-nowrap w-[10%]">
                         <div
                           className={`flex flex-col items-center ${row.historialFechas &&
-                              row.historialFechas.length > 0
-                              ? "justify-start"
-                              : "justify-center h-full"
+                            row.historialFechas.length > 0
+                            ? "justify-start"
+                            : "justify-center h-full"
                             } min-h-[50px]`}
                         >
                           <p
                             className={`font-semibold ${vencida
-                                ? "text-red-600 font-bold"
-                                : "text-gray-800"
+                              ? "text-red-600 font-bold"
+                              : "text-gray-800"
                               }`}
                           >
                             {fechaLimiteFinalStr}
@@ -456,10 +456,10 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       <td className="px-4 py-4 text-center w-[7%]">
                         <span
                           className={`px-3 py-1 text-md font-bold ${row.estatus === "CONCLUIDA"
-                              ? "text-green-700"
-                              : row.estatus === "CANCELADA"
-                                ? "text-red-700"
-                                : "text-blue-700"
+                            ? "text-green-700"
+                            : row.estatus === "CANCELADA"
+                              ? "text-red-700"
+                              : "text-blue-700"
                             }`}
                         >
                           {row.estatus}
@@ -557,10 +557,10 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     </h3>
                     <span
                       className={`flex-shrink-0 px-2 py-0.5 text-xs font-semibold ${row.urgencia === "ALTA"
-                          ? "bg-red-100 text-red-700 border border-red-300 rounded-full"
-                          : row.urgencia === "MEDIA"
-                            ? "bg-amber-100 text-amber-700 border border-amber-300 rounded-full"
-                            : "bg-green-100 text-green-700 border border-green-300 rounded-full"
+                        ? "bg-red-100 text-red-700 border border-red-300 rounded-full"
+                        : row.urgencia === "MEDIA"
+                          ? "bg-amber-100 text-amber-700 border border-amber-300 rounded-full"
+                          : "bg-green-100 text-green-700 border border-green-300 rounded-full"
                         }`}
                     >
                       {/* Mostramos el valor literal */}
@@ -631,10 +631,10 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </span>{" "}
                       <span
                         className={`text-xs font-bold ${row.estatus === "CONCLUIDA"
-                            ? "text-green-700"
-                            : row.estatus === "CANCELADA"
-                              ? "text-red-700"
-                              : "text-blue-700"
+                          ? "text-green-700"
+                          : row.estatus === "CANCELADA"
+                            ? "text-red-700"
+                            : "text-blue-700"
                           }`}
                       >
                         {row.estatus}
@@ -644,8 +644,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     {row.fechaConclusion && (
                       <p
                         className={`mt-2 text-xs flex items-center ${retrasada
-                            ? "text-red-600 font-semibold"
-                            : "text-gray-700"
+                          ? "text-red-600 font-semibold"
+                          : "text-gray-700"
                           }`}
                       >
                         <span className="font-semibold text-gray-700">

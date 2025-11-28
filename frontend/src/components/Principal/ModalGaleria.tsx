@@ -1,41 +1,41 @@
+// 📍 src/components/Principal/ModalGaleria.tsx
+
 import React, { useState, useEffect } from "react";
-import { toast } from "react-toastify"; // 🚀 Importar toast
-import { tareasService } from "../../api/tareas.service"; // 🚀 Importar servicio
 import type { Tarea } from "../../types/tarea";
 
-// Asumimos que 'ImagenTarea' es parte de tu tipo Tarea y está exportado
+// Asegúrate de importar tu tipo ImagenTarea
 type ImagenTarea = Tarea["imagenes"][0];
 
 interface ModalGaleriaProps {
   imagenes: ImagenTarea[];
   onClose: () => void;
-  // 🚀 NUEVO: Callback para notificar al padre sobre la eliminación
+  // 🚀 NUEVA PROP: Define el contexto de las fotos
+  tipo?: "REFERENCIA" | "EVIDENCIA";
 }
 
-// ❌ ELIMINADO: Ya no se necesita, la URL viene completa de Cloudinary.
-// const getBaseURL = () => { /* ... */ };
-// const API_BASE_URL = getBaseURL();
-
 const ModalGaleria: React.FC<ModalGaleriaProps> = ({
-  imagenes: initialImagenes, // Renombramos la prop
+  imagenes: initialImagenes,
   onClose,
+  tipo = "REFERENCIA", // Por defecto será referencia
 }) => {
-  // 🚀 ESTADO LOCAL: Mantenemos la lista de imágenes aquí para permitir la eliminación sin cerrar el modal
   const [imagenes, setImagenes] = useState(initialImagenes);
   const [indiceActual, setIndiceActual] = useState(0);
-  const [loading, setLoading] = useState(false); // Para el spinner de borrado
 
-  // Si la imagen actual se borra, ajustamos el índice
+  // Si cambian las imágenes prop, reseteamos el estado local
+  useEffect(() => {
+    setImagenes(initialImagenes);
+    setIndiceActual(0);
+  }, [initialImagenes]);
+
+  // Manejo de borrado de índice si la lista cambia dinámicamente
   useEffect(() => {
     if (indiceActual >= imagenes.length && imagenes.length > 0) {
       setIndiceActual(imagenes.length - 1);
     } else if (imagenes.length === 0) {
-      // Si se borran todas, cerramos el modal
       onClose();
     }
   }, [imagenes.length, indiceActual, onClose]);
 
-  // --- Navegación ---
   const irSiguiente = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIndiceActual((prev) => (prev + 1) % imagenes.length);
@@ -46,133 +46,85 @@ const ModalGaleria: React.FC<ModalGaleriaProps> = ({
     setIndiceActual((prev) => (prev - 1 + imagenes.length) % imagenes.length);
   };
 
-  // --- Cierre con tecla Escape ---
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
+      if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, [onClose]);
 
-  if (!imagenes || imagenes.length === 0) {
-    return null;
-  }
+  if (!imagenes || imagenes.length === 0) return null;
 
   const imagenActual = imagenes[indiceActual];
-  // 🚀 CORRECCIÓN: La URL ya viene completa de Cloudinary.
   const imagenUrl = imagenActual.url;
 
   return (
     <div
-      // Fondo oscuro
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm 
-                  flex items-center justify-center z-[100] p-4"
-      onClick={onClose} // Cierra al hacer clic en el fondo
+      className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[100] p-4"
+      onClick={onClose}
     >
-      {/* Contenedor del Modal (evita cierre al hacer clic) */}
       <div
-        className="relative bg-white rounded-lg shadow-xl 
-                    max-w-3xl w-full max-h-[90vh] flex flex-col"
+        className="relative bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header: "Imagen 1 de 3" y botón X */}
-        <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200">
-          <span className="font-semibold text-gray-700">
-            Imagen {indiceActual + 1} de {imagenes.length}
-          </span>
-          <div className="flex items-center gap-2">
-            {/* Botón de Cerrar */}
-            <button
-              onClick={onClose}
-              disabled={loading}
-              className="p-1.5 rounded-full text-gray-500 hover:bg-gray-200 transition-colors disabled:opacity-50"
-              aria-label="Cerrar galería"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-6 h-6"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
+        {/* --- HEADER DEL MODAL --- */}
+        <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-100 bg-white z-10">
+
+          <div className="flex items-center gap-3">
+            {/* 🏷️ AQUÍ ESTÁ EL BADGE DIFERENCIADOR */}
+            {tipo === "EVIDENCIA" ? (
+              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200 flex items-center gap-1">
+                ✅ EVIDENCIA DE ENTREGA
+              </span>
+            ) : (
+              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-200 flex items-center gap-1">
+                📁 REFERENCIA / GUÍA
+              </span>
+            )}
+
+            <span className="text-sm text-gray-500 font-medium ml-2 border-l pl-3 border-gray-300">
+              {indiceActual + 1} / {imagenes.length}
+            </span>
           </div>
+
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
-        {/* Cuerpo: Imagen */}
-        <div className="flex-grow flex items-center justify-center p-4 overflow-hidden">
-          {loading ? (
-            <div className="text-gray-500">Eliminando imagen...</div>
-          ) : (
-            <img
-              src={imagenUrl}
-              alt={`Evidencia ${indiceActual + 1}`}
-              // La URL ya es la final, solo la usamos
-              className="max-w-full max-h-[70vh] h-auto w-auto object-contain"
-            />
-          )}
+        {/* --- CUERPO: IMAGEN --- */}
+        <div className="flex-grow flex items-center justify-center p-2 bg-gray-50 overflow-hidden relative">
+          <img
+            src={imagenUrl}
+            alt={`Imagen ${indiceActual + 1}`}
+            className="max-w-full max-h-[75vh] object-contain shadow-sm rounded"
+          />
         </div>
       </div>
 
-      {/* Flechas de Navegación (si hay más de 1 imagen) */}
+      {/* --- BOTONES DE NAVEGACIÓN --- */}
       {imagenes.length > 1 && (
         <>
-          {/* Flecha Izquierda */}
           <button
             onClick={irAnterior}
-            disabled={loading}
-            className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 
-                      bg-white/70 hover:bg-white p-2 rounded-full 
-                        shadow-md transition-all disabled:opacity-50"
-            aria-label="Imagen anterior"
+            className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white p-3 rounded-full backdrop-blur-md transition-all border border-white/20"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-6 h-6"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15.75 19.5L8.25 12l7.5-7.5"
-              />
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          {/* Flecha Derecha */}
           <button
             onClick={irSiguiente}
-            disabled={loading}
-            className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 
-                    bg-white/70 hover:bg-white p-2 rounded-full 
-                      shadow-md transition-all disabled:opacity-50"
-            aria-label="Siguiente imagen"
+            className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white p-3 rounded-full backdrop-blur-md transition-all border border-white/20"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-6 h-6"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8.25 4.5l7.5 7.5-7.5 7.5"
-              />
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
           </button>
         </>
