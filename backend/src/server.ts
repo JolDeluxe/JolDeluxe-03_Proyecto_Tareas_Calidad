@@ -7,6 +7,7 @@ import tareasRouter from "./routes/tareas.js";
 import authRouter from "./routes/auth.js";
 import usuariosRouter from "./routes/usuarios.js";
 import departamentosRouter from "./routes/departamentos.js";
+import { iniciarCronJobs } from "./services/cron.service.js"; 
 
 // ----------------------------------------------------
 // 💡 CORRECCIÓN ESM: Definir __dirname en el ámbito de ES Modules
@@ -127,6 +128,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/tareas", tareasRouter);
 app.use("/api/usuarios", usuariosRouter);
 app.use("/api/departamentos", departamentosRouter);
+
+iniciarCronJobs();
 
 // 🔹 Manejo de errores global
 app.use((err: any, req: any, res: any, next: any) => {

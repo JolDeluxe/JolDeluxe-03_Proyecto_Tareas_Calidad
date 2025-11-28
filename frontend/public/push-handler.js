@@ -1,46 +1,49 @@
 // 📍 public/push-handler.js
 
-// Escucha el evento 'push' que el servidor (web-push) envía
 self.addEventListener("push", (event) => {
-  // Asegúrate de que el payload se envíe como JSON
   const data = event.data.json();
   console.log("✅ Notificación Push recibida:", data);
 
   const options = {
     body: data.body,
-    // Usamos el icono de Cuadra que ya está referenciado en tu backend
     icon: data.icon || "/img/01_Cuadra.webp",
-    badge: data.icon || "/img/01_Cuadra.webp",
+    badge: "/img/01_Cuadra.webp", // El badge debe ser monocromático en Android, pero usar el logo está bien por ahora
     data: {
-      url: data.data.url || "/admin", // La URL a la que debe navegar
+      url: data.data?.url || "/admin", // Guardamos la URL destino
     },
     vibrate: [100, 50, 100],
+    actions: [
+      { action: 'open', title: 'Ver Tarea' } // Opcional: añade un botón explícito
+    ]
   };
 
-  // Muestra la notificación
   event.waitUntil(self.registration.showNotification(data.title, options));
 });
 
-// Escucha el evento 'notificationclick' para manejar la interacción del usuario
 self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
+  event.notification.close(); // Cierra la notificación al tocarla
 
-  const targetUrl = event.notification.data?.url || "/";
+  // 1. Obtener la URL relativa y convertirla a absoluta para comparar bien
+  const relativeUrl = event.notification.data?.url || "/";
+  const targetUrl = new URL(relativeUrl, self.location.origin).href;
 
-  // Enfoca una ventana existente o abre una nueva
   event.waitUntil(
-    self.clients.matchAll({ type: "window" }).then((clientList) => {
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      // 2. Buscar si ya hay una pestaña abierta de nuestra app
       for (const client of clientList) {
-        // Si encuentra una ventana de la PWA abierta, la enfoca
+        // Verificar si la URL base coincide (para no tomar otras webs)
         if (client.url.includes(self.location.origin) && "focus" in client) {
-          // Abre la URL específica en esa ventana
-          if (client.url !== targetUrl) {
-            return client.navigate(targetUrl).then((client) => client.focus());
+          
+          // A. Si ya está en la pantalla correcta, solo enfocar
+          if (client.url === targetUrl) {
+            return client.focus();
           }
-          return client.focus();
+          // B. Si está en la app pero en otra pantalla, navegar y enfocar
+          return client.navigate(targetUrl).then((c) => c?.focus());
         }
       }
-      // Si no hay ventanas de la PWA abiertas, abre una nueva
+
+      // 3. Si no hay ninguna ventana abierta, abrir una nueva
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }
