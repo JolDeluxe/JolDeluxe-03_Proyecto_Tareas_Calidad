@@ -177,11 +177,29 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     setFecha(formatDateToInput(date));
   };
 
-  // --- Handlers de Archivos ---
+  // --- 3. Manejadores de Archivos (CON VALIDACIÓN 5MB) ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const nuevosArchivos = Array.from(e.target.files);
-      setArchivos((prevArchivos) => [...prevArchivos, ...nuevosArchivos]);
+
+      // 🛑 Validación de tamaño (5MB)
+      const TAMANO_MAXIMO = 5 * 1024 * 1024;
+      const archivoPesado = nuevosArchivos.find(file => file.size > TAMANO_MAXIMO);
+
+      if (archivoPesado) {
+        toast.error(`⚠️ El archivo "${archivoPesado.name}" pesa más de 5MB.`);
+        e.target.value = "";
+        return;
+      }
+
+      // 🛑 Validación de cantidad
+      if (archivos.length + nuevosArchivos.length > 5) {
+        toast.warning("Solo puedes subir un máximo de 5 archivos.");
+        e.target.value = "";
+        return;
+      }
+
+      setArchivos((prev) => [...prev, ...nuevosArchivos]);
       e.target.value = "";
     }
   };
@@ -239,9 +257,9 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
 
     // Validación de longitud de nombre (doble chequeo)
     if (nombre.length > MAX_NOMBRE_LENGTH) {
-        toast.error(`El Nombre excede el máximo permitido (${MAX_NOMBRE_LENGTH}).`);
-        setLoading(false);
-        return;
+      toast.error(`El Nombre excede el máximo permitido (${MAX_NOMBRE_LENGTH}).`);
+      setLoading(false);
+      return;
     }
 
     if (comentario.length > MAX_OBSERVACIONES_LENGTH) {
@@ -397,104 +415,100 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                   user?.departamento?.nombre
                     ?.toUpperCase()
                     .includes("CALIDAD"))) && (
-                <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsKaizen(false);
-                      setResponsablesIds([]);
-                    }}
-                    className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${
-                      !isKaizen
+                  <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsKaizen(false);
+                        setResponsablesIds([]);
+                      }}
+                      className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${!isKaizen
                         ? "bg-white text-blue-700 shadow-sm"
                         : "text-gray-500 hover:text-gray-700"
-                    }`}
-                  >
-                    Tarea Estándar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsKaizen(true);
-                      setResponsablesIds([]);
-                    }}
-                    className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${
-                      isKaizen
+                        }`}
+                    >
+                      Tarea Estándar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsKaizen(true);
+                        setResponsablesIds([]);
+                      }}
+                      className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${isKaizen
                         ? "bg-purple-600 text-white shadow-sm"
                         : "text-gray-500 hover:text-gray-700"
-                    }`}
-                  >
-                    Tarea KAIZEN
-                  </button>
-                </div>
-              )}
+                        }`}
+                    >
+                      Tarea KAIZEN
+                    </button>
+                  </div>
+                )}
               <div>
-                <label className="block text-sm font-semibold mb-1 flex justify-between">
-                  <span>Nombre</span>
-                    {/* 🎯 NUEVO CONTADOR PARA EL NOMBRE */}
-                  <span className={`text-xs ${nombre.length > MAX_NOMBRE_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-                    {nombre.length}/{MAX_NOMBRE_LENGTH}
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  value={nombre}
-                  onChange={handleNombreChange} // 🎯 Usamos el nuevo handler
-                  placeholder="Ej. Revisar reporte de calidad"
-                  required
-                  disabled={loading}
-                  className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
-                    ${
-                      submitted && !nombre.trim()
-                        ? "border-red-500"
-                        : "border-gray-300"
-                    }`}
-                />
-                {submitted && !nombre.trim() && (
-                  <p className="text-red-600 text-xs mt-1">
-                    El nombre es obligatorio.
-                  </p>
-                )}
-              </div>
+                <label className="block text-sm font-semibold mb-1 flex justify-between">
+                  <span>Nombre</span>
+                  {/* 🎯 NUEVO CONTADOR PARA EL NOMBRE */}
+                  <span className={`text-xs ${nombre.length > MAX_NOMBRE_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                    {nombre.length}/{MAX_NOMBRE_LENGTH}
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={nombre}
+                  onChange={handleNombreChange} // 🎯 Usamos el nuevo handler
+                  placeholder="Ej. Revisar reporte de calidad"
+                  required
+                  disabled={loading}
+                  className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
+                    ${submitted && !nombre.trim()
+                      ? "border-red-500"
+                      : "border-gray-300"
+                    }`}
+                />
+                {submitted && !nombre.trim() && (
+                  <p className="text-red-600 text-xs mt-1">
+                    El nombre es obligatorio.
+                  </p>
+                )}
+              </div>
 
               {/* Indicaciones (Sin cambios) */}
               <div>
-                <label className="block text-sm font-semibold mb-1 flex justify-between">
-                  <span>Indicaciones</span>
-                  {/* 🎯 CONTADOR DE CARACTERES */}
-                  <span className={`text-xs ${comentario.length > MAX_OBSERVACIONES_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-                    {comentario.length}/{MAX_OBSERVACIONES_LENGTH}
-                  </span>
-                </label>
-                <textarea
-                  value={comentario}
+                <label className="block text-sm font-semibold mb-1 flex justify-between">
+                  <span>Indicaciones</span>
+                  {/* 🎯 CONTADOR DE CARACTERES */}
+                  <span className={`text-xs ${comentario.length > MAX_OBSERVACIONES_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                    {comentario.length}/{MAX_OBSERVACIONES_LENGTH}
+                  </span>
+                </label>
+                <textarea
+                  value={comentario}
                   // 🎯 LÓGICA DE LÍMITE DE CARACTERES EN EL FRONTEND
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    if (newValue.length <= MAX_OBSERVACIONES_LENGTH) {
-                      setComentario(newValue);
-                    } else {
-                      // Si se pega texto largo, se trunca para no exceder el límite visual y lógico.
-                      setComentario(newValue.slice(0, MAX_OBSERVACIONES_LENGTH));
-                      toast.warn(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres permitidos.`);
-                    }
-                  }}
-                  placeholder="Agrega indicaciones o detalles..."
-                  disabled={loading}
-                  required
-                  className={`w-full border rounded-md px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
-                    ${
-                      submitted && !comentario.trim()
-                        ? "border-red-500"
-                        : "border-gray-300"
-                    }`}
-                />
-                {submitted && !comentario.trim() && (
-                  <p className="text-red-600 text-xs mt-1">
-                    Las indicaciones son obligatorias.
-                  </p>
-                )}
-              </div>
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    if (newValue.length <= MAX_OBSERVACIONES_LENGTH) {
+                      setComentario(newValue);
+                    } else {
+                      // Si se pega texto largo, se trunca para no exceder el límite visual y lógico.
+                      setComentario(newValue.slice(0, MAX_OBSERVACIONES_LENGTH));
+                      toast.warn(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres permitidos.`);
+                    }
+                  }}
+                  placeholder="Agrega indicaciones o detalles..."
+                  disabled={loading}
+                  required
+                  className={`w-full border rounded-md px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
+                    ${submitted && !comentario.trim()
+                      ? "border-red-500"
+                      : "border-gray-300"
+                    }`}
+                />
+                {submitted && !comentario.trim() && (
+                  <p className="text-red-600 text-xs mt-1">
+                    Las indicaciones son obligatorias.
+                  </p>
+                )}
+              </div>
 
               {/* Evidencia (Sin cambios) */}
               <div>
@@ -510,11 +524,10 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                    bg-amber-100 text-amber-900 
                    font-semibold px-4 py-2 rounded-md 
                    transition-all duration-200
-                   ${
-                     loading
-                       ? "opacity-50 cursor-not-allowed"
-                       : "cursor-pointer hover:bg-amber-200"
-                   }
+                   ${loading
+                      ? "opacity-50 cursor-not-allowed"
+                      : "cursor-pointer hover:bg-amber-200"
+                    }
                   `}
                 >
                   <svg
@@ -623,10 +636,10 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                       overflow-y-auto 
                       focus:ring-2 focus:ring-amber-950 focus:outline-none 
                       ${
-                        // Validación (igual que antes)
-                        submitted && responsablesIds.length === 0
-                          ? "border-red-500"
-                          : "border-gray-300"
+                      // Validación (igual que antes)
+                      submitted && responsablesIds.length === 0
+                        ? "border-red-500"
+                        : "border-gray-300"
                       }
                     `}
                     // tabIndex para que sea navegable con teclado
@@ -642,10 +655,9 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                         className={`
                           flex items-center gap-3 w-full px-3 py-2 
                           cursor-pointer transition-colors
-                          ${
-                            responsablesIds.includes(u.id)
-                              ? "bg-amber-100 text-amber-900 font-semibold"
-                              : "text-gray-800 hover:bg-gray-50"
+                          ${responsablesIds.includes(u.id)
+                            ? "bg-amber-100 text-amber-900 font-semibold"
+                            : "text-gray-800 hover:bg-gray-50"
                           }
                         `}
                       >
@@ -674,12 +686,12 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                     {/* Mensaje si la lista correspondiente está vacía */}
                     {(isKaizen ? listaInvitados : listaUsuarios).length ===
                       0 && (
-                      <p className="text-center text-sm text-gray-500 py-4">
-                        {isKaizen
-                          ? "No se encontraron invitados registrados."
-                          : "No hay usuarios disponibles."}
-                      </p>
-                    )}
+                        <p className="text-center text-sm text-gray-500 py-4">
+                          {isKaizen
+                            ? "No se encontraron invitados registrados."
+                            : "No hay usuarios disponibles."}
+                        </p>
+                      )}
                   </div>
                 )}
 
@@ -719,36 +731,30 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                           border text-sm font-semibold cursor-pointer transition-all
                           ${loading ? "opacity-50 cursor-not-allowed" : ""}
                           
-                          ${
-                            p.value === "ALTA" &&
-                            `
+                          ${p.value === "ALTA" &&
+                          `
                             border-gray-300 bg-gray-50 text-gray-700
                             peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600
-                            ${
-                              !loading && "hover:bg-red-100 hover:text-gray-700"
-                            }
+                            ${!loading && "hover:bg-red-100 hover:text-gray-700"
+                          }
                           `
                           }
-                          ${
-                            p.value === "MEDIA" &&
-                            `
+                          ${p.value === "MEDIA" &&
+                          `
                             border-gray-300 bg-gray-50 text-gray-700
                             peer-checked:bg-amber-400 peer-checked:text-white peer-checked:border-amber-400
-                            ${
-                              !loading &&
-                              "hover:bg-amber-100 hover:text-gray-700"
-                            }
+                            ${!loading &&
+                          "hover:bg-amber-100 hover:text-gray-700"
+                          }
                           `
                           }
-                          ${
-                            p.value === "BAJA" &&
-                            `
+                          ${p.value === "BAJA" &&
+                          `
                             border-gray-300 bg-gray-50 text-gray-700
                             peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-600
-                            ${
-                              !loading &&
-                              "hover:bg-green-100 hover:text-gray-700"
-                            }
+                            ${!loading &&
+                          "hover:bg-green-100 hover:text-gray-700"
+                          }
                           `
                           }
                         `}
@@ -797,7 +803,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                     submitted && !getSelectedDate()
                       ? "border-red-500"
                       : "border-gray-300"
-                  }
+                    }
                 `}
                 />
 
@@ -824,9 +830,8 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className={`${
-                loading ? "opacity-70 cursor-not-allowed" : "hover:bg-green-700"
-              } bg-green-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
+              className={`${loading ? "opacity-70 cursor-not-allowed" : "hover:bg-green-700"
+                } bg-green-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
             >
               {loading ? "Guardando..." : "Guardar"}
             </button>

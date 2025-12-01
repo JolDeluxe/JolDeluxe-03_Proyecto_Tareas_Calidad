@@ -1,21 +1,17 @@
 import { Router } from "express";
-import type { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express"; // Importación de solo tipo
 import { PrismaClient, Prisma, Estatus, Urgencia } from "@prisma/client";
 import { z } from "zod";
 import { verifyToken } from "../middleware/verifyToken.js";
-import multer from "multer";
 import path from "path";
-import fs from "fs";
 import { fileURLToPath } from "url";
 import webpush from "web-push";
-import { v2 as cloudinary } from "cloudinary";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
 
-// Configuración de Cloudinary: Se conecta automáticamente usando CLOUDINARY_URL
-cloudinary.config({
-  cloudinary_url: process.env.CLOUDINARY_URL, // Obtiene la URL del .env
-  secure: true, // Opcional, pero recomendado
-});
+import { 
+  uploadImagenesMiddleware, 
+  uploadEvidenciasMiddleware,
+  cloudinary // Esta es la instancia única que usaremos
+} from "../middleware/upload.js"; // 👈 ¡El .js es OBLIGATORIO!
 
 // Configuración para __dirname en ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -93,23 +89,6 @@ const sendNotificationToUsers = async (
     console.error("❌ Error en la función sendNotificationToUsers:", error);
   }
 };
-
-// --- Configuración de Multer ---
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: "tareas", // Nombre de la carpeta en Cloudinary (mencionado en el prompt)
-    // 🚀 FIX TS7006: Se tipan explícitamente 'req' y 'file'
-    public_id: (
-      req: Request, // <-- CORRECCIÓN: Tipo explícito
-      file: Express.Multer.File // <-- CORRECCIÓN: Tipo explícito
-    ) => `${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
-    // Opcional: Especificar un formato para optimización
-    // format: async (req, file) => 'webp',
-  } as any,
-});
-
-const upload = multer({ storage: storage });
 
 /* 🧱 Helper genérico para capturar errores async */
 const safeAsync =
@@ -1325,7 +1304,7 @@ router.patch(
 router.post(
   "/:id/entregar",
   verifyToken(),
-  upload.array("evidencias", 5),
+  uploadEvidenciasMiddleware,
   safeAsync(async (req: Request, res: Response) => {
     // 1. Validar ID
     const paramsParse = paramsSchema.safeParse(req.params);
@@ -1528,7 +1507,7 @@ router.post(
   "/:id/upload",
   // 1. Solo roles que pueden crear/editar pueden subir
   verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]),
-  upload.array("imagenes", 10), // Multer con Cloudinary Storage se ejecuta
+  uploadImagenesMiddleware,
   safeAsync(async (req: Request, res: Response) => {
     // 2. Validar el ID de la URL
     const paramsParse = paramsSchema.safeParse(req.params);

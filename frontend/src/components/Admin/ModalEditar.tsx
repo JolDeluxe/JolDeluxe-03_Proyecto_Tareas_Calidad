@@ -53,7 +53,7 @@ export const MOTIVOS_CAMBIO_FECHA = [
   "Falta de información/recursos",
   "Espera de autorización/Visto bueno",
   "Retraso en tarea previa",
-  
+
   // --- 3. Personal y Equipo (Problemas internos) ---
   "Retraso imputable al responsable", // 🚨 (Negativo: Fue su culpa/descuido)
   "Ausencia o baja médica del personal",
@@ -80,7 +80,7 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   const [imagenesExistentes, setImagenesExistentes] = useState<ImagenTarea[]>(
     tarea.imagenes || []
   );
-  
+
   // --- Estados de Datos (inicializados) ---
   const [responsablesIds, setResponsablesIds] = useState<number[]>(
     tarea.responsables ? tarea.responsables.map((r) => r.id) : []
@@ -229,10 +229,29 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     return dateObj;
   };
 
-  // --- Handlers de Archivos ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const nuevosArchivos = Array.from(e.target.files);
+
+      // 🛑 1. Validación de tamaño (5MB)
+      const TAMANO_MAXIMO = 5 * 1024 * 1024;
+      const archivoPesado = nuevosArchivos.find((file) => file.size > TAMANO_MAXIMO);
+
+      if (archivoPesado) {
+        toast.error(`⚠️ El archivo "${archivoPesado.name}" pesa más de 5MB.`);
+        e.target.value = ""; // Limpiar para permitir reintento
+        return;
+      }
+
+      // 🛑 2. Validación de cantidad (Máximo 5 en cola)
+      // Nota: Si quieres contar también las que YA existen en la tarea, 
+      // cambia la condición a: (archivos.length + imagenesExistentes.length + nuevosArchivos.length > 5)
+      if (archivos.length + nuevosArchivos.length > 5) {
+        toast.warning("Solo puedes subir un máximo de 5 evidencias mas.");
+        e.target.value = "";
+        return;
+      }
+
       setArchivos((prevArchivos) => [...prevArchivos, ...nuevosArchivos]);
       e.target.value = "";
     }
@@ -447,11 +466,10 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                 <label className="block text-sm font-semibold mb-1 flex justify-between">
                   <span>Nombre</span>
                   <span
-                    className={`text-xs ${
-                      nombre.length > MAX_NOMBRE_LENGTH
-                        ? "text-red-600 font-bold"
-                        : "text-gray-500"
-                    }`}
+                    className={`text-xs ${nombre.length > MAX_NOMBRE_LENGTH
+                      ? "text-red-600 font-bold"
+                      : "text-gray-500"
+                      }`}
                   >
                     {nombre.length}/{MAX_NOMBRE_LENGTH}
                   </span>
@@ -464,10 +482,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   required
                   disabled={loading}
                   className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
-                    ${
-                      submitted && !nombre.trim()
-                        ? "border-red-500"
-                        : "border-gray-300"
+                    ${submitted && !nombre.trim()
+                      ? "border-red-500"
+                      : "border-gray-300"
                     }`}
                 />
                 {submitted && !nombre.trim() && (
@@ -482,11 +499,10 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                 <label className="block text-sm font-semibold mb-1 flex justify-between">
                   <span>Indicaciones</span>
                   <span
-                    className={`text-xs ${
-                      comentario.length > MAX_OBSERVACIONES_LENGTH
-                        ? "text-red-600 font-bold"
-                        : "text-gray-500"
-                    }`}
+                    className={`text-xs ${comentario.length > MAX_OBSERVACIONES_LENGTH
+                      ? "text-red-600 font-bold"
+                      : "text-gray-500"
+                      }`}
                   >
                     {comentario.length}/{MAX_OBSERVACIONES_LENGTH}
                   </span>
@@ -498,10 +514,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   disabled={loading}
                   required
                   className={`w-full border rounded-md px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
-                    ${
-                      submitted && !comentario.trim()
-                        ? "border-red-500"
-                        : "border-gray-300"
+                    ${submitted && !comentario.trim()
+                      ? "border-red-500"
+                      : "border-gray-300"
                     }`}
                 />
                 {submitted && !comentario.trim() && (
@@ -581,10 +596,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                     bg-amber-100 text-amber-900 
                     font-semibold px-4 py-2 rounded-md 
                     transition-all duration-200
-                    ${
-                      loading
-                        ? "opacity-50 cursor-not-allowed"
-                        : "cursor-pointer hover:bg-amber-200"
+                    ${loading
+                      ? "opacity-50 cursor-not-allowed"
+                      : "cursor-pointer hover:bg-amber-200"
                     }
                   `}
                 >
@@ -671,10 +685,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                 className={`relative w-full h-32 border rounded-md 
                   overflow-y-auto 
                   focus:ring-2 focus:ring-amber-950 focus:outline-none 
-                  ${
-                    submitted && responsablesIds.length === 0
-                      ? "border-red-500"
-                      : "border-gray-300"
+                  ${submitted && responsablesIds.length === 0
+                    ? "border-red-500"
+                    : "border-gray-300"
                   }
                 `}
                 tabIndex={0}
@@ -686,10 +699,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                     className={`
                       flex items-center gap-3 w-full px-3 py-2 
                       cursor-pointer transition-colors
-                      ${
-                        responsablesIds.includes(u.id)
-                          ? "bg-amber-100 text-amber-900 font-semibold"
-                          : "text-gray-800 hover:bg-gray-50"
+                      ${responsablesIds.includes(u.id)
+                        ? "bg-amber-100 text-amber-900 font-semibold"
+                        : "text-gray-800 hover:bg-gray-50"
                       }
                     `}
                   >
@@ -749,25 +761,22 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                           border text-sm font-semibold cursor-pointer transition-all
                           ${loading ? "opacity-50 cursor-not-allowed" : ""}
                           
-                          ${
-                            p.value === "ALTA" &&
-                            `
+                          ${p.value === "ALTA" &&
+                          `
                               border-gray-300 bg-gray-50 text-gray-700
                               peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600
                               ${!loading && "hover:bg-red-100"}
                             `
                           }
-                          ${
-                            p.value === "MEDIA" &&
-                            `
+                          ${p.value === "MEDIA" &&
+                          `
                               border-gray-300 bg-gray-50 text-gray-700
                               peer-checked:bg-amber-400 peer-checked:text-white peer-checked:border-amber-400
                               ${!loading && "hover:bg-amber-100"}
                             `
                           }
-                          ${
-                            p.value === "BAJA" &&
-                            `
+                          ${p.value === "BAJA" &&
+                          `
                               border-gray-300 bg-gray-50 text-gray-700
                               peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-600
                               ${!loading && "hover:bg-blue-100"}
@@ -804,10 +813,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   disabled={loading}
                   min={formatDateToInput(new Date())}
                   className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
-                    ${
-                      submitted && !getSelectedDate()
-                        ? "border-red-500"
-                        : "border-gray-300"
+                    ${submitted && !getSelectedDate()
+                      ? "border-red-500"
+                      : "border-gray-300"
                     }
                   `}
                 />
@@ -834,10 +842,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                     disabled={loading}
                     required
                     className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-700 focus:outline-none
-                      ${
-                        submitted && fechaHaCambiado && !motivoCambio
-                          ? "border-red-500"
-                          : "border-gray-300"
+                      ${submitted && fechaHaCambiado && !motivoCambio
+                        ? "border-red-500"
+                        : "border-gray-300"
                       }`}
                   >
                     <option value="" disabled>
@@ -872,9 +879,8 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className={`${
-                loading ? "opacity-70 cursor-not-allowed" : "hover:bg-green-700"
-              } bg-green-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
+              className={`${loading ? "opacity-70 cursor-not-allowed" : "hover:bg-green-700"
+                } bg-green-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
             >
               {loading ? "Actualizando..." : "Guardar Cambios"}
             </button>
