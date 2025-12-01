@@ -1,129 +1,137 @@
 import express from "express";
 import "dotenv/config";
 import cors from "cors";
-import path from "path"; // 👈 Importante para las rutas de archivos
-import { fileURLToPath } from "url"; // 👈 Importante para el fix de __dirname
+import path from "path";
+import { fileURLToPath } from "url";
 import tareasRouter from "./routes/tareas.js";
 import authRouter from "./routes/auth.js";
 import usuariosRouter from "./routes/usuarios.js";
 import departamentosRouter from "./routes/departamentos.js";
-import { iniciarCronJobs } from "./services/cron.service.js"; 
+import { iniciarCronJobs } from "./services/cron.service.js";
 
 // ----------------------------------------------------
-// 💡 CORRECCIÓN ESM: Definir __dirname en el ámbito de ES Modules
+// ⚙️ CONFIGURACIÓN INICIAL
 // ----------------------------------------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// ----------------------------------------------------
-
 const app = express();
 const PORT = 3000;
 
-// 🔹 Configuración CORS MEJORADA (Mantenida)
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) {
-        console.log("✅ CORS: Request sin origin (Postman/curl)");
-        return callback(null, true);
-      } // Lista de orígenes permitidos
-      const allowedOrigins = [
-        "https://tareas-calidad-mbc.mbc-bitacoras.me",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4173",
-        "http://127.0.0.1:4173",
-        "http://200.1.0.72:5173",
-        "http://200.1.0.72:4173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://200.1.0.72:5173",
-        "http://10.0.2.2:5173",
-      ]; // Lógica de permisos mejorada
+// ----------------------------------------------------
+// 🛠️ UTILIDADES DE LOGGING (PROFESIONAL)
+// ----------------------------------------------------
+const obtenerFecha = () => {
+  return new Date().toLocaleString('es-MX', { 
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false 
+  });
+};
 
-      const isAllowed =
-        allowedOrigins.includes(origin) ||
-        origin.startsWith("http://200.1.") ||
-        origin.startsWith("http://localhost") ||
-        origin.startsWith("http://127.0.0.1") ||
-        origin.startsWith("http://192.168.") || // Redes locales
-        origin.includes(":5173") || // Cualquier puerto 5173
-        origin.includes(":4173"); // Cualquier puerto 4173
-      if (isAllowed) {
-        console.log(`✅ CORS permitido para: ${origin}`);
-        callback(null, true);
-      } else {
-        console.log(`❌ CORS bloqueado para: ${origin}`);
-        callback(new Error("No permitido por CORS"));
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
-  })
-);
+// TRADUCTOR DE RUTAS: Convierte URLs técnicas en lenguaje de negocio
+const interpretarSolicitud = (method: string, url: string): string => {
+  // TAREAS
+  const idTarea = url.match(/\/api\/tareas\/(\d+)/)?.[1];
+  if (url.includes('/entregar') && method === 'POST') return `🚀 Entregando Tarea #${idTarea}`;
+  if (url.includes('/misTareas')) return "📋 Usuario consultando sus pendientes";
+  if (url.includes('/api/tareas') && method === 'POST') return "✨ Creando nueva Tarea";
+  if (url.includes('/api/tareas') && method === 'GET' && !idTarea) return "🗂️ Listando todas las Tareas";
+  if (url.includes('/api/tareas') && method === 'GET' && idTarea) return `🔍 Viendo detalle Tarea #${idTarea}`;
+  
+  // USUARIOS & NOTIFICACIONES
+  const idUsuario = url.match(/\/api\/usuarios\/(\d+)/)?.[1];
+  if (url.includes('/subscribe')) return `🔔 Usuario #${idUsuario} activando notificaciones`;
+  if (url.includes('/api/usuarios') && method === 'GET') return "👥 Listando personal";
 
-// 🔹 Middleware para logging de requests
+  // AUTH
+  if (url.includes('/login')) return "🔑 Inicio de Sesión";
+  if (url.includes('/verify')) return "👤 Verificación de Token (Auto-login)";
+
+  return "⚡ Operación General del Sistema";
+};
+
+// ----------------------------------------------------
+// 🔹 CONFIGURACIÓN CORS (SILENCIOSA)
+// ----------------------------------------------------
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const allowedOrigins = [
+      "https://tareas-calidad-mbc.mbc-bitacoras.me",
+      "http://localhost:5173", "http://127.0.0.1:5173",
+      "http://localhost:3000", "http://127.0.0.1:3000",
+      "http://200.1.0.72:5173", "http://10.0.2.2:5173"
+    ];
+    // Lógica laxa para subredes locales
+    const isAllowed = allowedOrigins.includes(origin) || 
+                      origin.startsWith("http://192.168.") || 
+                      origin.startsWith("http://200.1.") ||
+                      origin.includes(":5173");
+
+    if (isAllowed) callback(null, true);
+    else {
+      console.error(`[${obtenerFecha()}] ⛔ BLOQUEO CORS: IP ${origin} no autorizada`);
+      callback(new Error("No permitido por CORS"));
+    }
+  },
+  credentials: true
+}));
+
+// ----------------------------------------------------
+// 🧠 MIDDLEWARE INTERCEPTOR (LOGS COMPLETOS)
+// ----------------------------------------------------
 app.use((req, res, next) => {
-  console.log(
-    `📥 ${req.method} ${req.path} from ${req.headers.origin || "direct"}`
-  );
+  const start = Date.now(); // Marca de tiempo inicial
+
+  // 1. FILTRO DE BASURA (No loguear imágenes ni JS estático)
+  const ignorar = ['.js', '.css', '.png', '.jpg', '.webp', '.svg', '.ico', '.map', 'json'];
+  const esBasura = ignorar.some(ext => req.path.endsWith(ext));
+  const esSalud = req.path.includes('health') || req.path.includes('sw.js');
+
+  if (esBasura || esSalud) return next();
+
+  // 2. LOG DE ENTRADA (REQUEST)
+  const fecha = obtenerFecha();
+  const historia = interpretarSolicitud(req.method, req.path);
+  const origen = req.headers.origin ? "🌐 WEB" : "📱 APP";
+  
+  console.log(`[${fecha}] 📥 ${origen} | ${historia.padEnd(40)} | Solicitando: ${req.path}`);
+
+  // 3. LOG DE SALIDA (RESPONSE - Se ejecuta cuando termina la petición)
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const status = res.statusCode;
+    
+    // Icono según el estatus
+    let icon = '🟢';
+    if (status >= 400) icon = '⚠️'; // Error de cliente (400, 401, 404)
+    if (status >= 500) icon = '🔥'; // Error de servidor (500)
+
+    console.log(`[${obtenerFecha()}] ${icon} FIN | Estatus: ${status} ${res.statusMessage || ''} | Tiempo: ${duration}ms`);
+    if(status >= 400) console.log('---------------------------------------------------------------');
+  });
+
   next();
 });
 
-// 🔹 Middleware para JSON
+// 🔹 JSON y Archivos
 app.use(express.json());
-
-// 🔽 =================== LÍNEA AÑADIDA =================== 🔽
-// 🔹 Servir la carpeta de 'uploads' estáticamente
-// Esto permite que /uploads/imagen.png sea accesible desde el frontend
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-// 🔼 ======================================================== 🔼
 
 // ----------------------------------------------------------------------
-// 🚀 BLOQUE CLAVE: UNIFICACIÓN DE PRODUCCIÓN (Sirve el Frontend)
+// 🚀 SERVIR FRONTEND
 // ----------------------------------------------------------------------
-
-// Ruta: /backend/src -> subir 2 niveles (..) -> /frontend/dist
 const FRONTEND_PATH = path.join(__dirname, "..", "..", "frontend", "dist");
-
-// 1. Servir archivos estáticos (CSS, JS, imágenes, etc.)
 app.use(express.static(FRONTEND_PATH));
-
-// 2. Fallback: Sirve index.html para todas las rutas que no son API
 app.get("*", (req, res, next) => {
-  // Si la solicitud NO empieza con /api, la consideramos una ruta de React (frontend)
-  if (!req.path.startsWith("/api")) {
-    console.log(`📡 Sirviendo frontend (ruta no-API): ${req.path}`);
-    return res.sendFile(path.join(FRONTEND_PATH, "index.html"));
-  }
-  // Si es /api, permite que pase a tus rutas de Express
+  if (!req.path.startsWith("/api")) return res.sendFile(path.join(FRONTEND_PATH, "index.html"));
   next();
 });
 
 // ----------------------------------------------------------------------
-// FIN BLOQUE CLAVE
+// RUTAS API
 // ----------------------------------------------------------------------
-
-// 🔹 Rutas de salud para testing
-app.get("/api/health", (req, res) => {
-  res.json({
-    status: "OK",
-    message: "Servidor funcionando ✅",
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || "development",
-    database: "Producción - Servidor",
-  });
-});
-
-app.get("/api/auth/test", (req, res) => {
-  res.json({
-    message: "Auth endpoint funcionando",
-    database: "Producción - Servidor",
-  });
-});
-
-// 🔹 Rutas principales
+app.get("/api/health", (req, res) => res.json({ status: "OK" }));
 app.use("/api/auth", authRouter);
 app.use("/api/tareas", tareasRouter);
 app.use("/api/usuarios", usuariosRouter);
@@ -131,21 +139,36 @@ app.use("/api/departamentos", departamentosRouter);
 
 iniciarCronJobs();
 
-// 🔹 Manejo de errores global
+// ----------------------------------------------------------------------
+// 🔥 MANEJO DE ERRORES DETALLADO
+// ----------------------------------------------------------------------
 app.use((err: any, req: any, res: any, next: any) => {
-  console.error("🔥 Error global:", err.message);
-  if (err.message === "No permitido por CORS") {
-    return res.status(403).json({ error: "Acceso no permitido por CORS" });
-  }
-  res.status(500).json({ error: "Error interno del servidor" });
+  const fecha = obtenerFecha();
+  
+  // Identificar el tipo de error para dar un mensaje claro
+  let tipoError = "Error Desconocido";
+  let codigo = 500;
+
+  if (err.code === 'P2002') { tipoError = "Violación de Unicidad (Datos duplicados en BD)"; codigo = 409; }
+  else if (err.code === 'P2025') { tipoError = "Registro no encontrado en BD"; codigo = 404; }
+  else if (err.name === 'ZodError') { tipoError = "Datos de formulario inválidos"; codigo = 400; }
+  else if (err.message === "No permitido por CORS") { tipoError = "Bloqueo de Seguridad"; codigo = 403; }
+
+  // LOG VISUAL PARA EL SERVIDOR
+  console.error(`\n❌ [${fecha}] ERROR CRÍTICO DETECTADO`);
+  console.error(`   📌 Tipo: ${tipoError}`);
+  console.error(`   📂 Ruta: ${req.method} ${req.path}`);
+  console.error(`   🛑 Mensaje: ${err.message}`);
+  if (err.stack) console.error(`   💻 Stack: ${err.stack.split('\n')[1].trim()}`); // Solo la primera línea del stack
+  console.error('---------------------------------------------------------------\n');
+
+  // RESPUESTA AL CLIENTE
+  res.status(codigo).json({ 
+    error: true, 
+    message: tipoError === "Error Desconocido" ? "Error interno del servidor" : err.message 
+  });
 });
 
-// 🔹 Levantar servidor en todas las interfaces de red
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🎯 Servidor de PRODUCCIÓN corriendo en:`);
-  console.log(`    → http://localhost:${PORT}`);
-  console.log(`    → http://127.0.0.1:${PORT}`);
-  console.log(`    → http://200.1.0.72:${PORT}`);
-  console.log(`    → Y accesible desde cualquier IP de la red`);
-  console.log(`📊 Base de datos: Producción - Servidor`);
+  console.log(`\n[${obtenerFecha()}] 🚀 SISTEMA MONITORIZADO Y LISTO EN PUERTO ${PORT}\n`);
 });
