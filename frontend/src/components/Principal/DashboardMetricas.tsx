@@ -214,7 +214,7 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
     });
 
     const topMotivos = Object.entries(contadores.motivos).sort(([, a], [, b]) => b - a).slice(0, 5);
-    const rankingUsuarios = Object.values(userMap).sort((a, b) => b.total - a.total).slice(0, 8);
+    const rankingUsuarios = Object.values(userMap).sort((a, b) => b.total - a.total);
 
     return { contadores, topMotivos, rankingUsuarios, listaVencidas, listaProximas };
 
