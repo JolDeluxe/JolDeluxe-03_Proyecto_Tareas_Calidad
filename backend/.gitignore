@@ -5,3 +5,11 @@ node_modules/
 /generated/prisma
 # Archivos de usuario
 /uploads/
+
+# TypeScript build artifacts
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+
+!src/types/**/*.d.ts

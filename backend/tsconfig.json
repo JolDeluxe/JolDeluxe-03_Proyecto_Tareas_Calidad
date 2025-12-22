@@ -43,5 +43,5 @@
     "skipLibCheck": true
   },
   "exclude": ["node_modules"],
-  "include": ["src"] // 👈 CAMBIO: Solo incluir "src"
+  "include": ["src"]
 }
