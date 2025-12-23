@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // 1. IMPORTAR CONFIGURACIONES Y MIDDLEWARES
-import { envs } from "./config/envs.js";          
+import { envs } from "./config/envs.js";           
 import { corsConfig } from "./config/cors.js";    
 import { requestLogger } from "./middleware/requestLogger.js"; 
 import { errorHandler } from "./middleware/errorHandler.js";   
@@ -16,6 +16,7 @@ import tareasRouter from "./modules/tareas/tareas.routes.js";
 import authRouter from "./modules/auth/auth.routes.js";
 import usuariosRouter from "./modules/usuarios/usuarios.routes.js";
 import departamentosRouter from "./modules/departamentos/departamentos.routes.js";
+import logsRouter from "./modules/logs/logs.routes.js"; // <--- 1. NUEVA IMPORTACIÓN
 
 // --- CONFIGURACIÓN INICIAL ---
 const __filename = fileURLToPath(import.meta.url);
@@ -38,6 +39,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/tareas", tareasRouter);
 app.use("/api/usuarios", usuariosRouter);
 app.use("/api/departamentos", departamentosRouter);
+app.use("/api/logs", logsRouter); // <--- 2. NUEVA RUTA REGISTRADA
 
 // --- FALLBACK PARA SPA (Cualquier otra ruta va al index.html) ---
 app.get("*", (req, res, next) => {

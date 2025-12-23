@@ -3,13 +3,19 @@ import { prisma } from "../../../config/db.js";
 import { safeAsync } from "../../../utils/safeAsync.js"; 
 import { paramsSchema } from "../schemas/tarea.schema.js";
 import { uploadImageBuffer } from "../../../utils/cloudinaryUtils.js"; 
+import { registrarBitacora } from "../../../services/logger.service.js"; // <--- NUEVO
 
 export const subirImagen = safeAsync(async (req: Request, res: Response) => {
   const { id } = paramsSchema.parse(req.params);
   const tareaId = Number(id);
   const user = req.user!;
 
-  const tarea = await prisma.tarea.findUnique({ where: { id: tareaId } });
+  // MODIFICADO: Incluimos departamento para el log
+  const tarea = await prisma.tarea.findUnique({ 
+    where: { id: tareaId },
+    include: { departamento: { select: { nombre: true } } } 
+  });
+
   if (!tarea) return res.status(404).json({ error: "Tarea no encontrada" });
 
   // Permisos básicos
@@ -27,24 +33,36 @@ export const subirImagen = safeAsync(async (req: Request, res: Response) => {
   }
 
   // --- OPTIMIZACIÓN Y SUBIDA ---
-  // IMPORTANTE: Usamos la misma carpeta "tareas-calidad" que en el eliminar
   const promesasDeSubida = files.map(file => 
     uploadImageBuffer(file.buffer, "tareas-calidad") 
   );
 
+  // Si Cloudinary falla, safeAsync atrapará el error aquí
   const resultados = await Promise.all(promesasDeSubida);
 
   // Preparamos los datos para Prisma
-  // CORRECCIÓN: Quitamos 'publicId' porque no existe en tu tabla ImagenTarea
   const imagenesData = resultados.map(result => ({
     url: result.secure_url,
-    // publicId: result.public_id, <--- ELIMINADO PARA EVITAR ERROR
     tareaId: tareaId,
   }));
 
   // Guardamos en Base de Datos
   const resultadoBD = await prisma.imagenTarea.createMany({ data: imagenesData });
   
+  // --- LOG DE BITÁCORA ---
+  await registrarBitacora(
+    "ACTUALIZAR_TAREA",
+    `${user.nombre} subió ${resultadoBD.count} imagen(es) a la tarea "${tarea.tarea}".`,
+    user.id,
+    { 
+        tareaId, 
+        departamento: tarea.departamento.nombre,
+        imagenesSubidas: resultadoBD.count,
+        urls: imagenesData.map(img => img.url) // Guardamos las URLs por seguridad
+    }
+  );
+  // -----------------------
+
   res.status(201).json({
     message: "Imágenes optimizadas y subidas",
     count: resultadoBD.count,

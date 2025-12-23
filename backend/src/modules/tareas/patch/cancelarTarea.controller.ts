@@ -4,6 +4,7 @@ import { safeAsync } from "../../../utils/safeAsync.js";
 import { paramsSchema } from "../schemas/tarea.schema.js";
 import { tareaConRelacionesInclude } from "../helpers/prisma.constants.js";
 import { sendNotificationToUsers } from "../helpers/notificaciones.helper.js";
+import { registrarBitacora } from "../../../services/logger.service.js"; 
 
 export const cancelarTarea = safeAsync(async (req: Request, res: Response) => {
   const { id: tareaId } = paramsSchema.parse(req.params);
@@ -11,7 +12,10 @@ export const cancelarTarea = safeAsync(async (req: Request, res: Response) => {
 
   const tarea = await prisma.tarea.findUnique({
     where: { id: tareaId },
-    include: { responsables: { select: { usuarioId: true } } },
+    include: { 
+        responsables: { select: { usuarioId: true } },
+        departamento: { select: { nombre: true } } // Obtenemos Depto
+    },
   });
 
   if (!tarea) return res.status(404).json({ error: "Tarea no encontrada" });
@@ -31,6 +35,20 @@ export const cancelarTarea = safeAsync(async (req: Request, res: Response) => {
 
   const ids = tarea.responsables.map((r) => r.usuarioId);
   sendNotificationToUsers(ids, `Tarea Cancelada`, `"${tarea.tarea}" ha sido CANCELADA.`, `/admin`);
+
+  // --- LOG BITÁCORA (Con Departamento) ---
+  await registrarBitacora(
+    "CAMBIO_ESTATUS",
+    `${user.nombre} CANCELÓ la tarea "${tarea.tarea}" (ID: ${tareaId}).`,
+    user.id,
+    { 
+        tareaId, 
+        departamento: tarea.departamento.nombre,
+        estatusAnterior: tarea.estatus, 
+        estatusNuevo: "CANCELADA" 
+    }
+  );
+  // ------------------------------------------
 
   res.json({ ...tareaActualizada, responsables: tareaActualizada.responsables.map((r) => r.usuario) });
 });

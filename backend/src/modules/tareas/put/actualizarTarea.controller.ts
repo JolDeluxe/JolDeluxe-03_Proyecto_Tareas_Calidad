@@ -4,6 +4,7 @@ import { safeAsync } from "../../../utils/safeAsync.js";
 import { paramsSchema, actualizarTareaSchema } from "../schemas/tarea.schema.js";
 import { tareaConRelacionesInclude } from "../helpers/prisma.constants.js";
 import { sendNotificationToUsers } from "../helpers/notificaciones.helper.js";
+import { registrarBitacora } from "../../../services/logger.service.js"; 
 
 export const actualizarTarea = safeAsync(async (req: Request, res: Response) => {
   // 1. Validar ID y Body
@@ -23,6 +24,7 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
     include: {
       responsables: { select: { usuarioId: true } },
       asignador: { select: { id: true, rol: true } },
+      departamento: { select: { nombre: true } } // Obtenemos Depto
     },
   });
 
@@ -47,8 +49,8 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
 
   // 5. Preparar actualización
   const dataParaActualizar: any = { ...validatedBody };
-  delete dataParaActualizar.responsables; // Lo manejamos aparte
-  delete dataParaActualizar.departamentoId; // Lo manejamos aparte
+  delete dataParaActualizar.responsables; 
+  delete dataParaActualizar.departamentoId; 
 
   // Cambio de Estatus
   if (validatedBody.estatus) {
@@ -66,7 +68,9 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
   }
 
   // Cambio de Responsables (Transacción)
+  let nuevosResponsablesIds: number[] = [];
   if (validatedBody.responsables) {
+    nuevosResponsablesIds = validatedBody.responsables; // Guardamos para usar en notificaciones
     // Validar jerarquía aquí si es necesario (similar a crearTarea)
     dataParaActualizar.responsables = {
       deleteMany: {},
@@ -81,13 +85,55 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
     include: tareaConRelacionesInclude,
   });
 
-  // 7. Notificar si hubo cambio de estatus importante
+  // 7. Notificaciones y Logs (MEJORADA)
+  
+  // A. Si se asignaron NUEVOS responsables
+  if (nuevosResponsablesIds.length > 0) {
+     sendNotificationToUsers(
+        nuevosResponsablesIds, 
+        "🆕 Nueva Tarea Asignada", 
+        `Se te ha asignado la tarea: "${tareaActualizada.tarea}".`,
+        `/tarea/${tareaId}`
+     );
+
+     // LOG Reasignación (Con Depto)
+     await registrarBitacora(
+       "ACTUALIZAR_TAREA",
+       `${user.nombre} re-asignó responsables en la tarea "${tareaActualizada.tarea}".`,
+       user.id,
+       { 
+           tareaId, 
+           departamento: tareaExistente.departamento.nombre,
+           nuevosResponsables: nuevosResponsablesIds 
+       }
+     );
+  }
+
+  // B. Notificar cambio de estatus (Solo si NO es una reasignación masiva)
   if (validatedBody.estatus && validatedBody.estatus !== tareaExistente.estatus) {
-    const ids = tareaExistente.responsables.map(r => r.usuarioId);
-    if (ids.length > 0) {
+    const ids = tareaActualizada.responsables.map(r => r.usuario.id);
+    
+    const idsAFiltrar = nuevosResponsablesIds.length > 0 
+        ? ids.filter(id => !nuevosResponsablesIds.includes(id)) 
+        : ids;
+
+    if (idsAFiltrar.length > 0) {
       const titulo = validatedBody.estatus === "CONCLUIDA" ? "Tarea Concluida" : "Tarea Actualizada";
-      sendNotificationToUsers(ids, titulo, `La tarea "${tareaActualizada.tarea}" ahora está ${validatedBody.estatus}`, "/mis-tareas");
+      sendNotificationToUsers(idsAFiltrar, titulo, `La tarea "${tareaActualizada.tarea}" ahora está ${validatedBody.estatus}`, "/mis-tareas");
     }
+
+    // LOG Cambio Estatus (Con Depto)
+    await registrarBitacora(
+       "CAMBIO_ESTATUS",
+       `${user.nombre} cambió el estatus de "${tareaActualizada.tarea}" a ${validatedBody.estatus}.`,
+       user.id,
+       { 
+           tareaId, 
+           departamento: tareaExistente.departamento.nombre,
+           anterior: tareaExistente.estatus, 
+           nuevo: validatedBody.estatus 
+       }
+     );
   }
 
   res.json({ ...tareaActualizada, responsables: tareaActualizada.responsables.map(r => r.usuario) });

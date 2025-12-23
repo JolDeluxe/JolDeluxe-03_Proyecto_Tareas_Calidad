@@ -1,12 +1,12 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../../config/db.js";
 import { safeAsync } from "../../../utils/safeAsync.js";
-import { crearTareaSchema } from "../schemas/tarea.schema.js"; // Solo el schema
+import { crearTareaSchema } from "../schemas/tarea.schema.js"; 
 import { 
-  tareaConRelacionesInclude, 
-  type TareaConRelaciones 
+  tareaConRelacionesInclude 
 } from "../helpers/prisma.constants.js";
 import { sendNotificationToUsers } from "../helpers/notificaciones.helper.js";
+import { registrarBitacora } from "../../../services/logger.service.js"; 
 
 export const crearTarea = safeAsync(async (req: Request, res: Response) => {
   const user = req.user!;
@@ -30,7 +30,7 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
   // Verificar existencia de responsables
   const usuariosResponsables = await prisma.usuario.findMany({
     where: { id: { in: responsables }, estatus: "ACTIVO" },
-    select: { id: true, rol: true, departamentoId: true },
+    select: { id: true, rol: true, departamentoId: true, nombre: true }, 
   });
 
   if (usuariosResponsables.length !== responsables.length) {
@@ -46,7 +46,6 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
       
       if (!valido) return res.status(403).json({ error: `No puedes asignar al usuario ID ${responsable.id} por reglas de jerarquía.` });
     }
-    // ... Agregar lógica de ENCARGADO si es necesario
   }
 
   // 3. Ajuste de fecha (Final del día)
@@ -66,17 +65,34 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
         create: responsables.map((id) => ({ usuario: { connect: { id } } })),
       },
     },
-    include: tareaConRelacionesInclude, // 👈 Reutilizado
+    // Incluimos el departamento explícitamente para el log
+    include: {
+        ...tareaConRelacionesInclude,
+        departamento: { select: { nombre: true } }
+    },
   });
 
   // 5. Notificar
-  // No usamos 'await' bloqueante para responder rápido
   sendNotificationToUsers(
     responsables,
     `Nueva Tarea: ${nuevaTarea.tarea}`,
     `Asignada por ${user.nombre}`,
     `/admin`
   );
+
+  // --- LOG DE BITÁCORA (Con Departamento) ---
+  const nombresAsignados = usuariosResponsables.map(u => u.nombre).join(", ");
+  await registrarBitacora(
+    "CREAR_TAREA",
+    `${user.nombre} creó la tarea "${nuevaTarea.tarea}" y la asignó a: ${nombresAsignados}.`,
+    user.id,
+    { 
+        tareaId: nuevaTarea.id, 
+        departamento: nuevaTarea.departamento.nombre,
+        responsablesIds: responsables 
+    }
+  );
+  // ------------------------------------------
 
   // 6. Respuesta limpia
   const tareaLimpia = {

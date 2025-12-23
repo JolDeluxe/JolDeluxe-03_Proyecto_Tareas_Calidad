@@ -3,6 +3,7 @@ import { prisma } from "../../../config/db.js";
 import { safeAsync } from "../../../utils/safeAsync.js";
 import { paramsSchema, revisionTareaSchema } from "../schemas/tarea.schema.js";
 import { sendNotificationToUsers } from "../helpers/notificaciones.helper.js";
+import { registrarBitacora } from "../../../services/logger.service.js"; 
 
 export const revisionTarea = safeAsync(async (req: Request, res: Response) => {
   const { id: tareaId } = paramsSchema.parse(req.params);
@@ -14,7 +15,10 @@ export const revisionTarea = safeAsync(async (req: Request, res: Response) => {
 
   const tarea = await prisma.tarea.findUnique({
     where: { id: tareaId },
-    include: { responsables: { select: { usuarioId: true } } },
+    include: { 
+        responsables: { select: { usuarioId: true } },
+        departamento: { select: { nombre: true } } // Obtenemos Depto
+    },
   });
 
   if (!tarea) return res.status(404).json({ error: "Tarea no encontrada" });
@@ -42,7 +46,21 @@ export const revisionTarea = safeAsync(async (req: Request, res: Response) => {
         feedbackRevision: feedback ?? "Aprobada.",
       },
     });
+    
     sendNotificationToUsers(ids, "✅ Tarea Aprobada", `Tu entrega de "${tarea.tarea}" fue validada.`, `/mis-tareas`);
+    
+    // LOG APROBACIÓN (Con Departamento)
+    await registrarBitacora(
+      "ACTUALIZAR_TAREA",
+      `Tarea "${tarea.tarea}" APROBADA por ${user.nombre}.`,
+      user.id,
+      { 
+          tareaId, 
+          departamento: tarea.departamento.nombre,
+          decision, 
+          feedback 
+      }
+    );
   
   } else {
     // RECHAZO
@@ -68,7 +86,22 @@ export const revisionTarea = safeAsync(async (req: Request, res: Response) => {
         ...(nuevaFechaLimite && { fechaLimite: nuevaFechaLimite }),
       },
     });
+
     sendNotificationToUsers(ids, "⚠️ Tarea Rechazada", `Se requiere corrección: ${feedback}`, `/mis-tareas`);
+
+    // LOG RECHAZO (Con Departamento)
+    await registrarBitacora(
+      "ACTUALIZAR_TAREA",
+      `Tarea "${tarea.tarea}" RECHAZADA por ${user.nombre}. Motivo: ${feedback}`,
+      user.id,
+      { 
+          tareaId, 
+          departamento: tarea.departamento.nombre,
+          decision, 
+          feedback, 
+          nuevaFecha: nuevaFechaLimite 
+      }
+    );
   }
 
   res.json({ message: `Tarea ${decision}`, tarea: tareaActualizada });

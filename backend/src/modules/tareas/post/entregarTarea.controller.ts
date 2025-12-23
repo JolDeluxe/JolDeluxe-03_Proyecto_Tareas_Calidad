@@ -3,7 +3,8 @@ import { prisma } from "../../../config/db.js";
 import { safeAsync } from "../../../utils/safeAsync.js";
 import { paramsSchema } from "../schemas/tarea.schema.js";
 import { sendNotificationToUsers } from "../helpers/notificaciones.helper.js";
-import { uploadImageBuffer } from "../../../utils/cloudinaryUtils.js"; // Importamos la optimización
+import { uploadImageBuffer } from "../../../utils/cloudinaryUtils.js"; 
+import { registrarBitacora } from "../../../services/logger.service.js"; 
 
 export const entregarTarea = safeAsync(async (req: Request, res: Response) => {
   const { id: tareaId } = paramsSchema.parse(req.params);
@@ -11,43 +12,42 @@ export const entregarTarea = safeAsync(async (req: Request, res: Response) => {
 
   const tarea = await prisma.tarea.findUnique({
     where: { id: tareaId },
-    include: { responsables: { select: { usuarioId: true } } },
+    include: { 
+        responsables: { select: { usuarioId: true } },
+        departamento: { select: { nombre: true } } // Obtenemos Depto para el log
+    },
   });
 
   if (!tarea) return res.status(404).json({ error: "Tarea no encontrada" });
 
-  // Validar si es responsable o SuperAdmin (Tu lógica original)
+  // Validar si es responsable o SuperAdmin
   const esResponsable = tarea.responsables.some((r) => r.usuarioId === user.id);
   if (!esResponsable && user.rol !== "SUPER_ADMIN") {
     return res.status(403).json({ error: "No puedes entregar esta tarea." });
   }
 
-  // Validación estricta de estatus (Tu lógica original para evitar el error de TS)
+  // Validación estricta de estatus
   if (tarea.estatus !== "PENDIENTE") {
     return res.status(400).json({ error: `No se puede entregar. Estatus actual: ${tarea.estatus}` });
   }
 
-  // --- AQUÍ ESTÁ EL CAMBIO (OPTIMIZACIÓN) ---
+  // --- OPTIMIZACIÓN IMÁGENES ---
   let imagenesData: any[] = [];
-  const files = req.files as Express.Multer.File[]; // Multer en memoria devuelve esto
+  const files = req.files as Express.Multer.File[]; 
 
   if (files && files.length > 0) {
-    // 1. Enviamos cada archivo a optimizar y subir
     const promesasSubida = files.map(file => 
       uploadImageBuffer(file.buffer, "tareas-calidad")
     );
 
-    // 2. Esperamos a que todas se procesen
     const resultados = await Promise.all(promesasSubida);
 
-    // 3. Preparamos datos para la BD
     imagenesData = resultados.map(result => ({
       url: result.secure_url,
-      // publicId omitido porque no tienes la columna
       tareaId: tareaId,
     }));
   }
-  // --------------------------------------------
+  // ----------------------------
 
   const comentario = req.body.comentarioEntrega || "Tarea marcada como entregada.";
 
@@ -66,7 +66,7 @@ export const entregarTarea = safeAsync(async (req: Request, res: Response) => {
     });
   });
 
-  // Notificación (Tu lógica original)
+  // Notificación
   if (tarea.asignadorId) {
     sendNotificationToUsers(
         [tarea.asignadorId], 
@@ -75,6 +75,20 @@ export const entregarTarea = safeAsync(async (req: Request, res: Response) => {
         `/admin`
     );
   }
+
+  // --- LOG DE BITÁCORA (Con Departamento) ---
+  await registrarBitacora(
+    "CAMBIO_ESTATUS",
+    `${user.nombre} marcó como ENTREGADA la tarea "${tarea.tarea}". Esperando revisión.`,
+    user.id,
+    { 
+        tareaId, 
+        departamento: tarea.departamento.nombre,
+        evidencias: imagenesData.length, 
+        comentario 
+    }
+  );
+  // ------------------------------------------
 
   res.json({ message: "Enviada a revisión", tarea: tareaActualizada });
 });
