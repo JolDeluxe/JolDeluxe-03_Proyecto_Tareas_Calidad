@@ -1,21 +1,15 @@
-// 📍 src/components/layout/HeaderMobile.tsx
-
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-// 1. Importar los tipos Usuario y Rol
 import type { Usuario } from "../../types/usuario";
 import { Rol } from "../../types/usuario";
 
-// 2. Definir la interfaz de props que recibe
 interface HeaderMobileProps {
   user: Usuario | null;
 }
 
-// 3. Aceptar 'user' como prop y cambiar el tipo de React.FC
 const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  // 4. 'isLoggedIn' se elimina, usaremos 'user'
   const location = useLocation();
 
   const handleLogout = () => {
@@ -24,18 +18,43 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
     navigate("/login");
   };
 
-  // 5. Función para verificar si se muestra el link de Admin (con corrección de TS)
   const puedeVerAdmin = () => {
     if (!user) return false;
-    // Definimos el tipo del array para TypeScript
-    const rolesPermitidos: Rol[] = [Rol.SUPER_ADMIN, Rol.ADMIN, Rol.ENCARGADO];
+    const rolesPermitidos: Rol[] = [Rol.ADMIN, Rol.ENCARGADO];
     return rolesPermitidos.includes(user.rol);
   };
+
+  const getMenuItems = () => {
+    if (!user) return [];
+
+    // Menú exclusivo para SUPER_ADMIN
+    if (user.rol === "SUPER_ADMIN") {
+      return [
+        { to: "/super-admin", label: "Panel Maestro" },
+        { to: "/super-admin?tab=DEPTOS", label: "Departamento" },
+        { to: "/super-admin?tab=USUARIOS", label: "Usuarios" },
+        { to: "/super-admin?tab=LOGS", label: "Terminal" },
+      ];
+    }
+
+    // Menú para el resto de roles
+    const items = [
+      { to: "/pendientes", label: "Pendientes" },
+      { to: "/todas", label: "Todas" },
+    ];
+
+    if (puedeVerAdmin()) {
+      items.push({ to: "/admin", label: "Administrar Tareas" });
+    }
+
+    return items;
+  };
+
+  const menuItems = getMenuItems();
 
   return (
     <nav>
       <div className="relative flex items-center justify-between px-4 py-1 md:py-3">
-        {/* Logo centrado */}
         <div className="absolute left-1/2 transform -translate-x-1/2">
           <img
             src="/img/01_Cuadra.webp"
@@ -44,7 +63,6 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
           />
         </div>
 
-        {/* Botón hamburguesa */}
         <button
           onClick={() => setOpen(!open)}
           className="z-50 p-2 focus:outline-none"
@@ -71,7 +89,6 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
         )}
       </div>
 
-      {/* Menú desplegable */}
       {open && (
         <div
           className="flex flex-col bg-white/80 backdrop-blur-xl border-t border-amber-100 
@@ -79,26 +96,9 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
             animate-slide-down transition-all duration-300 z-50
             p-3 space-y-1"
         >
-          {[
-            {
-              to: "/pendientes",
-              label: "Pendientes",
-            },
-            {
-              to: "/todas",
-              label: "Todas",
-            },
-            // 7. Lógica de menú condicional basada en 'user' y su rol
-            ...(user && puedeVerAdmin()
-              ? [
-                  {
-                    to: "/admin",
-                    label: "Administrar",
-                  },
-                ]
-              : []),
-          ].map(({ to, label }) => {
-            const isActive = location.pathname === to;
+          {menuItems.map(({ to, label }) => {
+            const isActive = location.pathname + location.search === to;
+
             return (
               <Link
                 key={to}
@@ -108,10 +108,9 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
                   px-4 py-3 rounded-lg 
                   text-base font-semibold tracking-wide
                   transition-colors duration-200 active:scale-[0.98]
-                  ${
-                    isActive
-                      ? "text-amber-900 bg-amber-100"
-                      : "text-gray-700 hover:bg-gray-100"
+                  ${isActive
+                    ? "text-amber-900 bg-amber-100"
+                    : "text-gray-700 hover:bg-gray-100"
                   }`}
               >
                 <span>{label}</span>
@@ -119,10 +118,8 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
             );
           })}
 
-          {/* Separador */}
           <hr className="my-2 border-gray-200/60" />
 
-          {/* 8. Botón de logout condicional (solo si 'user' existe) */}
           {user && (
             <button
               onClick={() => {

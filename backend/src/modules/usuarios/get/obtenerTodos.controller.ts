@@ -20,7 +20,7 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
 
   const where: Prisma.UsuarioWhereInput = {
     estatus: estatus ?? "ACTIVO",
-    rol: { not: "INVITADO" },
+    // rol: { not: "INVITADO" },  <-- Si quieres ver a TODOS, comenta esto.
   };
 
   const andClauses: Prisma.UsuarioWhereInput[] = [];
@@ -55,7 +55,15 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
   const usuarios = await prisma.usuario.findMany({
     where: where,
     select: {
-      id: true, nombre: true, username: true, rol: true, estatus: true, fechaCreacion: true,
+      id: true, 
+      nombre: true, 
+      username: true, 
+      rol: true, 
+      estatus: true, 
+      fechaCreacion: true,
+      
+      departamentoId: true, 
+
       departamento: { select: { id: true, nombre: true } },
     },
     orderBy: { nombre: "asc" },

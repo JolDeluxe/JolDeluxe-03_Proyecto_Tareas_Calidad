@@ -1,15 +1,16 @@
-// 📍 src/App.tsx (Código modificado para incluir la restricción de roles en /admin)
+// 📍 src/App.tsx
 import React, { useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
   Routes,
   Route,
-  Navigate, // Importación necesaria para la redirección
+  Navigate,
 } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import Pendientes from "./pages/Pendientes";
 import Principal from "./pages/Principal";
 import Admin from "./pages/Admin";
+import Super_Admin from "./pages/Super_Admin"; // 👈 Nueva importación
 import PrivateRoute from "./components/PrivateRoute";
 import PublicRoute from "./components/PublicRoute";
 import LoginPage from "./pages/LoginPage";
@@ -58,23 +59,52 @@ const AppLayout: React.FC = () => {
     );
   }
 
-  const allowedRoles = ["SUPER_ADMIN", "ADMIN", "ENCARGADO"];
-
-  const adminElement =
-    user && allowedRoles.includes(user.rol) ? (
-      <Admin user={user} />
-    ) : (
-      <Navigate to="/pendientes" replace />
-    );
-  // 🔼🔼🔼
-
   return (
     <Layout user={user}>
       <Routes>
-        <Route path="/" element={<Navigate to="/pendientes" replace />} />
+        {/* Redirección inteligente en la raíz:
+            - Si no hay user -> Login
+            - Si es SUPER_ADMIN -> Panel Maestro
+            - Si es otro rol -> Lista de Pendientes
+        */}
+        <Route
+          path="/"
+          element={
+            !user ? <Navigate to="/login" replace /> :
+              user.rol === "SUPER_ADMIN" ? <Navigate to="/super-admin" replace /> :
+                <Navigate to="/pendientes" replace />
+          }
+        />
+
         <Route path="/todas" element={<Principal user={user} />} />
         <Route path="/pendientes" element={<Pendientes user={user} />} />
-        <Route path="/admin" element={adminElement} />
+
+        {/* 👇 RUTA EXCLUSIVA SUPER ADMIN 👇 */}
+        <Route
+          path="/super-admin"
+          element={
+            user && user.rol === "SUPER_ADMIN" ? (
+              <Super_Admin user={user} />
+            ) : (
+              // Si intenta entrar alguien sin permiso, lo mandamos a pendientes
+              <Navigate to="/pendientes" replace />
+            )
+          }
+        />
+
+        {/* 👇 RUTA ADMIN DEPARTAMENTO (Tu Admin.tsx original) 👇 */}
+        <Route
+          path="/admin"
+          element={
+            user && ["ADMIN", "ENCARGADO"].includes(user.rol) ? (
+              <Admin user={user} />
+            ) : (
+              // Si no tiene rol operativo, lo mandamos a la raíz para que se re-evalúe
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
         <Route path="*" element={<Navigate to="/pendientes" replace />} />
       </Routes>
     </Layout>

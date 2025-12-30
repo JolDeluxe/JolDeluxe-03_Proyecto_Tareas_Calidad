@@ -12,6 +12,7 @@ export const cambiarEstatus = safeAsync(async (req: Request, res: Response) => {
     });
   }
   const { id } = paramsParseResult.data;
+  const creador = req.user!;
 
   const bodyParseResult = estatusSchema.safeParse(req.body);
   if (!bodyParseResult.success) {
@@ -21,6 +22,25 @@ export const cambiarEstatus = safeAsync(async (req: Request, res: Response) => {
     });
   }
   const { estatus } = bodyParseResult.data;
+
+  // =================================================================
+  // 🛡️ LÓGICA DE SEGURIDAD
+  // =================================================================
+  
+  // Si soy ADMIN, verifico que el usuario sea de mi equipo antes de borrarlo/reactivarlo
+  if (creador.rol === "ADMIN") {
+      const usuarioTarget = await prisma.usuario.findUnique({ 
+          where: { id },
+          select: { departamentoId: true } 
+      });
+
+      if (!usuarioTarget) return res.status(404).json({ error: "Usuario no encontrado" });
+
+      if (usuarioTarget.departamentoId !== creador.departamentoId) {
+          return res.status(403).json({ error: "No tienes permiso para cambiar el estatus de usuarios de otro departamento." });
+      }
+  }
+  // =================================================================
 
   const usuarioActualizado = await prisma.usuario.update({
     where: { id },
