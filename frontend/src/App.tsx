@@ -1,4 +1,3 @@
-// 📍 src/App.tsx
 import React, { useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
@@ -10,14 +9,15 @@ import Layout from "./components/layout/Layout";
 import Pendientes from "./pages/Pendientes";
 import Principal from "./pages/Principal";
 import Admin from "./pages/Admin";
-import Super_Admin from "./pages/Super_Admin"; // 👈 Nueva importación
+import Super_Admin from "./pages/Super_Admin";
+import Usuarios from "./pages/Usuarios"; // 👈 Tu nueva página
 import PrivateRoute from "./components/PrivateRoute";
 import PublicRoute from "./components/PublicRoute";
 import LoginPage from "./pages/LoginPage";
 import { authService } from "./api/auth.service";
 import type { Usuario } from "./types/usuario";
+import { Rol } from "./types/usuario"; // 👈 Importante importar el Enum
 
-// 🔽 --- IMPORTAR LA LÓGICA DE SUSCRIPCIÓN --- 🔽
 import { subscribeUser } from "./push-subscription";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -62,16 +62,11 @@ const AppLayout: React.FC = () => {
   return (
     <Layout user={user}>
       <Routes>
-        {/* Redirección inteligente en la raíz:
-            - Si no hay user -> Login
-            - Si es SUPER_ADMIN -> Panel Maestro
-            - Si es otro rol -> Lista de Pendientes
-        */}
         <Route
           path="/"
           element={
             !user ? <Navigate to="/login" replace /> :
-              user.rol === "SUPER_ADMIN" ? <Navigate to="/super-admin" replace /> :
+              user.rol === Rol.SUPER_ADMIN ? <Navigate to="/super-admin" replace /> :
                 <Navigate to="/pendientes" replace />
           }
         />
@@ -79,27 +74,39 @@ const AppLayout: React.FC = () => {
         <Route path="/todas" element={<Principal user={user} />} />
         <Route path="/pendientes" element={<Pendientes user={user} />} />
 
-        {/* 👇 RUTA EXCLUSIVA SUPER ADMIN 👇 */}
+        {/* 👇 RUTA EXCLUSIVA SUPER ADMIN */}
         <Route
           path="/super-admin"
           element={
-            user && user.rol === "SUPER_ADMIN" ? (
+            user && user.rol === Rol.SUPER_ADMIN ? (
               <Super_Admin user={user} />
             ) : (
-              // Si intenta entrar alguien sin permiso, lo mandamos a pendientes
               <Navigate to="/pendientes" replace />
             )
           }
         />
 
-        {/* 👇 RUTA ADMIN DEPARTAMENTO (Tu Admin.tsx original) 👇 */}
+        {/* 👇 RUTA ADMIN DEPARTAMENTO (Gestión Tareas) */}
         <Route
           path="/admin"
           element={
-            user && ["ADMIN", "ENCARGADO"].includes(user.rol) ? (
+            // 🛑 CORREGIDO: Usamos OR en lugar de array.includes para evitar error de tipado
+            user && (user.rol === Rol.ADMIN || user.rol === Rol.ENCARGADO) ? (
               <Admin user={user} />
             ) : (
-              // Si no tiene rol operativo, lo mandamos a la raíz para que se re-evalúe
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* 👇 NUEVA RUTA: GESTIÓN DE USUARIOS (Solo Admin Depto) */}
+        <Route
+          path="/usuarios"
+          element={
+            // Solo dejamos entrar si es ADMIN explícitamente
+            user && user.rol === Rol.ADMIN ? (
+              <Usuarios user={user} />
+            ) : (
               <Navigate to="/" replace />
             )
           }

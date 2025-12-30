@@ -32,10 +32,16 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
     return location.pathname === path || (path === "/pendientes" && location.pathname === "/");
   };
 
-  const puedeVerAdmin = () => {
+  // ✅ CORREGIDO: Usamos comparación directa para evitar el error de tipado de .includes()
+  const puedeVerAdminTareas = () => {
     if (!user) return false;
-    const rolesPermitidos: Rol[] = [Rol.ADMIN, Rol.ENCARGADO];
-    return rolesPermitidos.includes(user.rol);
+    return user.rol === Rol.ADMIN || user.rol === Rol.ENCARGADO;
+  };
+
+  // ✅ NUEVO: Lógica para ver la pestaña de usuarios (Solo ADMIN de Depto)
+  const puedeVerGestionUsuarios = () => {
+    if (!user) return false;
+    return user.rol === Rol.ADMIN;
   };
 
   const esSuperAdmin = user?.rol === "SUPER_ADMIN";
@@ -54,8 +60,7 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
         <div className="relative flex justify-center border-t border-gray-200 shadow-sm py-3 text-[0.7rem] sm:text-sm font-bold uppercase font-sans tracking-wide">
           {user && (
             <div className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-gray-700 text-xs sm:text-sm font-semibold normal-case">
-              Hola,{" "}
-              <span className="font-bold">{user.nombre.split(" ")[0]}</span>
+              Hola, <span className="font-bold">{user.nombre.split(" ")[0]}</span>
             </div>
           )}
 
@@ -65,8 +70,8 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
               <Link
                 to="/super-admin"
                 className={`relative mx-3 px-4 py-1 group ${isActive("/super-admin")
-                    ? "text-amber-800"
-                    : "text-gray-900 hover:text-amber-800"
+                  ? "text-amber-800"
+                  : "text-gray-900 hover:text-amber-800"
                   }`}
               >
                 PANEL MAESTRO
@@ -76,8 +81,8 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
               <Link
                 to="/super-admin?tab=DEPTOS"
                 className={`relative mx-3 px-4 py-1 group ${isActive("/super-admin?tab=DEPTOS")
-                    ? "text-amber-800"
-                    : "text-gray-900 hover:text-amber-800"
+                  ? "text-amber-800"
+                  : "text-gray-900 hover:text-amber-800"
                   }`}
               >
                 DEPARTAMENTO
@@ -87,8 +92,8 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
               <Link
                 to="/super-admin?tab=USUARIOS"
                 className={`relative mx-3 px-4 py-1 group ${isActive("/super-admin?tab=USUARIOS")
-                    ? "text-amber-800"
-                    : "text-gray-900 hover:text-amber-800"
+                  ? "text-amber-800"
+                  : "text-gray-900 hover:text-amber-800"
                   }`}
               >
                 USUARIOS
@@ -98,8 +103,8 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
               <Link
                 to="/super-admin?tab=LOGS"
                 className={`relative mx-3 px-4 py-1 group ${isActive("/super-admin?tab=LOGS")
-                    ? "text-amber-800"
-                    : "text-gray-900 hover:text-amber-800"
+                  ? "text-amber-800"
+                  : "text-gray-900 hover:text-amber-800"
                   }`}
               >
                 TERMINAL
@@ -113,9 +118,9 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
             <>
               <Link
                 to="/pendientes"
-                className={`relative mx-3 sm:mx-8 px-4 py-1 group ${isActive("/pendientes")
-                    ? "text-amber-800"
-                    : "text-gray-900 hover:text-amber-800"
+                className={`relative mx-3 sm:mx-6 px-4 py-1 group ${isActive("/pendientes")
+                  ? "text-amber-800"
+                  : "text-gray-900 hover:text-amber-800"
                   }`}
               >
                 PENDIENTES
@@ -125,24 +130,38 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
               <Link
                 to="/todas"
                 className={`relative mx-3 px-4 py-1 group ${isActive("/todas")
-                    ? "text-amber-800"
-                    : "text-gray-900 hover:text-amber-800"
+                  ? "text-amber-800"
+                  : "text-gray-900 hover:text-amber-800"
                   }`}
               >
                 TODAS
                 <span className={`absolute left-0 bottom-0 w-full h-[2px] bg-amber-600 transition-transform duration-300 origin-left ${isActive("/todas") ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}`}></span>
               </Link>
 
-              {user && puedeVerAdmin() && (
+              {user && puedeVerAdminTareas() && (
                 <Link
                   to="/admin"
                   className={`relative mx-3 px-4 py-1 group ${isActive("/admin")
-                      ? "text-amber-800"
-                      : "text-gray-900 hover:text-amber-800"
+                    ? "text-amber-800"
+                    : "text-gray-900 hover:text-amber-800"
                     }`}
                 >
-                  ADMINISTRAR TAREAS
+                  GESTIONAR TAREAS
                   <span className={`absolute left-0 bottom-0 w-full h-[2px] bg-amber-600 transition-transform duration-300 origin-left ${isActive("/admin") ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}`}></span>
+                </Link>
+              )}
+
+              {/* ✅ ENLACE DE USUARIOS AGREGADO */}
+              {user && puedeVerGestionUsuarios() && (
+                <Link
+                  to="/usuarios"
+                  className={`relative mx-3 px-4 py-1 group ${isActive("/usuarios")
+                    ? "text-amber-800"
+                    : "text-gray-900 hover:text-amber-800"
+                    }`}
+                >
+                  MI EQUIPO
+                  <span className={`absolute left-0 bottom-0 w-full h-[2px] bg-amber-600 transition-transform duration-300 origin-left ${isActive("/usuarios") ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}`}></span>
                 </Link>
               )}
             </>

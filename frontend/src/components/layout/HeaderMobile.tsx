@@ -18,10 +18,16 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
     navigate("/login");
   };
 
-  const puedeVerAdmin = () => {
+  // ✅ CORREGIDO: Comparación directa
+  const puedeVerAdminTareas = () => {
     if (!user) return false;
-    const rolesPermitidos: Rol[] = [Rol.ADMIN, Rol.ENCARGADO];
-    return rolesPermitidos.includes(user.rol);
+    return user.rol === Rol.ADMIN || user.rol === Rol.ENCARGADO;
+  };
+
+  // ✅ NUEVO: Lógica para ver Usuarios
+  const puedeVerGestionUsuarios = () => {
+    if (!user) return false;
+    return user.rol === Rol.ADMIN;
   };
 
   const getMenuItems = () => {
@@ -32,7 +38,7 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
       return [
         { to: "/super-admin", label: "Panel Maestro" },
         { to: "/super-admin?tab=DEPTOS", label: "Departamento" },
-        { to: "/super-admin?tab=USUARIOS", label: "Usuarios" },
+        { to: "/super-admin?tab=USUARIOS", label: "Mi Equipo" },
         { to: "/super-admin?tab=LOGS", label: "Terminal" },
       ];
     }
@@ -43,8 +49,13 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
       { to: "/todas", label: "Todas" },
     ];
 
-    if (puedeVerAdmin()) {
-      items.push({ to: "/admin", label: "Administrar Tareas" });
+    if (puedeVerAdminTareas()) {
+      items.push({ to: "/admin", label: "Gestionar Tareas" });
+    }
+
+    // ✅ AGREGADO EN EL MENÚ MÓVIL
+    if (puedeVerGestionUsuarios()) {
+      items.push({ to: "/usuarios", label: "Mi Equipo" });
     }
 
     return items;
@@ -94,7 +105,7 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
           className="flex flex-col bg-white/80 backdrop-blur-xl border-t border-amber-100 
             shadow-[0_-2px_20px_rgba(0,0,0,0.08)] rounded-b-2xl 
             animate-slide-down transition-all duration-300 z-50
-            p-3 space-y-1"
+            p-3 space-y-1 absolute w-full left-0 top-full"
         >
           {menuItems.map(({ to, label }) => {
             const isActive = location.pathname + location.search === to;
@@ -104,7 +115,7 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
                 key={to}
                 to={to}
                 onClick={() => setOpen(false)}
-                className={`flex  justify-center items-center gap-3 w-full text-left 
+                className={`flex justify-center items-center gap-3 w-full text-left 
                   px-4 py-3 rounded-lg 
                   text-base font-semibold tracking-wide
                   transition-colors duration-200 active:scale-[0.98]
