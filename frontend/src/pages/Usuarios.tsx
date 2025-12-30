@@ -36,12 +36,11 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
     if (!user) return;
     setLoading(true);
     try {
-      // ✅ CORRECCIÓN DEL ERROR DE TYPESCRIPT:
       // Convertimos null a undefined usando el operador '??'
       const deptoId = user.departamentoId ?? undefined;
 
       const res = await usuariosService.getAll({ departamentoId: deptoId });
-      console.log("USUARIOS RECIBIDOS:", res);
+      // console.log("USUARIOS RECIBIDOS:", res);
       setUsuarios(res);
     } catch (error) {
       console.error("Error al cargar usuarios:", error);
@@ -104,17 +103,20 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
         ADMINISTRA USUARIOS
       </h1>
 
-      {/* Botón Agregar Nuevo (Estilo Idéntico a Admin.tsx) */}
+      {/* Botón Agregar Nuevo (Alineado a la derecha igual que Admin.tsx) */}
       <div className="flex justify-end sm:justify-between items-center mb-4">
+        {/* ✅ Este div vacío empuja el botón a la derecha en escritorio cuando usamos justify-between */}
+        <div className="hidden sm:block"></div>
+
         <button
           onClick={handleNuevoUsuario}
           className="flex items-center justify-center gap-2 
-                     bg-green-600 hover:bg-green-700 text-white 
-                     font-semibold px-4 py-2 rounded-md shadow-md 
-                     active:scale-[0.97] transition-all duration-200
-                     fixed bottom-40 right-5 sm:static sm:bottom-auto sm:right-auto
-                     sm:px-5 sm:py-2 sm:rounded-md sm:shadow 
-                     z-30 sm:z-auto"
+                      bg-green-600 hover:bg-green-700 text-white 
+                      font-semibold px-4 py-2 rounded-md shadow-md 
+                      active:scale-[0.97] transition-all duration-200
+                      fixed bottom-40 right-5 sm:static sm:bottom-auto sm:right-auto
+                      sm:px-5 sm:py-2 sm:rounded-md sm:shadow 
+                      z-30 sm:z-auto"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
             <path fillRule="evenodd" d="M12 4.5a.75.75 0 01.75.75v6h6a.75.75 0 010 1.5h-6v6a.75.75 0 01-1.5 0v-6h-6a.75.75 0 010-1.5h6v-6A.75.75 0 0112 4.5z" clipRule="evenodd" />

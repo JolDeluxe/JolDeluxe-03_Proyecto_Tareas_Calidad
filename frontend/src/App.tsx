@@ -1,3 +1,5 @@
+// 📍 src/App.tsx
+
 import React, { useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
@@ -10,13 +12,13 @@ import Pendientes from "./pages/Pendientes";
 import Principal from "./pages/Principal";
 import Admin from "./pages/Admin";
 import Super_Admin from "./pages/Super_Admin";
-import Usuarios from "./pages/Usuarios"; // 👈 Tu nueva página
+import Usuarios from "./pages/Usuarios";
 import PrivateRoute from "./components/PrivateRoute";
 import PublicRoute from "./components/PublicRoute";
 import LoginPage from "./pages/LoginPage";
 import { authService } from "./api/auth.service";
 import type { Usuario } from "./types/usuario";
-import { Rol } from "./types/usuario"; // 👈 Importante importar el Enum
+import { Rol } from "./types/usuario";
 
 import { subscribeUser } from "./push-subscription";
 import { ToastContainer } from "react-toastify";
@@ -71,8 +73,21 @@ const AppLayout: React.FC = () => {
           }
         />
 
-        <Route path="/todas" element={<Principal user={user} />} />
+        {/* ✅ RUTA PENDIENTES (Común para todos) */}
         <Route path="/pendientes" element={<Pendientes user={user} />} />
+
+        {/* ✅ RUTA TODAS (Exclusiva ROL USUARIO) */}
+        <Route
+          path="/todas"
+          element={
+            user && user.rol === Rol.USUARIO ? (
+              <Principal user={user} />
+            ) : (
+              // Si es Admin o Encargado intenta entrar, lo mandamos a su panel
+              <Navigate to="/" replace />
+            )
+          }
+        />
 
         {/* 👇 RUTA EXCLUSIVA SUPER ADMIN */}
         <Route
@@ -90,7 +105,6 @@ const AppLayout: React.FC = () => {
         <Route
           path="/admin"
           element={
-            // 🛑 CORREGIDO: Usamos OR en lugar de array.includes para evitar error de tipado
             user && (user.rol === Rol.ADMIN || user.rol === Rol.ENCARGADO) ? (
               <Admin user={user} />
             ) : (
@@ -99,11 +113,10 @@ const AppLayout: React.FC = () => {
           }
         />
 
-        {/* 👇 NUEVA RUTA: GESTIÓN DE USUARIOS (Solo Admin Depto) */}
+        {/* 👇 RUTA GESTIÓN DE USUARIOS (Solo Admin Depto) */}
         <Route
           path="/usuarios"
           element={
-            // Solo dejamos entrar si es ADMIN explícitamente
             user && user.rol === Rol.ADMIN ? (
               <Usuarios user={user} />
             ) : (

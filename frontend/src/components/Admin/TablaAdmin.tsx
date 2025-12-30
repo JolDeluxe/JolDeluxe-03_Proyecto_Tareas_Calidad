@@ -16,6 +16,8 @@ import Acciones from "./Acciones";
 import ModalEditar from "./ModalEditar";
 import ModalEliminar from "./ModalEliminar";
 import ModalAceptar from "./ModalAceptar";
+// ✅ NUEVO: Importamos el Modal de Revisión
+import ModalRevision from "./ModalRevision";
 import { toast } from "react-toastify";
 
 interface TablaProps {
@@ -51,6 +53,8 @@ const getRowClass = (status: Estatus): string => {
       return "bg-green-50 border-l-4 border-green-500";
     case "CANCELADA":
       return "bg-red-50 border-l-4 border-red-500";
+    case "EN_REVISION": // ✅ Agregamos estilo visual para revisión
+      return "bg-indigo-50 border-l-4 border-indigo-500";
     default:
       return "bg-blue-50 border-l-4 border-blue-500";
   }
@@ -97,6 +101,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
   const [modalImagenes, setModalImagenes] = useState<ImagenTarea[] | null>(
     null
   );
+
+  // ✅ NUEVO: Estado para el modal de revisión
+  const [tareaParaRevisar, setTareaParaRevisar] = useState<Tarea | null>(null);
 
   // 🧩 Modales (Funciones se quedan)
   const abrirModalAceptar = (tarea: Tarea) => {
@@ -147,13 +154,27 @@ const TablaAdmin: React.FC<TablaProps> = ({
     }
   };
 
+  // ✅ NUEVO: Handlers para Revisión
+  const handleRevisar = (tarea: Tarea) => {
+    setTareaParaRevisar(tarea);
+  };
+
+  const handleCerrarRevision = () => {
+    setTareaParaRevisar(null);
+  };
+
+  const handleExitoRevision = () => {
+    setTareaParaRevisar(null);
+    onRecargarTareas();
+  };
+
   // 9. 🚀 Lógica de filtro (Esta lógica es correcta)
   const tareasFiltradas = tareas.filter((t) => {
     const estatus = t.estatus;
 
     const pasaEstatus =
       filtro.toUpperCase() === "TOTAL" ||
-      (filtro.toUpperCase() === "PENDIENTES" && estatus === "PENDIENTE") ||
+      (filtro.toUpperCase() === "PENDIENTES" && (estatus === "PENDIENTE" || estatus === "EN_REVISION")) || // Incluimos EN_REVISION en pendientes
       (filtro.toUpperCase() === "CONCLUIDAS" && estatus === "CONCLUIDA") ||
       (filtro.toUpperCase() === "CANCELADAS" && estatus === "CANCELADA");
 
@@ -274,6 +295,11 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       {/* Columna Tarea */}
                       <td className="px-3 py-3 text-left font-semibold w-[18%] break-words">
                         {row.tarea}
+                        {row.estatus === "EN_REVISION" && (
+                          <span className="block text-[10px] text-indigo-700 font-bold bg-indigo-100 w-fit px-1 rounded mt-1">
+                            EN REVISIÓN
+                          </span>
+                        )}
                       </td>
 
                       {/* 🚀 Columna IMAGEN (Implementación del Badge) */}
@@ -283,8 +309,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
                             onClick={() => setModalImagenes(row.imagenes)}
                             title={`Ver ${row.imagenes.length} imagen(es)`}
                             className="inline-flex items-center justify-center w-6 h-6 rounded-full
-                                                            bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white
-                                                            transition-colors duration-200 shadow-sm"
+                                                                bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white
+                                                                transition-colors duration-200 shadow-sm"
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -459,10 +485,12 @@ const TablaAdmin: React.FC<TablaProps> = ({
                             ? "text-green-700"
                             : row.estatus === "CANCELADA"
                               ? "text-red-700"
-                              : "text-blue-700"
+                              : row.estatus === "EN_REVISION"
+                                ? "text-indigo-700"
+                                : "text-blue-700"
                             }`}
                         >
-                          {row.estatus}
+                          {row.estatus === "EN_REVISION" ? "EN REVISIÓN" : row.estatus}
                         </span>
                       </td>
 
@@ -474,6 +502,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
                           onCompletar={() => abrirModalAceptar(row)}
                           onEditar={() => abrirModalEditar(row)}
                           onBorrar={() => abrirModalEliminar(row)}
+                          // ✅ NUEVO: Pasamos la función de revisar
+                          onRevisar={() => handleRevisar(row)}
                         />
                       )}
                     </tr>
@@ -510,7 +540,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                 fechaLimiteNormalizada.setHours(0, 0, 0, 0); // Normaliza la fecha límite
 
                 vencida =
-                  fechaLimiteNormalizada < hoy && row.estatus !== "CONCLUIDA";
+                  fechaLimiteNormalizada < hoy && row.estatus !== "CONCLUIDA" && row.estatus !== "EN_REVISION";
               }
 
               const retrasada = isRetrasada(
@@ -634,10 +664,12 @@ const TablaAdmin: React.FC<TablaProps> = ({
                           ? "text-green-700"
                           : row.estatus === "CANCELADA"
                             ? "text-red-700"
-                            : "text-blue-700"
+                            : row.estatus === "EN_REVISION"
+                              ? "text-indigo-700"
+                              : "text-blue-700"
                           }`}
                       >
-                        {row.estatus}
+                        {row.estatus === "EN_REVISION" ? "EN REVISIÓN" : row.estatus}
                       </span>
                     </p>
 
@@ -756,74 +788,95 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     </div>
                   )}
 
-                  {/* ⚙️ Acciones (Móvil) - LÓGICA CORREGIDA */}
+                  {/* ⚙️ Acciones (Móvil) - LÓGICA CORREGIDA CON REVISIÓN */}
                   <div className="flex justify-around items-center mt-4 pt-2 border-t border-gray-200 h-[46px]">
-                    {row.estatus === "PENDIENTE" && (
-                      <>
-                        {/* 🚀 BOTÓN CANCELAR (Ahora visible para todos) */}
-                        {puedeCancelar && (
-                          <button
-                            onClick={() => abrirModalEliminar(row)}
-                            className="flex flex-col items-center text-red-700 hover:text-red-800 transition"
-                            title="Cancelar tarea"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 -960 960 960"
-                              className="w-6 h-6 text-red-700"
-                              fill="currentColor"
-                            >
-                              <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
-                            </svg>
-                            <span className="text-[11px] font-semibold">
-                              Cancelar
-                            </span>
-                          </button>
-                        )}
 
-                        {/* 🚀 BOTÓN EDITAR (Visible para todos) */}
-                        {puedeEditar && (
-                          <button
-                            onClick={() => abrirModalEditar(row)}
-                            className="flex flex-col items-center text-amber-700 hover:text-amber-800 transition"
-                            title="Editar tarea"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 -960 960 960"
-                              className="w-6 h-6 text-amber-700"
-                              fill="currentColor"
-                            >
-                              <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z" />
-                            </svg>
-                            <span className="text-[11px] font-semibold">
-                              Editar
-                            </span>
-                          </button>
-                        )}
+                    {/* ✅ BOTÓN DE REVISIÓN EN MÓVIL */}
+                    {row.estatus === "EN_REVISION" && puedeValidar ? (
+                      <button
+                        onClick={() => handleRevisar(row)}
+                        className="flex flex-col items-center text-indigo-700 hover:text-indigo-800 transition"
+                        title="Revisar evidencia"
+                      >
+                        {/* Ícono Lupita */}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 -960 960 960"
+                          className="w-6 h-6 fill-indigo-700"
+                        >
+                          <path d="M440-240q116 0 198-81.5T720-520q0-116-82-198t-198-82q-117 0-198.5 82T160-520q0 117 81.5 198.5T440-240Zm0-280Zm0 160q-83 0-147.5-44.5T200-520q28-70 92.5-115T440-680q82 0 146.5 45T680-520q-29 71-93.5 115.5T440-360Zm0-60q55 0 101-26.5t72-73.5q-26-46-72-73t-101-27q-56 0-102 27t-72 73q26 47 72 73.5T440-420Zm0-40q25 0 42.5-17t17.5-43q0-25-17.5-42.5T440-580q-26 0-43 17.5T380-520q0 26 17 43t43 17Zm0 300q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T80-520q0-74 28.5-139.5t77-114.5q48.5-49 114-77.5T440-880q74 0 139.5 28.5T694-774q49 49 77.5 114.5T800-520q0 64-21 121t-58 104l159 159-57 56-159-158q-47 37-104 57.5T440-160Z" />
+                        </svg>
+                        <span className="text-[11px] font-semibold">
+                          Revisar
+                        </span>
+                      </button>
+                    ) : null}
 
-                        {/* 🚀 BOTÓN VALIDAR (Usa la nueva lógica 'puedeValidar') */}
-                        {puedeValidar && (
-                          <button
-                            onClick={() => abrirModalAceptar(row)}
-                            className="flex flex-col items-center text-green-700 hover:text-green-800 transition"
-                            title="Marcar como completada"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 -960 960 960"
-                              className="w-6 h-6 text-green-700"
-                              fill="currentColor"
-                            >
-                              <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Z" />
-                            </svg>
-                            <span className="text-[11px] font-semibold">
-                              Validar
-                            </span>
-                          </button>
-                        )}
-                      </>
+                    {/* BOTONES STANDARD (PENDIENTE / EDITAR / CANCELAR) */}
+
+                    {/* CANCELAR */}
+                    {puedeCancelar && (
+                      <button
+                        onClick={() => abrirModalEliminar(row)}
+                        className="flex flex-col items-center text-red-700 hover:text-red-800 transition"
+                        title="Cancelar tarea"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 -960 960 960"
+                          className="w-6 h-6 text-red-700"
+                          fill="currentColor"
+                        >
+                          <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
+                        </svg>
+                        <span className="text-[11px] font-semibold">
+                          Cancelar
+                        </span>
+                      </button>
                     )}
+
+                    {/* EDITAR */}
+                    {puedeEditar && (
+                      <button
+                        onClick={() => abrirModalEditar(row)}
+                        className="flex flex-col items-center text-amber-700 hover:text-amber-800 transition"
+                        title="Editar tarea"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 -960 960 960"
+                          className="w-6 h-6 text-amber-700"
+                          fill="currentColor"
+                        >
+                          <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z" />
+                        </svg>
+                        <span className="text-[11px] font-semibold">
+                          Editar
+                        </span>
+                      </button>
+                    )}
+
+                    {/* VALIDAR (Solo si está pendiente, si está en revisión sale la lupita arriba) */}
+                    {row.estatus === "PENDIENTE" && puedeValidar && (
+                      <button
+                        onClick={() => abrirModalAceptar(row)}
+                        className="flex flex-col items-center text-green-700 hover:text-green-800 transition"
+                        title="Marcar como completada"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 -960 960 960"
+                          className="w-6 h-6 text-green-700"
+                          fill="currentColor"
+                        >
+                          <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Z" />
+                        </svg>
+                        <span className="text-[11px] font-semibold">
+                          Validar
+                        </span>
+                      </button>
+                    )}
+
                     {row.estatus === "CONCLUIDA" && (
                       <div
                         className="flex flex-col items-center text-green-700 opacity-80"
@@ -891,6 +944,17 @@ const TablaAdmin: React.FC<TablaProps> = ({
             <ModalGaleria
               imagenes={modalImagenes}
               onClose={() => setModalImagenes(null)}
+            />
+          )}
+          {/* ✅ NUEVO: Modal de Revisión */}
+          {tareaParaRevisar && (
+            <ModalRevision
+              tarea={tareaParaRevisar}
+              onClose={handleCerrarRevision}
+              onSuccess={handleExitoRevision}
+              onVerImagenes={(imagenes) => {
+                setModalImagenes(imagenes);
+              }}
             />
           )}
         </>
