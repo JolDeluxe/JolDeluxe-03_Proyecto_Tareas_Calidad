@@ -5,6 +5,7 @@ import svgr from "vite-plugin-svgr";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  envDir: "..",
   plugins: [
     react(),
     tailwindcss(),
