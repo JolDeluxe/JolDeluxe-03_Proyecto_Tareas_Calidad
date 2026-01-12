@@ -17,8 +17,6 @@ const ModalEntrega: React.FC<ModalEntregaProps> = ({
   const [comentario, setComentario] = useState(tarea.comentarioEntrega || "");
   const [archivos, setArchivos] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
-  // Eliminamos el estado 'error' local si prefieres que TODO salga por Toast
-  // Pero lo mantendré por si quieres mostrar errores de servidor en el modal también.
   const [error, setError] = useState<string | null>(null);
 
   // --- Manejadores de Archivos (Con Toastify) ---
@@ -26,15 +24,15 @@ const ModalEntrega: React.FC<ModalEntregaProps> = ({
     if (e.target.files) {
       const nuevosArchivos = Array.from(e.target.files);
 
-      // 🛑 1. VALIDACIÓN DE TAMAÑO (5MB)
-      const TAMANO_MAXIMO = 5 * 1024 * 1024;
+      // ✅ CAMBIO AQUÍ: AUMENTAMOS EL LÍMITE A 20MB
+      // Esto permite pasar la foto original pesada al backend
+      const TAMANO_MAXIMO = 20 * 1024 * 1024;
 
       const archivoPesado = nuevosArchivos.find((file) => file.size > TAMANO_MAXIMO);
 
       if (archivoPesado) {
-        // 🔔 REEMPLAZO DE ALERT POR TOAST ERROR
         toast.error(
-          `⚠️ El archivo "${archivoPesado.name}" pesa más de 5MB. Por favor comprímelo o elige otro.`
+          `⚠️ El archivo "${archivoPesado.name}" es demasiado grande (Máximo 20MB).`
         );
         e.target.value = ""; // Limpiar input
         return;
@@ -42,7 +40,6 @@ const ModalEntrega: React.FC<ModalEntregaProps> = ({
 
       // 🛑 2. VALIDACIÓN DE CANTIDAD
       if (archivos.length + nuevosArchivos.length > 5) {
-        // 🔔 REEMPLAZO DE ALERT POR TOAST WARNING
         toast.warning("Solo puedes subir un máximo de 5 evidencias en total.");
         e.target.value = "";
         return;
