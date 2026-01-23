@@ -25,5 +25,8 @@
   "bugs": {
     "url": "https://github.com/JolDeluxe/JolDeluxe-03_Proyecto_Tareas_Calidad/issues"
   },
-  "homepage": "https://github.com/JolDeluxe/JolDeluxe-03_Proyecto_Tareas_Calidad#readme"
+  "homepage": "https://github.com/JolDeluxe/JolDeluxe-03_Proyecto_Tareas_Calidad#readme",
+  "devDependencies": {
+    "@types/node": "^25.0.10"
+  }
 }
