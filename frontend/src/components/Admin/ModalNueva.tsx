@@ -70,6 +70,9 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   const [listaInvitados, setListaInvitados] = useState<Usuario[]>([]); // Para tareas Kaizen
   const [loadingUsuarios, setLoadingUsuarios] = useState(true);
 
+  // --- Estado para búsqueda ---
+  const [busqueda, setBusqueda] = useState("");
+
   // --- Estados de UI ---
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -374,6 +377,11 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     }
   };
 
+  // Filtrado de usuarios
+  const usuariosFiltrados = (isKaizen ? listaInvitados : listaUsuarios).filter((u) =>
+    u.nombre.toLowerCase().includes(busqueda.toLowerCase())
+  );
+
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -421,6 +429,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                       onClick={() => {
                         setIsKaizen(false);
                         setResponsablesIds([]);
+                        setBusqueda(""); // Limpiar búsqueda al cambiar
                       }}
                       className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${!isKaizen
                         ? "bg-white text-blue-700 shadow-sm"
@@ -434,6 +443,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                       onClick={() => {
                         setIsKaizen(true);
                         setResponsablesIds([]);
+                        setBusqueda(""); // Limpiar búsqueda al cambiar
                       }}
                       className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${isKaizen
                         ? "bg-purple-600 text-white shadow-sm"
@@ -460,7 +470,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                   required
                   disabled={loading}
                   className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
-                    ${submitted && !nombre.trim()
+                    ${submitted && !nombre.trim()
                       ? "border-red-500"
                       : "border-gray-300"
                     }`}
@@ -498,7 +508,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                   disabled={loading}
                   required
                   className={`w-full border rounded-md px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
-                    ${submitted && !comentario.trim()
+                    ${submitted && !comentario.trim()
                       ? "border-red-500"
                       : "border-gray-300"
                     }`}
@@ -618,6 +628,16 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                   {isKaizen ? "Selecciona Invitado(s)" : "Responsable(s)"}
                 </label>
 
+                {/* Barra de búsqueda */}
+                <input
+                  type="text"
+                  placeholder="Buscar usuario..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  disabled={loading || loadingUsuarios}
+                  className="w-full border rounded-md px-3 py-2 mb-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100"
+                />
+
                 {loadingUsuarios ? (
                   // Placeholder (un esqueleto)
                   <div
@@ -645,10 +665,8 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                     // tabIndex para que sea navegable con teclado
                     tabIndex={0}
                   >
-                    {/* ✅ LÓGICA CORREGIDA: 
-                        Usamos la lista adecuada según el modo (Kaizen = listaInvitados, Normal = listaUsuarios) 
-                    */}
-                    {(isKaizen ? listaInvitados : listaUsuarios).map((u) => (
+                    {/* ✅ LÓGICA CORREGIDA CON FILTRO DE BÚSQUEDA */}
+                    {usuariosFiltrados.map((u) => (
                       <label
                         key={u.id}
                         htmlFor={`resp-${u.id}`}
@@ -684,14 +702,15 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                     ))}
 
                     {/* Mensaje si la lista correspondiente está vacía */}
-                    {(isKaizen ? listaInvitados : listaUsuarios).length ===
-                      0 && (
-                        <p className="text-center text-sm text-gray-500 py-4">
-                          {isKaizen
+                    {usuariosFiltrados.length === 0 && (
+                      <p className="text-center text-sm text-gray-500 py-4">
+                        {busqueda
+                          ? "No se encontraron resultados."
+                          : isKaizen
                             ? "No se encontraron invitados registrados."
                             : "No hay usuarios disponibles."}
-                        </p>
-                      )}
+                      </p>
+                    )}
                   </div>
                 )}
 

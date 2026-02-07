@@ -18,9 +18,9 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
 
   const { departamentoId, estatus } = queryParseResult.data;
 
+  // Filtro base: Estatus
   const where: Prisma.UsuarioWhereInput = {
     estatus: estatus ?? "ACTIVO",
-    // rol: { not: "INVITADO" },  <-- Si quieres ver a TODOS, comenta esto.
   };
 
   const andClauses: Prisma.UsuarioWhereInput[] = [];
@@ -29,23 +29,34 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
     case "SUPER_ADMIN":
       if (departamentoId) where.departamentoId = departamentoId;
       break;
+
     case "ADMIN":
       if (!user.departamentoId) return res.status(403).json({ error: "Usuario sin departamento." });
-      andClauses.push({ departamentoId: user.departamentoId });
+      
+      // ✅ CORRECCIÓN: Usamos OR para permitir ver a usuarios del propio departamento O invitados
+      // Esto elimina la restricción estricta anterior.
+      where.OR = [
+        { departamentoId: user.departamentoId }, // Mi equipo
+        { rol: "INVITADO" }                      // Invitados globales
+      ];
       break;
+
     case "ENCARGADO":
       if (!user.departamentoId) return res.status(403).json({ error: "Usuario sin departamento." });
       andClauses.push({
         AND: [{ rol: { in: ["USUARIO", "ENCARGADO"] } }, { departamentoId: user.departamentoId }],
       });
       break;
+
     case "USUARIO":
       if (!user.departamentoId) return res.status(403).json({ error: "Usuario sin departamento." });
       andClauses.push({ rol: "USUARIO", departamentoId: user.departamentoId });
       break;
+
     case "INVITADO":
       andClauses.push({ id: -1 });
       break;
+
     default:
       andClauses.push({ id: -1 });
   }
@@ -61,9 +72,7 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
       rol: true, 
       estatus: true, 
       fechaCreacion: true,
-      
       departamentoId: true, 
-
       departamento: { select: { id: true, nombre: true } },
     },
     orderBy: { nombre: "asc" },

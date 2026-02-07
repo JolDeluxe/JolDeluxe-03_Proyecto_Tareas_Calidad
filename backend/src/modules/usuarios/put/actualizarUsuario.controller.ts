@@ -36,13 +36,17 @@ export const actualizarUsuario = safeAsync(async (req: Request, res: Response) =
   // 🛡️ LÓGICA DE SEGURIDAD Y PERMISOS DE EDICIÓN
   // =================================================================
 
-  // Regla 1: Si soy ADMIN, solo puedo tocar usuarios de MI departamento
+  // Regla 1: Si soy ADMIN, solo puedo tocar usuarios de MI departamento O INVITADOS
   if (creador.rol === "ADMIN") {
-    if (usuarioActual.departamentoId !== creador.departamentoId) {
+    const esDeMiDepartamento = usuarioActual.departamentoId === creador.departamentoId;
+    const esInvitado = usuarioActual.rol === "INVITADO";
+
+    if (!esDeMiDepartamento && !esInvitado) {
         return res.status(403).json({ error: "No tienes permiso para editar usuarios de otro departamento." });
     }
 
-    // Regla 2: Si soy ADMIN, no puedo cambiar el departamento del usuario
+    // Regla 2: Si soy ADMIN, no puedo cambiar el departamento del usuario a otro distinto al mio
+    // Pero SI puedo cambiarlo a null (si lo convierto a invitado) o a mi departamento (si lo convierto a usuario)
     if (validatedBody.departamentoId && validatedBody.departamentoId !== creador.departamentoId) {
         return res.status(403).json({ error: "No puedes transferir usuarios a otro departamento." });
     }
@@ -66,12 +70,24 @@ export const actualizarUsuario = safeAsync(async (req: Request, res: Response) =
     estatus: validatedBody.estatus ?? usuarioActual.estatus,
   };
 
+  // Validación cruzada: ROL vs DEPARTAMENTO
   if ((datosFusionados.rol === "SUPER_ADMIN" || datosFusionados.rol === "INVITADO") && datosFusionados.departamentoId !== null) {
-    return res.status(400).json({ error: "Conflicto de reglas", detalle: "Un SUPER_ADMIN o INVITADO no puede tener un departamentoId." });
+    // Si un ADMIN está editando, esto podría pasar si intenta cambiar rol a INVITADO pero no envía departamentoId: null explícito.
+    // Lo corregimos automáticamente para evitar el error 400 si la intención es clara.
+    if(datosFusionados.rol === "INVITADO") {
+        validatedBody.departamentoId = null; // Auto-fix
+    } else {
+        return res.status(400).json({ error: "Conflicto de reglas", detalle: "Un SUPER_ADMIN o INVITADO no puede tener un departamentoId." });
+    }
   }
 
   if ((datosFusionados.rol === "ADMIN" || datosFusionados.rol === "ENCARGADO" || datosFusionados.rol === "USUARIO") && datosFusionados.departamentoId === null) {
-    return res.status(400).json({ error: "Conflicto de reglas", detalle: `El rol ${datosFusionados.rol} debe tener un departamentoId.` });
+    // Si soy ADMIN y convierto un INVITADO a USUARIO, debo asignar mi departamento automáticamente si no viene en el body
+    if (creador.rol === "ADMIN" && creador.departamentoId) {
+        validatedBody.departamentoId = creador.departamentoId; // Auto-fix
+    } else {
+        return res.status(400).json({ error: "Conflicto de reglas", detalle: `El rol ${datosFusionados.rol} debe tener un departamentoId.` });
+    }
   }
 
   if (datosFusionados.estatus === "INACTIVO" && usuarioActual.estatus === "ACTIVO") {
@@ -84,9 +100,16 @@ export const actualizarUsuario = safeAsync(async (req: Request, res: Response) =
   if (validatedBody.username !== undefined) dataParaActualizar.username = validatedBody.username;
   if (validatedBody.rol !== undefined) dataParaActualizar.rol = validatedBody.rol;
   
+  // Lógica ajustada para update de departamentoId
   if (validatedBody.departamentoId !== undefined) {
-    if (validatedBody.departamentoId === null) dataParaActualizar.departamento = { disconnect: true };
-    else dataParaActualizar.departamento = { connect: { id: validatedBody.departamentoId } };
+    if (validatedBody.departamentoId === null) {
+        dataParaActualizar.departamento = { disconnect: true };
+    } else {
+        dataParaActualizar.departamento = { connect: { id: validatedBody.departamentoId } };
+    }
+  } else if (validatedBody.rol === "INVITADO") {
+      // Si cambiamos rol a invitado pero no enviamos departamentoId, desconectamos explícitamente
+      dataParaActualizar.departamento = { disconnect: true };
   }
 
   if (validatedBody.password !== undefined) {

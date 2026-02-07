@@ -1,15 +1,11 @@
 // 📍 src/api/usuarios.service.ts
 import api from "./01_axiosInstance";
-// Asegúrate de que Usuario, Rol y EstatusUsuario estén exportados en tus tipos
 import type { Usuario, Rol, EstatusUsuario } from "../types/usuario";
 
 // ===================================================================
-// TIPOS DE PAYLOAD (Basados en tus Zod Schemas del backend)
+// TIPOS DE PAYLOAD
 // ===================================================================
 
-/**
- * Payload para crear un usuario. Basado en `crearUsuarioSchema`.
- */
 export type CrearUsuarioPayload = {
   nombre: string;
   username: string;
@@ -21,20 +17,15 @@ export type CrearUsuarioPayload = {
 export type ActualizarUsuarioPayload = {
   nombre?: string;
   username?: string;
-  password?: string; // Opcional, solo si se quiere cambiar
+  password?: string;
   rol?: Rol;
   departamentoId?: number | null;
 };
 
-/**
- * Payload para el endpoint de Estatus (soft delete).
- * Basado en `estatusSchema`.
- */
 export type ActualizarEstatusPayload = {
   estatus: EstatusUsuario;
 };
 
-// Interfaces para tipado de Push (si no las tiene ya en un archivo de tipos)
 export interface PushSubscriptionKeys {
   p256dh: string;
   auth: string;
@@ -49,17 +40,10 @@ export interface PushSubscriptionPayload {
 // SERVICIO DE USUARIOS
 // ===================================================================
 
-/**
- * Servicio de acceso a datos para la entidad 'Usuarios'.
- * Mapea los endpoints de `routes/usuarios.ts`.
- */
 export const usuariosService = {
   /**
    * 🔹 Obtener usuarios (GET /api/usuarios)
-   * Permite filtrar por departamentoId y estatus.
-   *
-   * ❗️ IMPORTANTE: Tu backend por defecto ya filtra por `estatus: "ACTIVO"`.
-   * Así que llamar a `getAll()` sin parámetros es perfecto para el dropdown de filtros.
+   * El backend ya filtra automáticamente según el rol del usuario (Admin ve suyos + invitados).
    */
   getAll: async (params?: {
     departamentoId?: number;
@@ -70,15 +54,10 @@ export const usuariosService = {
   },
 
   getInvitados: async (): Promise<Usuario[]> => {
-    // Asumiendo que tu ruta base es /usuarios y el endpoint es /invitados
     const { data } = await api.get<Usuario[]>("/usuarios/invitados");
     return data;
   },
 
-  // 🆕 Nuevo: Obtener solo usuarios con ROL=USUARIO
-  /**
-   * 🔹 Obtener solo usuarios con ROL=USUARIO (GET /api/usuarios/usuarios)
-   */
   getUsuarios: async (params?: {
     estatus?: EstatusUsuario;
   }): Promise<Usuario[]> => {
@@ -86,10 +65,6 @@ export const usuariosService = {
     return data;
   },
 
-  // 🆕 Nuevo: Obtener solo usuarios con ROL=ENCARGADO o ROL=USUARIO
-  /**
-   * 🔹 Obtener usuarios con ROL=ENCARGADO o ROL=USUARIO (GET /api/usuarios/encargados-y-usuarios)
-   */
   getEncargadosYUsuarios: async (params?: {
     estatus?: EstatusUsuario;
   }): Promise<Usuario[]> => {
@@ -100,25 +75,16 @@ export const usuariosService = {
     return data;
   },
 
-  /**
-   * 🔹 Obtener un usuario por ID (GET /api/usuarios/:id)
-   */
   getById: async (id: number): Promise<Usuario> => {
     const { data } = await api.get(`/usuarios/${id}`);
     return data;
   },
 
-  /**
-   * 🔹 Crear un nuevo usuario (POST /api/usuarios)
-   */
   create: async (payload: CrearUsuarioPayload): Promise<Usuario> => {
     const { data } = await api.post("/usuarios", payload);
     return data;
   },
 
-  /**
-   * 🔹 Actualizar un usuario (PUT /api/usuarios/:id)
-   */
   update: async (
     id: number,
     payload: ActualizarUsuarioPayload
@@ -127,9 +93,6 @@ export const usuariosService = {
     return data;
   },
 
-  /**
-   * 🔹 Actualizar estatus (Soft Delete / Reactivar) (PUT /api/usuarios/:id/estatus)
-   */
   updateEstatus: async (
     id: number,
     estatus: EstatusUsuario
@@ -139,9 +102,6 @@ export const usuariosService = {
     return data;
   },
 
-  /**
-   * 🔹 Registrar una suscripción Push (POST /api/usuarios/:id/subscribe)
-   */
   subscribeToPush: async (
     id: number,
     subscription: PushSubscriptionPayload

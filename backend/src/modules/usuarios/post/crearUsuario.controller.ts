@@ -17,7 +17,7 @@ export const crearUsuario = safeAsync(async (req: Request, res: Response) => {
   }
 
   const { nombre, username, password, rol, departamentoId } = parseResult.data;
-  const creador = req.user!; // Asumimos que verifyToken ya pobló esto
+  const creador = req.user!; 
 
   // =================================================================
   // 🛡️ LÓGICA DE PERMISOS JERÁRQUICOS
@@ -35,19 +35,25 @@ export const crearUsuario = safeAsync(async (req: Request, res: Response) => {
       });
     }
 
-    // Regla 2: Un ADMIN solo puede crear usuarios para SU PROPIO departamento
-    // Forzamos el ID del departamento del creador, ignorando lo que envíe el body.
-    if (!creador.departamentoId) {
+    // Regla 2: Un ADMIN solo puede crear usuarios para SU PROPIO departamento, 
+    // EXCEPTO si es INVITADO, en cuyo caso el departamentoId debe ser NULL.
+    if (rol === "INVITADO") {
+      finalDepartamentoId = null;
+    } else {
+      if (!creador.departamentoId) {
         return res.status(500).json({ error: "Error de integridad: El ADMIN creador no tiene departamento asignado." });
+      }
+      finalDepartamentoId = creador.departamentoId;
     }
-    finalDepartamentoId = creador.departamentoId;
   }
 
-  // REGLA PARA SUPER_ADMIN (Validación de consistencia)
+  // REGLA PARA SUPER_ADMIN
   if (creador.rol === "SUPER_ADMIN") {
-    // Si crea un ADMIN, ENCARGADO o USUARIO, debe especificar departamento
     if (["ADMIN", "ENCARGADO", "USUARIO"].includes(rol) && !finalDepartamentoId) {
         return res.status(400).json({ error: "Falta departamento", detalle: `El rol ${rol} requiere un departamentoId.` });
+    }
+    if (["INVITADO", "SUPER_ADMIN"].includes(rol)) {
+        finalDepartamentoId = null;
     }
   }
 
@@ -55,13 +61,16 @@ export const crearUsuario = safeAsync(async (req: Request, res: Response) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
+  // FIX: Spread operator para evitar el error de exactOptionalPropertyTypes
   const dataParaCrear: Prisma.UsuarioCreateInput = {
     nombre,
     username,
     password: hashedPassword,
     rol,
-    // Usamos la variable procesada finalDepartamentoId
-    ...(finalDepartamentoId !== undefined && finalDepartamentoId !== null && { departamentoId: finalDepartamentoId }),
+    ...(finalDepartamentoId 
+      ? { departamento: { connect: { id: finalDepartamentoId } } } 
+      : {}
+    ),
   };
 
   const nuevoUsuario = await prisma.usuario.create({

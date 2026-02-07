@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { Rol, EstatusUsuario } from "@prisma/client";
 
+// ==========================================
+// SCHEMAS DE UTILIDAD
+// ==========================================
+
 export const querySchema = z.object({
   departamentoId: z.coerce.number().int().positive().optional(),
   estatus: z.nativeEnum(EstatusUsuario).optional(),
@@ -28,32 +32,50 @@ export const subscriptionSchema = z.object({
   }),
 });
 
+// ==========================================
+// SCHEMA PARA CREAR USUARIO (CORREGIDO)
+// ==========================================
+
 export const crearUsuarioSchema = z
   .object({
-    nombre: z.string().trim().nonempty("El nombre es requerido").min(3, "El nombre debe tener al menos 3 caracteres"),
-    username: z.string().trim().nonempty("El username es requerido").min(4, "El username debe tener al menos 4 caracteres"),
-    password: z.string().nonempty("La contraseña es requerida").min(6, "La contraseña debe tener al menos 6 caracteres"),
+    nombre: z.string().trim().min(1, "El nombre es requerido").min(3, "El nombre debe tener al menos 3 caracteres"),
+    username: z.string().trim().min(1, "El username es requerido").min(4, "El username debe tener al menos 4 caracteres"),
+    password: z.string().min(1, "La contraseña es requerida").min(6, "La contraseña debe tener al menos 6 caracteres"),
     rol: z.nativeEnum(Rol, { message: "Rol inválido" }),
-    departamentoId: z.number().int().positive().optional().nullable(),
+    
+    // 🛡️ SOLUCIÓN: Usamos z.union para aceptar explícitamente número positivo O null
+    departamentoId: z.union([
+      z.number().int().positive(), 
+      z.null()
+    ]).optional(),
   })
-  .refine(
-    (data) => {
-      if ((data.rol === "SUPER_ADMIN" || data.rol === "INVITADO") && data.departamentoId !== null && data.departamentoId !== undefined) {
-        return false;
+  .superRefine((data, ctx) => {
+    // Regla 1: Roles Externos (SUPER_ADMIN, INVITADO) -> departamentoId DEBE ser null o undefined
+    if (["SUPER_ADMIN", "INVITADO"].includes(data.rol)) {
+      if (data.departamentoId !== null && data.departamentoId !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `El usuario con rol ${data.rol} NO puede tener un departamento asignado.`,
+          path: ["departamentoId"],
+        });
       }
-      return true;
-    },
-    { message: "El departamentoId debe ser nulo para el rol INVITADO", path: ["departamentoId"] }
-  )
-  .refine(
-    (data) => {
-      if ((data.rol === "ADMIN" || data.rol === "ENCARGADO" || data.rol === "USUARIO") && (data.departamentoId === null || data.departamentoId === undefined)) {
-        return false;
+    }
+
+    // Regla 2: Roles Internos (ADMIN, ENCARGADO, USUARIO) -> departamentoId ES OBLIGATORIO (número)
+    if (["ADMIN", "ENCARGADO", "USUARIO"].includes(data.rol)) {
+      if (typeof data.departamentoId !== "number") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `El usuario con rol ${data.rol} requiere un departamentoId válido.`,
+          path: ["departamentoId"],
+        });
       }
-      return true;
-    },
-    { message: "El departamentoId es obligatorio para roles ADMIN, ENCARGADO y USUARIO", path: ["departamentoId"] }
-  );
+    }
+  });
+
+// ==========================================
+// SCHEMA PARA ACTUALIZAR USUARIO
+// ==========================================
 
 export const actualizarUsuarioSchema = z
   .object({
@@ -61,7 +83,8 @@ export const actualizarUsuarioSchema = z
     username: z.string().trim().min(4, "El username debe tener al menos 4 caracteres").optional(),
     password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres").optional(),
     rol: z.nativeEnum(Rol, { message: "Rol inválido" }).optional(),
-    departamentoId: z.number().int().positive().nullable().optional(),
+    // Aplicamos la misma lógica de unión para el update
+    departamentoId: z.union([z.number().int().positive(), z.null()]).optional(),
     estatus: z.nativeEnum(EstatusUsuario).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {

@@ -89,6 +89,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   const [listaInvitados, setListaInvitados] = useState<Usuario[]>([]);
   const [loadingUsuarios, setLoadingUsuarios] = useState(true);
 
+  // --- Estado para búsqueda ---
+  const [busqueda, setBusqueda] = useState("");
+
   const isKaizen = nombre.toUpperCase().startsWith("KAIZEN");
 
   // --- Estados para el motivo de cambio (CORREGIDOS) ---
@@ -428,6 +431,11 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     }
   };
 
+  // Filtrado de usuarios
+  const usuariosFiltrados = (isKaizen ? listaInvitados : listaUsuarios).filter((u) =>
+    u.nombre.toLowerCase().includes(busqueda.toLowerCase())
+  );
+
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -692,46 +700,83 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                 `}
                 tabIndex={0}
               >
-                {(isKaizen ? listaInvitados : listaUsuarios).map((u) => (
-                  <label
-                    key={u.id}
-                    htmlFor={`resp-edit-${u.id}`}
-                    className={`
-                      flex items-center gap-3 w-full px-3 py-2 
-                      cursor-pointer transition-colors
-                      ${responsablesIds.includes(u.id)
-                        ? "bg-amber-100 text-amber-900 font-semibold"
-                        : "text-gray-800 hover:bg-gray-50"
-                      }
+                {/* Barra de búsqueda dentro del contenedor o encima, como prefieras. 
+                    Dado que el contenedor tiene scroll, mejor ponerla encima.
+                    Voy a reestructurar esto ligeramente para poner el input fuera del scroll.
+                */}
+              </div>
+
+              {/* CORRECCIÓN: Estructura del bloque de responsables con búsqueda */}
+              <div>
+                <label className="block text-sm font-semibold mb-1">
+                  Responsables / Invitados
+                </label>
+
+                {/* Input de búsqueda */}
+                <input
+                  type="text"
+                  placeholder="Buscar usuario..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  disabled={loading || loadingUsuarios}
+                  className="w-full border rounded-md px-3 py-2 mb-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100"
+                />
+
+                <div
+                  id="responsable-list-editar"
+                  className={`relative w-full h-32 border rounded-md 
+                      overflow-y-auto 
+                      focus:ring-2 focus:ring-amber-950 focus:outline-none 
+                      ${submitted && responsablesIds.length === 0
+                      ? "border-red-500"
+                      : "border-gray-300"
+                    }
                     `}
-                  >
-                    <input
-                      type="checkbox"
-                      id={`resp-edit-${u.id}`}
-                      checked={responsablesIds.includes(u.id)}
-                      onChange={() => handleToggleResponsable(u.id)}
-                      disabled={loading}
-                      className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
-                    />
-                    <span className={getRoleColorClass(u)}>
-                      {getDisplayName(u)}
-                    </span>
-
-                    {isKaizen && (
-                      <span className="text-xs text-gray-400 ml-auto">
-                        (Invitado)
+                  tabIndex={0}
+                >
+                  {usuariosFiltrados.map((u) => (
+                    <label
+                      key={u.id}
+                      htmlFor={`resp-edit-${u.id}`}
+                      className={`
+                          flex items-center gap-3 w-full px-3 py-2 
+                          cursor-pointer transition-colors
+                          ${responsablesIds.includes(u.id)
+                          ? "bg-amber-100 text-amber-900 font-semibold"
+                          : "text-gray-800 hover:bg-gray-50"
+                        }
+                        `}
+                    >
+                      <input
+                        type="checkbox"
+                        id={`resp-edit-${u.id}`}
+                        checked={responsablesIds.includes(u.id)}
+                        onChange={() => handleToggleResponsable(u.id)}
+                        disabled={loading}
+                        className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
+                      />
+                      <span className={getRoleColorClass(u)}>
+                        {getDisplayName(u)}
                       </span>
-                    )}
-                  </label>
-                ))}
 
-                {(isKaizen ? listaInvitados : listaUsuarios).length === 0 && (
-                  <p className="text-center text-gray-500 text-sm py-8">
-                    {isKaizen
-                      ? "No hay invitados disponibles."
-                      : "No hay usuarios en tu departamento."}
-                  </p>
-                )}
+                      {isKaizen && (
+                        <span className="text-xs text-gray-400 ml-auto">
+                          (Invitado)
+                        </span>
+                      )}
+                    </label>
+                  ))}
+
+                  {usuariosFiltrados.length === 0 && (
+                    <p className="text-center text-gray-500 text-sm py-8">
+                      {busqueda
+                        ? "No se encontraron resultados."
+                        : isKaizen
+                          ? "No hay invitados disponibles."
+                          : "No hay usuarios en tu departamento."}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* --- Prioridad --- */}
