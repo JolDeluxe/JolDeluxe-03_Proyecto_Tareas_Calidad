@@ -16,6 +16,24 @@ export const crearUsuario = safeAsync(async (req: Request, res: Response) => {
     });
   }
 
+  // 2. VALIDACIÓN PREVIA: Verificar si el usuario ya existe
+  // Esto evita el error P2002 de Prisma y da un mensaje claro al usuario
+  const usuarioExistente = await prisma.usuario.findUnique({
+    where: {
+      username: parseResult.data.username
+    }
+  });
+
+  if (usuarioExistente) {
+    return res.status(400).json({
+      error: "Datos de entrada inválidos",
+      detalles: {
+        // Usamos el mismo formato que Zod para que el frontend pinte el input en rojo
+        username: ["Este nombre de usuario ya está registrado. Por favor elige otro."]
+      }
+    });
+  }
+
   const { nombre, username, password, rol, departamentoId } = parseResult.data;
   const creador = req.user!; 
 

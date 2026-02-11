@@ -115,16 +115,15 @@ const Filtros: React.FC<FiltrosProps> = ({
               className={`
                 flex items-center justify-between gap-2 px-4 py-2.5 
                 text-sm font-medium rounded-lg border shadow-sm transition-all
-                ${
-                  selectedResponsable !== "Todos"
-                    ? "bg-amber-50 border-amber-200 text-amber-900"
-                    : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                ${selectedResponsable !== "Todos"
+                  ? "bg-amber-50 border-amber-200 text-amber-900"
+                  : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
                 }
               `}
               type="button"
             >
               <span>
-                Responsable:{" "}
+                :{" "}
                 <strong
                   className={
                     selectedResponsable !== "Todos"
@@ -136,9 +135,8 @@ const Filtros: React.FC<FiltrosProps> = ({
                 </strong>
               </span>
               <svg
-                className={`w-4 h-4 text-gray-400 transition-transform ${
-                  responsableOpen ? "rotate-180" : ""
-                }`}
+                className={`w-4 h-4 text-gray-400 transition-transform ${responsableOpen ? "rotate-180" : ""
+                  }`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -158,11 +156,10 @@ const Filtros: React.FC<FiltrosProps> = ({
                 <div className="max-h-72 overflow-y-auto py-1">
                   <button
                     onClick={() => handleResponsableSelect("Todos")}
-                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${
-                      selectedResponsable === "Todos"
-                        ? "bg-gray-50 font-semibold text-gray-900"
-                        : "text-gray-600"
-                    }`}
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${selectedResponsable === "Todos"
+                      ? "bg-gray-50 font-semibold text-gray-900"
+                      : "text-gray-600"
+                      }`}
                   >
                     Todos
                   </button>
@@ -170,11 +167,10 @@ const Filtros: React.FC<FiltrosProps> = ({
                     <button
                       key={i}
                       onClick={() => handleResponsableSelect(nombre)}
-                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition-colors border-t border-gray-50 ${
-                        selectedResponsable === nombre
-                          ? "bg-amber-50 font-semibold text-amber-900"
-                          : "text-gray-600"
-                      }`}
+                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition-colors border-t border-gray-50 ${selectedResponsable === nombre
+                        ? "bg-amber-50 font-semibold text-amber-900"
+                        : "text-gray-600"
+                        }`}
                     >
                       {nombre}
                     </button>
@@ -183,52 +179,6 @@ const Filtros: React.FC<FiltrosProps> = ({
               </div>
             )}
           </div>
-
-          {/* 2. Botón Toggle KAIZEN (CONDICIONAL) */}
-          {canShowKaizen && (
-            <button
-              onClick={toggleKaizen}
-              className={`
-                flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border shadow-sm transition-all
-                ${
-                  isKaizenActive
-                    ? "bg-purple-600 border-purple-600 text-white hover:bg-purple-700 ring-2 ring-purple-100"
-                    : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
-                }
-              `}
-            >
-              {isKaizenActive ? (
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2.5"
-                    d="M5 13l4 4L19 7"
-                  ></path>
-                </svg>
-              ) : (
-                <svg
-                  className="w-4 h-4 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  ></path>
-                </svg>
-              )}
-              <span>Filtro KAIZEN</span>
-            </button>
-          )}
 
           {/* 3. Botón Limpiar TODO (Solo si hay RESPONSABLE seleccionado) */}
           {selectedResponsable !== "Todos" && (
@@ -255,7 +205,7 @@ const Filtros: React.FC<FiltrosProps> = ({
                   d="M6 18L18 6M6 6l12 12"
                 ></path>
               </svg>
-              <span className="hidden xl:inline">Limpiar</span>
+              <span className="hidden xl:inline">L</span>
             </button>
           )}
         </div>
@@ -324,11 +274,10 @@ const Filtros: React.FC<FiltrosProps> = ({
           </div>
           <button
             onClick={() => setMostrarFiltrosMovil(!mostrarFiltrosMovil)}
-            className={`p-2 rounded-lg border transition-colors ${
-              mostrarFiltrosMovil
-                ? "bg-amber-100 border-amber-300 text-amber-800"
-                : "bg-white border-gray-300 text-gray-600"
-            }`}
+            className={`p-2 rounded-lg border transition-colors ${mostrarFiltrosMovil
+              ? "bg-amber-100 border-amber-300 text-amber-800"
+              : "bg-white border-gray-300 text-gray-600"
+              }`}
           >
             <svg
               className="h-5 w-5"
@@ -354,10 +303,9 @@ const Filtros: React.FC<FiltrosProps> = ({
               className={`
                 relative flex-1 flex items-center justify-between 
                 rounded-full border px-4 py-2 transition-colors
-                ${
-                  isKaizenActive
-                    ? "bg-gray-100 border-gray-200 text-gray-400" // 🔒 Estilo deshabilitado móvil
-                    : selectedResponsable !== "Todos"
+                ${isKaizenActive
+                  ? "bg-gray-100 border-gray-200 text-gray-400" // 🔒 Estilo deshabilitado móvil
+                  : selectedResponsable !== "Todos"
                     ? "bg-amber-100 border-amber-300 text-amber-900"
                     : "bg-white border-gray-300 text-gray-700"
                 }
@@ -428,10 +376,9 @@ const Filtros: React.FC<FiltrosProps> = ({
                 onClick={toggleKaizen}
                 className={`
                   flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors
-                  ${
-                    isKaizenActive
-                      ? "bg-purple-100 border-purple-300 text-purple-900"
-                      : "bg-white border-gray-300 text-gray-700"
+                  ${isKaizenActive
+                    ? "bg-purple-100 border-purple-300 text-purple-900"
+                    : "bg-white border-gray-300 text-gray-700"
                   }
                 `}
               >

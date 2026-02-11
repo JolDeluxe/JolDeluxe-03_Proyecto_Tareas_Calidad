@@ -8,29 +8,34 @@ interface FiltrosProps {
   onResponsableChange: (usuarioId: string) => void;
   onBuscarChange?: (query: string) => void;
   user: Usuario | null;
-  onKaizenChange?: (isKaizen: boolean) => void;
+  // onKaizenChange?: (isKaizen: boolean) => void; // 🙈 KAIZEN COMENTADO
 }
 
 const FiltrosAdmin: React.FC<FiltrosProps> = ({
   onResponsableChange,
   onBuscarChange,
-  onKaizenChange,
+  // onKaizenChange, // 🙈 KAIZEN COMENTADO
   user,
 }) => {
   // --- Estados ---
   const [selectedUsuarioId, setSelectedUsuarioId] = useState("Todos"); // ID seleccionado
   const [usuarios, setUsuarios] = useState<Usuario[]>([]); // Objetos Usuario completos
-  const [isKaizenActive, setIsKaizenActive] = useState(false);
+
+  // const [isKaizenActive, setIsKaizenActive] = useState(false); // 🙈 KAIZEN COMENTADO
+
   const [loading, setLoading] = useState(true);
 
   // --- UI ---
   const [responsableOpen, setResponsableOpen] = useState(false);
   const responsableRef = useRef<HTMLDivElement>(null);
   const [mostrarFiltrosMovil, setMostrarFiltrosMovil] = useState(false);
+
+  /* 🙈 KAIZEN COMENTADO - Lógica de Permisos
   const canShowKaizen =
     user?.rol === "SUPER_ADMIN" ||
     ((user?.rol === "ADMIN" || user?.rol === "ENCARGADO") &&
       user?.departamento?.nombre?.toUpperCase().includes("CALIDAD"));
+  */
 
   // 1. Cargar Usuarios (Dinámico: Todos vs Invitados)
   useEffect(() => {
@@ -38,9 +43,22 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
       if (!user) return;
       try {
         setLoading(true);
+
+        /* 🙈 KAIZEN COMENTADO - Lógica de carga condicional
         const data = isKaizenActive
           ? await usuariosService.getInvitados()
           : await usuariosService.getAll();
+        */
+
+        // 🚀 CAMBIO SOLICITADO: Cargar solo usuarios válidos para el filtro
+        // (Excluyendo INVITADOS si esa es la regla actual, o filtrando por depto)
+        const todosLosUsuarios = await usuariosService.getAll();
+
+        // Filtramos para que SOLO aparezcan usuarios internos (No Invitados)
+        // Y si no es SuperAdmin, que solo vea a los de su departamento (opcional, 
+        // pero usuariosService.getAll ya suele traer filtrado desde el backend si no eres SuperAdmin).
+        // Aquí reforzamos que NO salgan invitados.
+        const data = todosLosUsuarios.filter(u => u.rol !== "INVITADO");
 
         const listaOrdenada = data.sort((a, b) =>
           a.nombre.localeCompare(b.nombre)
@@ -55,7 +73,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
     };
 
     fetchUsuarios();
-  }, [user, isKaizenActive]);
+  }, [user /*, isKaizenActive */]); // 🙈 Quitamos isKaizenActive de dependencias
 
   // 2. Click Outside
   useEffect(() => {
@@ -92,6 +110,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
     onResponsableChange("Todos");
   };
 
+  /* 🙈 KAIZEN COMENTADO - Toggle
   const toggleKaizen = () => {
     const newState = !isKaizenActive;
     setIsKaizenActive(newState);
@@ -103,20 +122,21 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
       setResponsableOpen(false);
     }
   };
+  */
 
   const handleLimpiarTodo = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     setSelectedUsuarioId("Todos");
     onResponsableChange("Todos");
-    setIsKaizenActive(false);
-    if (onKaizenChange) onKaizenChange(false);
+    // setIsKaizenActive(false); // 🙈 KAIZEN COMENTADO
+    // if (onKaizenChange) onKaizenChange(false); // 🙈 KAIZEN COMENTADO
   };
 
   return (
     <div className="w-full bg-white font-sans border-b border-gray-200">
       {/* ============================================================
           💻 VISTA ESCRITORIO (>= 1024px) - ADMIN
-         ============================================================ */}
+          ============================================================ */}
       <div className="hidden lg:flex lg:items-center lg:justify-between gap-4 p-4 bg-white">
         {/* 🔹 SECCIÓN IZQUIERDA: FILTROS */}
         <div className="flex items-center gap-3" ref={responsableRef}>
@@ -124,15 +144,16 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
           <div className="relative">
             <button
               // 🔒 BLOQUEADO SI KAIZEN ESTÁ ACTIVO
-              disabled={isKaizenActive || loading}
+              // disabled={isKaizenActive || loading} // 🙈 ORIGINAL
+              disabled={loading} // ✅ MODIFICADO (Solo carga)
               onClick={() => setResponsableOpen(!responsableOpen)}
               className={`
                 flex items-center justify-between gap-2 px-4 py-2.5 
                 text-sm font-medium rounded-lg border shadow-sm transition-all
                 ${
-                  isKaizenActive || loading
-                    ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed" // Estilo Deshabilitado
-                    : selectedUsuarioId !== "Todos"
+                  /* isKaizenActive || */ loading // 🙈 Condición simplificada
+                  ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed" // Estilo Deshabilitado
+                  : selectedUsuarioId !== "Todos"
                     ? "bg-amber-50 border-amber-200 text-amber-900"
                     : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
                 }
@@ -143,7 +164,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
                 Responsable:{" "}
                 <strong
                   className={
-                    !isKaizenActive && selectedUsuarioId !== "Todos"
+                    /* !isKaizenActive && */ selectedUsuarioId !== "Todos" // 🙈 Condición simplificada
                       ? "text-amber-700"
                       : "font-normal"
                   }
@@ -153,9 +174,8 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
                 </strong>
               </span>
               <svg
-                className={`w-4 h-4 transition-transform ${
-                  responsableOpen ? "rotate-180" : ""
-                } ${isKaizenActive ? "text-gray-300" : "text-gray-400"}`}
+                className={`w-4 h-4 transition-transform ${responsableOpen ? "rotate-180" : ""
+                  } text-gray-400`} // 🙈 Quitamos la condición de color isKaizenActive
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -170,16 +190,15 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
             </button>
 
             {/* Menú Desplegable (Solo si NO está bloqueado) */}
-            {responsableOpen && !isKaizenActive && !loading && (
+            {responsableOpen /* && !isKaizenActive */ && !loading && ( // 🙈 Condición simplificada
               <div className="absolute top-full left-0 mt-2 w-60 bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden animate-fade-in">
                 <div className="max-h-72 overflow-y-auto py-1">
                   <button
                     onClick={() => handleUsuarioSelect("Todos")}
-                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${
-                      selectedUsuarioId === "Todos"
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${selectedUsuarioId === "Todos"
                         ? "bg-gray-50 font-semibold text-gray-900"
                         : "text-gray-600"
-                    }`}
+                      }`}
                   >
                     Todos
                   </button>
@@ -188,11 +207,10 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
                     <button
                       key={u.id}
                       onClick={() => handleUsuarioSelect(u.id.toString())}
-                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition-colors border-t border-gray-50 ${
-                        selectedUsuarioId === u.id.toString()
+                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition-colors border-t border-gray-50 ${selectedUsuarioId === u.id.toString()
                           ? "bg-amber-50 font-semibold text-amber-900"
                           : "text-gray-600"
-                      }`}
+                        }`}
                     >
                       {u.nombre}
                     </button>
@@ -203,16 +221,16 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
           </div>
 
           {/* 2. Botón Toggle KAIZEN (SOLO VISIBLE SI TIENE PERMISOS) */}
+          {/* 🙈 KAIZEN COMENTADO - Botón Desktop
           {canShowKaizen && (
             <button
               onClick={toggleKaizen}
               disabled={loading}
               className={`
                 flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border shadow-sm transition-all
-                ${
-                  isKaizenActive
-                    ? "bg-purple-600 border-purple-600 text-white hover:bg-purple-700 ring-2 ring-purple-100"
-                    : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
+                ${isKaizenActive
+                  ? "bg-purple-600 border-purple-600 text-white hover:bg-purple-700 ring-2 ring-purple-100"
+                  : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
                 }
               `}
             >
@@ -248,6 +266,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
               <span>Filtro KAIZEN</span>
             </button>
           )}
+          */}
 
           {/* 3. Botón Limpiar TODO (Solo si hay responsable seleccionado) */}
           {selectedUsuarioId !== "Todos" && (
@@ -314,7 +333,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
 
       {/* ============================================================
           📱 VISTA MÓVIL (< 1024px) - ADMIN
-         ============================================================ */}
+          ============================================================ */}
       <div className="block lg:hidden p-3">
         {/* Barra Superior: Buscador + Toggle */}
         <div className="flex gap-2 items-center mb-3">
@@ -343,11 +362,10 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
           </div>
           <button
             onClick={() => setMostrarFiltrosMovil(!mostrarFiltrosMovil)}
-            className={`p-2 rounded-lg border transition-colors ${
-              mostrarFiltrosMovil
+            className={`p-2 rounded-lg border transition-colors ${mostrarFiltrosMovil
                 ? "bg-amber-100 border-amber-300 text-amber-800"
                 : "bg-white border-gray-300 text-gray-600"
-            }`}
+              }`}
           >
             <svg
               className="h-5 w-5"
@@ -374,9 +392,9 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
                 relative flex-1 flex items-center justify-between 
                 rounded-full border px-4 py-2 transition-colors
                 ${
-                  isKaizenActive || loading
-                    ? "bg-gray-100 border-gray-200 text-gray-400" // 🔒 Estilo Deshabilitado
-                    : selectedUsuarioId !== "Todos"
+                  /* isKaizenActive || */ loading // 🙈 Condición simplificada
+                  ? "bg-gray-100 border-gray-200 text-gray-400" // 🔒 Estilo Deshabilitado
+                  : selectedUsuarioId !== "Todos"
                     ? "bg-amber-100 border-amber-300 text-amber-900"
                     : "bg-white border-gray-300 text-gray-700"
                 }
@@ -388,11 +406,9 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
               </span>
 
               {/* Icono */}
-              {selectedUsuarioId === "Todos" || isKaizenActive ? (
+              {selectedUsuarioId === "Todos" /* || isKaizenActive */ ? ( // 🙈 Condición simplificada
                 <svg
-                  className={`w-4 h-4 flex-shrink-0 ${
-                    isKaizenActive ? "text-gray-300" : "text-gray-400"
-                  }`}
+                  className="w-4 h-4 flex-shrink-0 text-gray-400" // 🙈 Quitamos condición de color Kaizen
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -428,7 +444,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
 
               {/* SELECT NATIVO INVISIBLE (ADMIN usa selectedUsuarioId y handleUsuarioSelect) */}
               <select
-                disabled={isKaizenActive || loading} // 🔒 Bloqueo Lógico
+                disabled={/* isKaizenActive || */ loading} // 🔒 Bloqueo Lógico
                 value={selectedUsuarioId}
                 onChange={(e) => handleUsuarioSelect(e.target.value)}
                 className="absolute inset-0 w-full h-full opacity-0 z-10"
@@ -443,16 +459,16 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
             </div>
 
             {/* 2. Filtro KAIZEN (SOLO VISIBLE SI TIENE PERMISOS) */}
+            {/* 🙈 KAIZEN COMENTADO - Botón Móvil
             {canShowKaizen && (
               <button
                 onClick={toggleKaizen}
                 disabled={loading}
                 className={`
                   flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors
-                  ${
-                    isKaizenActive
-                      ? "bg-purple-100 border-purple-300 text-purple-900"
-                      : "bg-white border-gray-300 text-gray-700"
+                  ${isKaizenActive
+                    ? "bg-purple-100 border-purple-300 text-purple-900"
+                    : "bg-white border-gray-300 text-gray-700"
                   }
                 `}
               >
@@ -476,6 +492,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
                 )}
               </button>
             )}
+            */}
           </div>
         )}
       </div>

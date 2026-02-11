@@ -53,7 +53,7 @@ const getRowClass = (status: Estatus): string => {
       return "bg-green-50 border-l-4 border-green-500";
     case "CANCELADA":
       return "bg-red-50 border-l-4 border-red-500";
-    case "EN_REVISION": // ✅ Agregamos estilo visual para revisión
+    case "EN_REVISION":
       return "bg-indigo-50 border-l-4 border-indigo-500";
     default:
       return "bg-blue-50 border-l-4 border-blue-500";
@@ -168,15 +168,18 @@ const TablaAdmin: React.FC<TablaProps> = ({
     onRecargarTareas();
   };
 
-  // 9. 🚀 Lógica de filtro (Esta lógica es correcta)
+  // 9. 🚀 Lógica de filtro (AQUÍ ESTÁ LA MAGIA QUE PEDISTE)
   const tareasFiltradas = tareas.filter((t) => {
     const estatus = t.estatus;
 
     const pasaEstatus =
-      filtro.toUpperCase() === "TOTAL" ||
-      (filtro.toUpperCase() === "PENDIENTES" && (estatus === "PENDIENTE" || estatus === "EN_REVISION")) || // Incluimos EN_REVISION en pendientes
-      (filtro.toUpperCase() === "CONCLUIDAS" && estatus === "CONCLUIDA") ||
-      (filtro.toUpperCase() === "CANCELADAS" && estatus === "CANCELADA");
+      // 🔥 CAMBIO CLAVE: Si es TOTAL, solo mostramos PENDIENTE y EN_REVISION (Ocultamos Concluidas y Canceladas)
+      (filtro.toUpperCase() === "TOTAL" && (estatus === "PENDIENTE" || estatus === "EN_REVISION")) ||
+
+      // Filtros individuales por si das clic a los botones específicos
+      (filtro.toUpperCase() === "PENDIENTES" && estatus === "PENDIENTE") ||
+      (filtro.toUpperCase() === "EN_REVISION" && estatus === "EN_REVISION") ||
+      (filtro.toUpperCase() === "CONCLUIDAS" && estatus === "CONCLUIDA");
 
     const pasaResponsable =
       responsable === "Todos" ||
@@ -210,10 +213,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
             <table className="w-full text-sm font-sans">
               <thead className="bg-gray-100 text-black text-xs uppercase sticky top-0 z-20 shadow-inner">
                 <tr>
-                  {/* 🚀 ANCHOS OPTIMIZADOS (Suman 100%) */}
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[3%]">
-                    ID
-                  </th>
                   <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[18%] break-words">
                     Tarea
                   </th>
@@ -287,10 +286,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       key={row.id}
                       className={`${getRowClass(row.estatus)} transition`}
                     >
-                      {/* Columna ID */}
-                      <td className="px-3 py-3 text-center font-semibold w-[3%]">
-                        {row.id}
-                      </td>
 
                       {/* Columna Tarea */}
                       <td className="px-3 py-3 text-left font-semibold w-[18%] break-words">
@@ -427,39 +422,41 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                   Ver historial ({row.historialFechas.length})
                                 </summary>
 
-                                <div className="mt-2 text-gray-700 bg-white/70 rounded-md p-2 border border-gray-200 text-left">
-                                  <ul className="space-y-1">
-                                    {row.historialFechas.map((h, i) => (
-                                      <li
-                                        key={i}
-                                        className="leading-tight border-b border-gray-100 pb-1 last:border-none"
-                                      >
-                                        <p>
-                                          <span className="font-semibold">
-                                            Modificación:
-                                          </span>{" "}
-                                          {formateaFecha(h.fechaCambio)}
-                                        </p>
-                                        <p>
-                                          <span className="font-semibold">
-                                            Anterior:
-                                          </span>{" "}
-                                          {formateaFecha(h.fechaAnterior)} →{" "}
-                                          <span className="font-semibold">
-                                            Nueva:
-                                          </span>{" "}
-                                          {formateaFecha(h.nuevaFecha)}
-                                        </p>
-                                        <p className="italic text-gray-600">
-                                          Por: {h.modificadoPor.nombre}
-                                        </p>
-                                        {h.motivo && (
-                                          <p className="italic text-gray-600">
-                                            Motivo: {h.motivo}
+                                <div className="mt-2 text-gray-700 bg-white/80 rounded-md p-2 border border-gray-200 text-left">
+                                  <ul className="space-y-2">
+                                    {row.historialFechas.map(
+                                      (h: HistorialFecha, i: number) => (
+                                        <li
+                                          key={i}
+                                          className="border-b border-gray-100 pb-1 last:border-none"
+                                        >
+                                          <p>
+                                            <span className="font-semibold text-gray-800">
+                                              Modificación:
+                                            </span>{" "}
+                                            {formateaFecha(h.fechaCambio)}
                                           </p>
-                                        )}
-                                      </li>
-                                    ))}
+                                          <p>
+                                            <span className="font-semibold text-gray-800">
+                                              Anterior:
+                                            </span>{" "}
+                                            {formateaFecha(h.fechaAnterior)} →{" "}
+                                            <span className="font-semibold text-gray-800">
+                                              Nueva:
+                                            </span>{" "}
+                                            {formateaFecha(h.nuevaFecha)}
+                                          </p>
+                                          <p className="italic text-gray-600">
+                                            Por: {h.modificadoPor.nombre}
+                                          </p>
+                                          {h.motivo && (
+                                            <p className="italic text-gray-600">
+                                              Motivo: {h.motivo}
+                                            </p>
+                                          )}
+                                        </li>
+                                      )
+                                    )}
                                   </ul>
                                 </div>
                               </details>
@@ -551,7 +548,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
               const fechaLimiteFinalStr = formateaFecha(fechaLimiteObj);
 
               // 🚀 ✅ SOLUCIÓN (VISTA MÓVIL):
-              //   Calculamos los permisos aquí también para que la lógica sea IDÉNTICA
+              //   Calculamos los permisos aquí también para que la lógica sea IDÉNTICA
               const puedeValidar =
                 user &&
                 (user.rol === Rol.SUPER_ADMIN ||
@@ -672,101 +669,101 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         {row.estatus === "EN_REVISION" ? "EN REVISIÓN" : row.estatus}
                       </span>
                     </p>
+                  </div>
 
-                    {row.fechaConclusion && (
-                      <p
-                        className={`mt-2 text-xs flex items-center ${retrasada
-                          ? "text-red-600 font-semibold"
-                          : "text-gray-700"
-                          }`}
-                      >
-                        <span className="font-semibold text-gray-700">
-                          Conclusión:
-                        </span>{" "}
-                        <span className="ml-1">
-                          {formateaFecha(row.fechaConclusion)}
-                        </span>
-                        {retrasada && (
-                          <span className="ml-1 inline-flex items-center">
-                            {/* SVG Retrasada */}
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                              className="w-3.5 h-3.5 text-red-500"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M12 2.25a9.75 9.75 0 1 1 0 19.5 9.75 9.75 0 0 1 0-19.5Zm0 1.5a8.25 8.25 0 1 0 0 16.5 8.25 8.25 0 0 0 0-16.5Zm.75 4.5a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h3.75a.75.75 0 0 0 0-1.5h-3V8.25Z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          </span>
-                        )}
-                      </p>
-                    )}
-
-                    {row.historialFechas && row.historialFechas.length > 0 && (
-                      <details className="mt-3 text-xs transition-all duration-300 open:pb-2">
-                        <summary className="cursor-pointer select-none font-semibold text-blue-600 hover:underline flex items-center gap-1">
-                          {/* SVG Historial */}
+                  {row.fechaConclusion && (
+                    <p
+                      className={`mt-2 text-xs flex items-center ${retrasada
+                        ? "text-red-600 font-semibold"
+                        : "text-gray-700"
+                        }`}
+                    >
+                      <span className="font-semibold text-gray-700">
+                        Conclusión:
+                      </span>{" "}
+                      <span className="ml-1">
+                        {formateaFecha(row.fechaConclusion)}
+                      </span>
+                      {retrasada && (
+                        <span className="ml-1 inline-flex items-center">
+                          {/* SVG Retrasada */}
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            className="w-3.5 h-3.5 text-blue-500 transition-transform duration-200 group-open:rotate-180"
-                            fill="none"
                             viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={3}
+                            fill="currentColor"
+                            className="w-3.5 h-3.5 text-red-500"
                           >
                             <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M19 9l-7 7-7-7"
+                              fillRule="evenodd"
+                              d="M12 2.25a9.75 9.75 0 1 1 0 19.5 9.75 9.75 0 0 1 0-19.5Zm0 1.5a8.25 8.25 0 1 0 0 16.5 8.25 8.25 0 0 0 0-16.5Zm.75 4.5a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h3.75a.75.75 0 0 0 0-1.5h-3V8.25Z"
+                              clipRule="evenodd"
                             />
                           </svg>
-                          Ver historial ({row.historialFechas.length})
-                        </summary>
+                        </span>
+                      )}
+                    </p>
+                  )}
 
-                        <div className="mt-2 bg-white/80 border border-gray-200 rounded-md p-2 text-gray-700">
-                          <ul className="space-y-2">
-                            {row.historialFechas.map(
-                              (h: HistorialFecha, i: number) => (
-                                <li
-                                  key={i}
-                                  className="border-b border-gray-100 pb-1 last:border-none"
-                                >
-                                  <p>
-                                    <span className="font-semibold text-gray-800">
-                                      Modificación:
-                                    </span>{" "}
-                                    {formateaFecha(h.fechaCambio)}
-                                  </p>
-                                  <p>
-                                    <span className="font-semibold text-gray-800">
-                                      Anterior:
-                                    </span>{" "}
-                                    {formateaFecha(h.fechaAnterior)} →{" "}
-                                    <span className="font-semibold text-gray-800">
-                                      Nueva:
-                                    </span>{" "}
-                                    {formateaFecha(h.nuevaFecha)}
-                                  </p>
+                  {row.historialFechas && row.historialFechas.length > 0 && (
+                    <details className="mt-3 text-xs transition-all duration-300 open:pb-2">
+                      <summary className="cursor-pointer select-none font-semibold text-blue-600 hover:underline flex items-center gap-1">
+                        {/* SVG Historial */}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="w-3.5 h-3.5 text-blue-500 transition-transform duration-200 group-open:rotate-180"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={3}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                        Ver historial ({row.historialFechas.length})
+                      </summary>
+
+                      <div className="mt-2 bg-white/80 border border-gray-200 rounded-md p-2 text-gray-700">
+                        <ul className="space-y-2">
+                          {row.historialFechas.map(
+                            (h: HistorialFecha, i: number) => (
+                              <li
+                                key={i}
+                                className="border-b border-gray-100 pb-1 last:border-none"
+                              >
+                                <p>
+                                  <span className="font-semibold text-gray-800">
+                                    Modificación:
+                                  </span>{" "}
+                                  {formateaFecha(h.fechaCambio)}
+                                </p>
+                                <p>
+                                  <span className="font-semibold text-gray-800">
+                                    Anterior:
+                                  </span>{" "}
+                                  {formateaFecha(h.fechaAnterior)} →{" "}
+                                  <span className="font-semibold text-gray-800">
+                                    Nueva:
+                                  </span>{" "}
+                                  {formateaFecha(h.nuevaFecha)}
+                                </p>
+                                <p className="italic text-gray-600">
+                                  Por: {h.modificadoPor.nombre}
+                                </p>
+                                {h.motivo && (
                                   <p className="italic text-gray-600">
-                                    Por: {h.modificadoPor.nombre}
+                                    Motivo: {h.motivo}
                                   </p>
-                                  {h.motivo && (
-                                    <p className="italic text-gray-600">
-                                      Motivo: {h.motivo}
-                                    </p>
-                                  )}
-                                </li>
-                              )
-                            )}
-                          </ul>
-                        </div>
-                      </details>
-                    )}
-                  </div>
+                                )}
+                              </li>
+                            )
+                          )}
+                        </ul>
+                      </div>
+                    </details>
+                  )}
 
                   {row.imagenes && row.imagenes.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-200 flex justify-center">
@@ -791,26 +788,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                   {/* ⚙️ Acciones (Móvil) - LÓGICA CORREGIDA CON REVISIÓN */}
                   <div className="flex justify-around items-center mt-4 pt-2 border-t border-gray-200 h-[46px]">
 
-                    {/* ✅ BOTÓN DE REVISIÓN EN MÓVIL */}
-                    {row.estatus === "EN_REVISION" && puedeValidar ? (
-                      <button
-                        onClick={() => handleRevisar(row)}
-                        className="flex flex-col items-center text-indigo-700 hover:text-indigo-800 transition"
-                        title="Revisar evidencia"
-                      >
-                        {/* Ícono Lupita */}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 -960 960 960"
-                          className="w-6 h-6 fill-indigo-700"
-                        >
-                          <path d="M440-240q116 0 198-81.5T720-520q0-116-82-198t-198-82q-117 0-198.5 82T160-520q0 117 81.5 198.5T440-240Zm0-280Zm0 160q-83 0-147.5-44.5T200-520q28-70 92.5-115T440-680q82 0 146.5 45T680-520q-29 71-93.5 115.5T440-360Zm0-60q55 0 101-26.5t72-73.5q-26-46-72-73t-101-27q-56 0-102 27t-72 73q26 47 72 73.5T440-420Zm0-40q25 0 42.5-17t17.5-43q0-25-17.5-42.5T440-580q-26 0-43 17.5T380-520q0 26 17 43t43 17Zm0 300q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T80-520q0-74 28.5-139.5t77-114.5q48.5-49 114-77.5T440-880q74 0 139.5 28.5T694-774q49 49 77.5 114.5T800-520q0 64-21 121t-58 104l159 159-57 56-159-158q-47 37-104 57.5T440-160Z" />
-                        </svg>
-                        <span className="text-[11px] font-semibold">
-                          Revisar
-                        </span>
-                      </button>
-                    ) : null}
+
 
                     {/* BOTONES STANDARD (PENDIENTE / EDITAR / CANCELAR) */}
 
@@ -876,6 +854,27 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         </span>
                       </button>
                     )}
+
+                    {/* ✅ BOTÓN DE REVISIÓN EN MÓVIL */}
+                    {row.estatus === "EN_REVISION" && puedeValidar ? (
+                      <button
+                        onClick={() => handleRevisar(row)}
+                        className="flex flex-col items-center text-indigo-700 hover:text-indigo-800 transition"
+                        title="Revisar evidencia"
+                      >
+                        {/* Ícono Lupita */}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 -960 960 960"
+                          className="w-6 h-6 fill-indigo-700"
+                        >
+                          <path d="M440-240q116 0 198-81.5T720-520q0-116-82-198t-198-82q-117 0-198.5 82T160-520q0 117 81.5 198.5T440-240Zm0-280Zm0 160q-83 0-147.5-44.5T200-520q28-70 92.5-115T440-680q82 0 146.5 45T680-520q-29 71-93.5 115.5T440-360Zm0-60q55 0 101-26.5t72-73.5q-26-46-72-73t-101-27q-56 0-102 27t-72 73q26 47 72 73.5T440-420Zm0-40q25 0 42.5-17t17.5-43q0-25-17.5-42.5T440-580q-26 0-43 17.5T380-520q0 26 17 43t43 17Zm0 300q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T80-520q0-74 28.5-139.5t77-114.5q48.5-49 114-77.5T440-880q74 0 139.5 28.5T694-774q49 49 77.5 114.5T800-520q0 64-21 121t-58 104l159 159-57 56-159-158q-47 37-104 57.5T440-160Z" />
+                        </svg>
+                        <span className="text-[11px] font-semibold">
+                          Revisar
+                        </span>
+                      </button>
+                    ) : null}
 
                     {row.estatus === "CONCLUIDA" && (
                       <div

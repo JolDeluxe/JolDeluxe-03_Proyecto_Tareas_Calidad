@@ -101,11 +101,14 @@ const Tabla: React.FC<TablaProps> = ({
 
   const tareasFiltradas = tareas.filter((t) => {
     const estatus = t.estatus.toUpperCase();
+
+    // 🔥 LÓGICA DE FILTRADO ACTUALIZADA
+    // Si filtro es TOTAL, mostramos todo EXCEPTO las canceladas.
     const pasaEstatus =
-      filtro.toUpperCase() === "TOTAL" ||
+      (filtro.toUpperCase() === "TOTAL" && estatus !== "CANCELADA") ||
       (filtro.toUpperCase() === "PENDIENTES" && estatus === "PENDIENTE") ||
-      (filtro.toUpperCase() === "CONCLUIDAS" && estatus === "CONCLUIDA") ||
-      (filtro.toUpperCase() === "CANCELADAS" && estatus === "CANCELADA");
+      (filtro.toUpperCase() === "CONCLUIDAS" && estatus === "CONCLUIDA");
+    // Nota: Ya no filtramos explícitamente por "CANCELADAS" porque quitamos el botón.
 
     const pasaFecha = filtrarPorFecha(t.fechaRegistro);
 

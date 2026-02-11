@@ -1,3 +1,5 @@
+// 📍 src/components/Admin/ModalNueva.tsx
+
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import "react-datepicker/dist/react-datepicker.css";
@@ -7,7 +9,7 @@ import { usuariosService } from "../../api/usuarios.service";
 import type { Tarea, Estatus, Urgencia } from "../../types/tarea";
 import type { Usuario } from "../../types/usuario";
 import { Rol } from "../../types/usuario";
-import api from "../../api/01_axiosInstance";
+// import api from "../../api/01_axiosInstance"; // Comentado si no se usa directamente en este archivo
 
 interface ModalNuevaProps {
   onClose: () => void;
@@ -176,9 +178,9 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     return dateObj;
   };
 
-  const handleDateChange = (date: Date | null) => {
-    setFecha(formatDateToInput(date));
-  };
+  // const handleDateChange = (date: Date | null) => {
+  //   setFecha(formatDateToInput(date));
+  // };
 
   // --- 3. Manejadores de Archivos (CON VALIDACIÓN 5MB) ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -186,7 +188,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
       const nuevosArchivos = Array.from(e.target.files);
 
       // 🛑 Validación de tamaño (5MB)
-      const TAMANO_MAXIMO = 5 * 1024 * 1024;
+      const TAMANO_MAXIMO = 20 * 1024 * 1024;
       const archivoPesado = nuevosArchivos.find(file => file.size > TAMANO_MAXIMO);
 
       if (archivoPesado) {
@@ -212,9 +214,6 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
       prevArchivos.filter((_, index) => index !== indexToRemove)
     );
   };
-
-  // ❌ ELIMINADO
-  // const handleToggleResponsable = (id: number) => { ... };
 
   // --- ✅ NUEVA FUNCIÓN (Soluciona el error) ---
   /**
@@ -438,17 +437,19 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                     >
                       Tarea Estándar
                     </button>
+                    {/* 🔒🔒🔒 BOTÓN KAIZEN DESHABILITADO POR MANTENIMIENTO 🔒🔒🔒 */}
                     <button
                       type="button"
                       onClick={() => {
-                        setIsKaizen(true);
-                        setResponsablesIds([]);
-                        setBusqueda(""); // Limpiar búsqueda al cambiar
+                        // isKaizen está deshabilitado, pero dejamos la lógica aquí
+                        // setIsKaizen(true);
+                        // setResponsablesIds([]);
+                        // setBusqueda("");
                       }}
-                      className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${isKaizen
-                        ? "bg-purple-600 text-white shadow-sm"
-                        : "text-gray-500 hover:text-gray-700"
-                        }`}
+                      disabled={true} // 🔒 DESHABILITADO
+                      title="Módulo en mantenimiento" // 🔒 TOOLTIP
+                      className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all 
+                        bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent`} // 🔒 ESTILO GRIS
                     >
                       Tarea KAIZEN
                     </button>
@@ -531,10 +532,10 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                     if (loading) e.preventDefault();
                   }}
                   className={`w-full flex items-center justify-center gap-2 
-                   bg-amber-100 text-amber-900 
-                   font-semibold px-4 py-2 rounded-md 
-                   transition-all duration-200
-                   ${loading
+                    bg-amber-100 text-amber-900 
+                    font-semibold px-4 py-2 rounded-md 
+                    transition-all duration-200
+                    ${loading
                       ? "opacity-50 cursor-not-allowed"
                       : "cursor-pointer hover:bg-amber-200"
                     }
@@ -642,8 +643,8 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                   // Placeholder (un esqueleto)
                   <div
                     className="relative w-full h-32 border rounded-md px-3 py-2 
-                  bg-gray-100 border-gray-300 
-                  flex items-center justify-center"
+                   bg-gray-100 border-gray-300 
+                   flex items-center justify-center"
                   >
                     <p className="text-gray-500">Cargando usuarios...</p>
                   </div>

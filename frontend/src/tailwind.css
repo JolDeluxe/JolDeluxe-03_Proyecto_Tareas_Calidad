@@ -31,10 +31,5 @@
 
 body,
 html {
-  /* Esto evita el menú de copiar/pegar en iOS */
-  -webkit-touch-callout: none;
 
-  /* Esto (que ya hace Tailwind con select-none) evita la selección de texto */
-  -webkit-user-select: none;
-  user-select: none;
 }

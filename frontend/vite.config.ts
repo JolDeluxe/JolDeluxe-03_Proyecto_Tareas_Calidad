@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import svgr from "vite-plugin-svgr";
 import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   envDir: "..",
   plugins: [
     react(),
@@ -12,6 +12,7 @@ export default defineConfig({
     svgr(),
 
     VitePWA({
+      disable: mode === "development",
       registerType: "autoUpdate",
       workbox: {
         cleanupOutdatedCaches: true,
@@ -486,4 +487,4 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5173,
   },
-});
+}));

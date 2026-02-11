@@ -101,7 +101,7 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
                   <tr key={row.id} className="hover:bg-gray-50 transition">
                     <td className="px-3 py-3 text-center font-semibold w-[5%] text-gray-500">{row.id}</td>
                     <td className="px-3 py-3 text-left font-semibold text-gray-900 w-[25%]">{row.nombre}</td>
-                    <td className="px-3 py-3 text-left text-gray-600 w-[20%] font-mono text-xs">@{row.username}</td>
+                    <td className="px-3 py-3 text-left text-gray-600 w-[20%] font-mono text-xs">{row.username}</td>
 
                     <td className="px-3 py-3 text-center w-[15%]">
                       <span className={`px-2 py-1 text-xs font-bold rounded-full 
@@ -178,7 +178,7 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
                 <div className="text-xs text-gray-600 space-y-1">
                   <p>
                     <span className="font-semibold text-gray-700">Usuario:</span>{" "}
-                    <span className="font-mono text-gray-800">@{row.username}</span>
+                    <span className="font-mono text-gray-800">{row.username}</span>
                   </p>
                   <p>
                     <span className="font-semibold text-gray-700">Rol:</span>{" "}

@@ -60,7 +60,7 @@ const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Pr
                       </div>
                       <div>
                         <p className={`font-bold ${u.estatus === 'INACTIVO' ? 'text-slate-500' : 'text-slate-800'}`}>{u.nombre}</p>
-                        <p className="text-xs text-slate-500">@{u.username}</p>
+                        <p className="text-xs text-slate-500">{u.username}</p>
                       </div>
                     </div>
                   </td>
@@ -98,8 +98,8 @@ const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Pr
                         onClick={() => onToggleStatus(u)}
                         title={u.estatus === 'ACTIVO' ? "Desactivar usuario" : "Reactivar usuario"}
                         className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${u.estatus === 'ACTIVO'
-                            ? 'border-red-400 text-red-600 hover:bg-red-600 hover:text-white' // Estilo Borrar
-                            : 'border-green-400 text-green-700 hover:bg-green-100' // Estilo Reactivar (Verde)
+                          ? 'border-red-400 text-red-600 hover:bg-red-600 hover:text-white' // Estilo Borrar
+                          : 'border-green-400 text-green-700 hover:bg-green-100' // Estilo Reactivar (Verde)
                           }`}
                       >
                         {u.estatus === 'ACTIVO' ? (
