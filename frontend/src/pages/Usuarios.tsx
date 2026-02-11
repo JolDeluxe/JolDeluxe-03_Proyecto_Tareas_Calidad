@@ -4,18 +4,21 @@ import ResumenUsuarios from "../components/Usuarios/ResumenUsuarios";
 import FiltrosUsuarios from "../components/Usuarios/FiltrosUsuarios";
 import ModalUsuario from "../components/Usuarios/ModalUsuario";
 import { usuariosService } from "../api/usuarios.service";
+import { departamentosService } from "../api/departamentos.service"; // ✅ IMPORTAR SERVICIO DEPTOS
 import type { Usuario } from "../types/usuario";
+import type { Departamento } from "../api/departamentos.service"; // ✅ IMPORTAR TIPO DEPTO
 
 interface UsuariosProps {
   user: Usuario | null;
 }
 
 const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
-  // Estado para el filtro: "TODOS", "MI_EQUIPO", "INVITADOS"
+  // Estado para el filtro: "TODOS", "MI_EQUIPO", "INVITADOS" (aunque invitados ya no se usa visualmente)
   const [filtro, setFiltro] = useState<string>("TODOS");
   const [query, setQuery] = useState<string>("");
   const [openModal, setOpenModal] = useState<boolean>(false);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [departamentos, setDepartamentos] = useState<Departamento[]>([]); // ✅ ESTADO PARA DEPTOS
   const [loading, setLoading] = useState(true);
 
   const handleRefresh = () => {
@@ -31,18 +34,17 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
     if (!user) return;
     setLoading(true);
     try {
-      // Pedimos las dos listas por separado y las unimos
-      // 1. getAll() -> Trae usuarios de MI departamento (según tu backend actual)
-      // 2. getInvitados() -> Trae todos los invitados
-      const [equipo, invitados] = await Promise.all([
+      // ✅ Cargamos Usuarios, Invitados y Departamentos en paralelo
+      const [equipo, invitados, deptosData] = await Promise.all([
         usuariosService.getAll(),
-        usuariosService.getInvitados()
+        usuariosService.getInvitados(),
+        departamentosService.getAll() // ✅ Traer departamentos
       ]);
 
       const listaEquipo = Array.isArray(equipo) ? equipo : [];
       const listaInvitados = Array.isArray(invitados) ? invitados : [];
 
-      // Unimos las listas evitando duplicados por ID (por seguridad)
+      // Unimos las listas evitando duplicados por ID
       const todos = [...listaEquipo];
       const idsExistentes = new Set(todos.map(u => u.id));
 
@@ -53,9 +55,10 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
       });
 
       setUsuarios(todos);
+      setDepartamentos(deptosData); // ✅ Guardar departamentos
 
     } catch (error) {
-      console.error("Error al cargar usuarios:", error);
+      console.error("Error al cargar datos:", error);
     } finally {
       setLoading(false);
     }
@@ -124,6 +127,7 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
             loading={loading}
             onRecargarUsuarios={fetchUsuarios}
             currentUser={user}
+            departamentos={departamentos} // ✅ PASAR DEPARTAMENTOS A LA TABLA (Para que esta se lo pase al modal de edición)
           />
         </div>
       </div>
@@ -138,6 +142,7 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
           }}
           usuarioAEditar={null}
           currentUser={user}
+          departamentos={departamentos} // ✅ PASAR DEPARTAMENTOS AL MODAL DE CREACIÓN
         />
       )}
     </div>

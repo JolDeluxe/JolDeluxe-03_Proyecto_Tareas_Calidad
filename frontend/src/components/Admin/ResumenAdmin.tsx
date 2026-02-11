@@ -21,7 +21,7 @@ const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
   query,
   tareas,
   loading,
-  user,
+  // user,
 }) => {
 
   // 1. Filtrado base

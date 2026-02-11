@@ -18,94 +18,161 @@ const ResumenUsuarios: React.FC<Props> = ({
   query
 }) => {
 
-  // --- 1. Cálculo de Métricas ---
+  // --- 1. Cálculo de Métricas (Solo Activos e ignorando Invitados) ---
   const metricas = useMemo(() => {
     if (!usuarios || !Array.isArray(usuarios)) {
-      return { miEquipo: 0, invitados: 0, total: 0 };
+      return { admins: 0, encargados: 0, usuarios: 0, total: 0 };
     }
+    // Omitimos inactivos y omitimos invitados según tu regla de negocio
+    const personalActivo = usuarios.filter(u => u.estatus === "ACTIVO" && u.rol !== Rol.INVITADO);
 
-    const total = usuarios.length;
-    // Invitados: Rol explícito INVITADO
-    const invitados = usuarios.filter((u) => u.rol === Rol.INVITADO).length;
-    // Mi Equipo: Todo lo demás (ADMIN, ENCARGADO, USUARIO del mismo depto)
-    const miEquipo = total - invitados;
-
-    return { miEquipo, invitados, total };
+    return {
+      admins: personalActivo.filter((u) => u.rol === Rol.ADMIN).length,
+      encargados: personalActivo.filter((u) => u.rol === Rol.ENCARGADO).length,
+      usuarios: personalActivo.filter((u) => u.rol === Rol.USUARIO).length,
+      total: personalActivo.length
+    };
   }, [usuarios]);
 
-  // --- 2. Loading State ---
+  // --- 2. Definición de Botones (Estilos idénticos a ResumenAdmin) ---
+  const botones = [
+    {
+      id: "TODOS",
+      label: "Total",
+      value: metricas.total,
+      baseDesktop: "bg-gray-100 border border-gray-400 text-gray-800",
+      baseMobile: "bg-gray-100 border border-gray-300 text-gray-700",
+      activeDesktop: "bg-gray-700 border border-gray-800 text-white shadow-md scale-[1.03]",
+      activeMobile: "bg-gray-700 border border-gray-800 text-white shadow-md",
+      titleClassBase: "text-gray-900",
+      titleClassActive: "text-white"
+    },
+
+    {
+      id: Rol.ADMIN,
+      label: "Gestión",
+      value: metricas.admins,
+      baseDesktop: "bg-yellow-100 border border-yellow-400 text-yellow-800",
+      baseMobile: "bg-yellow-100 border border-yellow-300 text-yellow-700",
+      activeDesktop: "bg-yellow-500 border border-yellow-600 text-white shadow-md scale-[1.03]",
+      activeMobile: "bg-yellow-500 border border-yellow-600 text-white shadow-md",
+      titleClassBase: "text-yellow-900",
+      titleClassActive: "text-white"
+    },
+    {
+      id: Rol.ENCARGADO,
+      label: "Coordinadores",
+      value: metricas.encargados,
+      baseDesktop: "bg-blue-100 border border-blue-400 text-blue-800",
+      baseMobile: "bg-blue-100 border border-blue-300 text-blue-700",
+      activeDesktop: "bg-blue-600 border border-blue-700 text-white shadow-md scale-[1.03]",
+      activeMobile: "bg-blue-600 border border-blue-700 text-white shadow-md",
+      titleClassBase: "text-blue-900",
+      titleClassActive: "text-white"
+    },
+    {
+      id: Rol.USUARIO,
+      label: "Operativo",
+      value: metricas.usuarios,
+      baseDesktop: "bg-rose-100 border border-rose-400 text-rose-800",
+      baseMobile: "bg-rose-100 border border-rose-300 text-rose-700",
+      activeDesktop: "bg-rose-900 border border-rose-950 text-white shadow-md scale-[1.03]",
+      activeMobile: "bg-rose-900 border border-rose-950 text-white shadow-md",
+      titleClassBase: "text-rose-900",
+      titleClassActive: "text-white"
+    },
+
+
+  ];
+
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 animate-pulse">
-        <div className="h-24 bg-slate-100 rounded-xl border border-slate-200"></div>
-        <div className="h-24 bg-slate-100 rounded-xl border border-slate-200"></div>
+      <div className="flex justify-center items-center h-32 text-gray-500 italic">
+        Cargando resumen...
       </div>
     );
   }
 
-  // --- 3. Componente de Botón (Estilo Super Admin) ---
-  const FilterButton = ({ label, sublabel, count, value, colorClass }: any) => {
-    const isActive = filtroActual === value;
-
-    // Si hago clic en el que ya está activo, lo desactivo ("TODOS"), si no, activo el nuevo valor.
-    const handleClick = () => {
-      onFilterChange(isActive ? "TODOS" : value);
-    };
-
-    return (
-      <button
-        onClick={handleClick}
-        className={`flex items-center justify-between p-4 rounded-xl border transition-all w-full text-left group
-          ${isActive
-            ? `bg-white border-${colorClass}-500 ring-1 ring-${colorClass}-500 shadow-md`
-            : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm opacity-90 hover:opacity-100'
-          }`}
-      >
-        <div>
-          <p className={`text-xs font-bold uppercase mb-1 transition-colors ${isActive ? `text-${colorClass}-600` : 'text-slate-500'}`}>
-            {label}
-          </p>
-          <p className="text-xs text-slate-400 font-medium mb-1">{sublabel}</p>
-          <p className="text-3xl font-black text-slate-800">{count}</p>
-        </div>
-
-        {/* Indicador visual (círculo) */}
-        <div className={`w-3 h-3 rounded-full transition-colors ${isActive ? `bg-${colorClass}-500` : 'bg-slate-200 group-hover:bg-slate-300'}`}></div>
-      </button>
-    );
-  };
-
   return (
-    <div className="w-full">
+    <>
       {/* Mensaje de búsqueda si existe */}
-      {query && (
-        <div className="mb-4 p-2 bg-yellow-50 border-l-4 border-yellow-400 text-sm text-yellow-700 rounded-r-md flex items-center gap-2">
-          <span>🔍</span> Resultados para: <span className="font-bold">"{query}"</span>
-        </div>
-      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-
-        {/* Tarjeta Mi Equipo (Indigo) */}
-        <FilterButton
-          label="Mi Equipo"
-          sublabel="Personal de mi Departamento"
-          count={metricas.miEquipo}
-          value="MI_EQUIPO"
-          colorClass="indigo"
-        />
-
-        {/* Tarjeta Invitados (Amber) */}
-        <FilterButton
-          label="Invitados"
-          sublabel="Usuarios Externos"
-          count={metricas.invitados}
-          value="INVITADOS"
-          colorClass="amber"
-        />
-
+      {/* 💻 VERSIÓN ESCRITORIO (Estilo Tarjetas exactas a ResumenAdmin) */}
+      <div className="hidden lg:grid grid-cols-4 gap-4 mb-2 max-w-6xl mx-auto">
+        {botones.map((btn) => {
+          const isActive = filtroActual === btn.id;
+          return (
+            <div
+              key={btn.id}
+              className="flex justify-center cursor-pointer select-none"
+              onClick={() => onFilterChange(btn.id)}
+            >
+              <div className={`
+                rounded-lg p-2 text-center shadow-sm w-full transition-all duration-200
+                ${isActive ? btn.activeDesktop : btn.baseDesktop}
+              `}>
+                <div className="text-md font-semibold">
+                  {btn.label}
+                </div>
+                <div className={`text-2xl font-extrabold ${isActive ? btn.titleClassActive : btn.titleClassBase}`}>
+                  {btn.value}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
-    </div>
+
+      {/* 📱 VERSIÓN MÓVIL (Jerarquía Vertical Solicitada) */}
+      <div className="lg:hidden flex flex-col items-center mb-4 px-3">
+
+        {/* --- BLOQUE SUPERIOR: TOTAL --- */}
+        <div className="w-full flex justify-center mb-4">
+          <div
+            onClick={() => onFilterChange(botones[0].id)}
+            className={`
+              flex justify-between items-center 
+              w-60 md:w-80 max-w-xs px-4 py-2 
+              rounded-full border shadow-sm cursor-pointer select-none transition-all duration-200
+              ${filtroActual === botones[0].id ? botones[0].activeMobile : botones[0].baseMobile}
+            `}
+          >
+            <span className="text-center font-semibold text-[14px] md:text-[18px]">
+              {botones[0].label}
+            </span>
+            <span className={`text-right font-bold text-[15px] md:text-[19px] opacity-90 ${filtroActual === botones[0].id ? 'text-white' : ''}`}>
+              {botones[0].value}
+            </span>
+          </div>
+        </div>
+
+        {/* --- BLOQUE INFERIOR: ROLES --- */}
+        <div className="flex flex-col items-center space-y-2 w-full">
+          {botones.slice(1).map((btn) => {
+            const isActive = filtroActual === btn.id;
+            return (
+              <div
+                key={btn.id}
+                onClick={() => onFilterChange(isActive ? "TODOS" : btn.id)}
+                className={`
+                  flex justify-between items-center 
+                  w-60 md:w-80 max-w-xs px-4 py-2 
+                  rounded-full border shadow-sm cursor-pointer select-none transition-all duration-200
+                  ${isActive ? btn.activeMobile : btn.baseMobile}
+                `}
+              >
+                <span className="text-center font-semibold text-[14px] md:text-[18px] flex items-center gap-1.5">
+                  {btn.label}
+                </span>
+                <span className={`text-right font-bold text-[15px] md:text-[19px] opacity-90 ${isActive ? 'text-white' : ''}`}>
+                  {btn.value}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 };
 
