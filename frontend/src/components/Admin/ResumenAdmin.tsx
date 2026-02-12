@@ -46,11 +46,13 @@ const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
     (t) => t.estatus.toUpperCase() === "EN_REVISION"
   ).length;
 
-  const concluidas = tareasFiltradas.filter(
-    (t) => t.estatus.toUpperCase() === "CONCLUIDA"
-  ).length;
+  // const concluidas = tareasFiltradas.filter(
+  //   (t) => t.estatus.toUpperCase() === "CONCLUIDA"
+  // ).length;
 
-  const totalActivo = pendientes + enRevision + concluidas;
+  // const totalActivo = pendientes + enRevision + concluidas;
+
+  const totalActivo = pendientes + enRevision;
 
   const botones = [
     {
