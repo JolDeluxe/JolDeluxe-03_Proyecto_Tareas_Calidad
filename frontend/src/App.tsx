@@ -77,7 +77,7 @@ const AppLayout: React.FC = () => {
         <Route path="/pendientes" element={<Pendientes user={user} />} />
 
         {/* ✅ RUTA TODAS (Exclusiva ROL USUARIO) */}
-        <Route
+        {/* <Route
           path="/todas"
           element={
             user && user.rol === Rol.USUARIO ? (
@@ -87,7 +87,7 @@ const AppLayout: React.FC = () => {
               <Navigate to="/" replace />
             )
           }
-        />
+        /> */}
 
         {/* 👇 RUTA EXCLUSIVA SUPER ADMIN */}
         <Route
