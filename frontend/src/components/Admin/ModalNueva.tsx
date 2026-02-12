@@ -20,6 +20,7 @@ interface ModalNuevaProps {
 
 const MAX_NOMBRE_LENGTH = 50;
 const MAX_OBSERVACIONES_LENGTH = 160;
+const MAX_FILES_LIMIT = 5;
 
 // --- Helper para formatear Date a YYYY-MM-DD (Local) ---
 const formatDateToInput = (fecha?: Date | null): string => {
@@ -67,6 +68,8 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   const [hora, setHora] = useState("");
 
   const [archivos, setArchivos] = useState<File[]>([]);
+  // Nuevo estado para el error de archivos
+  const [fileError, setFileError] = useState("");
 
   // --- Estados de Datos ---
   const [responsablesIds, setResponsablesIds] = useState<number[]>([]);
@@ -195,6 +198,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   // --- Manejadores de Archivos ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
+      setFileError(""); // Limpiar error al intentar subir
       const nuevosArchivos = Array.from(e.target.files);
       const TAMANO_MAXIMO = 20 * 1024 * 1024;
       const archivoPesado = nuevosArchivos.find(file => file.size > TAMANO_MAXIMO);
@@ -205,8 +209,9 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
         return;
       }
 
-      if (archivos.length + nuevosArchivos.length > 5) {
-        toast.warning("Solo puedes subir un máximo de 5 archivos.");
+      // Validación cambiada: mensaje inline en lugar de toast
+      if (archivos.length + nuevosArchivos.length > MAX_FILES_LIMIT) {
+        setFileError(`Solo puedes subir un máximo de ${MAX_FILES_LIMIT} archivos.`);
         e.target.value = "";
         return;
       }
@@ -220,6 +225,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     setArchivos((prevArchivos) =>
       prevArchivos.filter((_, index) => index !== indexToRemove)
     );
+    setFileError(""); // Limpiar error si se elimina un archivo
   };
 
   const handleToggleResponsable = (id: number) => {
@@ -385,13 +391,16 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     u.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
 
+  // Determinar si se alcanzó el límite de archivos
+  const isMaxFilesReached = archivos.length >= MAX_FILES_LIMIT;
+
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-[90%] max-w-md relative flex flex-col max-h-[90vh]"
+        className="bg-white rounded-lg shadow-xl w-[90%] md:max-w-md lg:max-w-6xl relative flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex-shrink-0 p-6 pb-4 border-b border-gray-200">
@@ -415,6 +424,8 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
         >
           <div className="flex-grow overflow-y-auto p-6">
             <div className="flex flex-col gap-4 text-gray-800">
+
+              {/* --- HEADER: TIPO DE TAREA (KAIZEN) --- */}
               {(user?.rol === "SUPER_ADMIN" ||
                 ((user?.rol === "ADMIN" || user?.rol === "ENCARGADO") &&
                   user?.departamento?.nombre
@@ -446,405 +457,434 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                     </button>
                   </div>
                 )}
-              <div>
-                <label className="block text-sm font-semibold mb-1 flex justify-between">
-                  <span>Nombre</span>
-                  <span className={`text-xs ${nombre.length > MAX_NOMBRE_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-                    {nombre.length}/{MAX_NOMBRE_LENGTH}
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  value={nombre}
-                  onChange={handleNombreChange}
-                  placeholder="Ej. Revisar reporte de calidad"
-                  required
-                  disabled={loading}
-                  className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
+
+              {/* --- BODY: GRID DE 3 COLUMNAS EN DESKTOP --- */}
+              <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-6">
+
+                {/* --- COLUMNA 1: INFO BÁSICA --- */}
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 flex justify-between">
+                      <span>Nombre</span>
+                      <span className={`text-xs ${nombre.length > MAX_NOMBRE_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                        {nombre.length}/{MAX_NOMBRE_LENGTH}
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      value={nombre}
+                      onChange={handleNombreChange}
+                      placeholder="Ej. Revisar reporte de calidad"
+                      required
+                      disabled={loading}
+                      className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
                     ${submitted && !nombre.trim()
-                      ? "border-red-500"
-                      : "border-gray-300"
-                    }`}
-                />
-                {submitted && !nombre.trim() && (
-                  <p className="text-red-600 text-xs mt-1">
-                    El nombre es obligatorio.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-1 flex justify-between">
-                  <span>Indicaciones</span>
-                  <span className={`text-xs ${comentario.length > MAX_OBSERVACIONES_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-                    {comentario.length}/{MAX_OBSERVACIONES_LENGTH}
-                  </span>
-                </label>
-                <textarea
-                  value={comentario}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    if (newValue.length <= MAX_OBSERVACIONES_LENGTH) {
-                      setComentario(newValue);
-                    } else {
-                      setComentario(newValue.slice(0, MAX_OBSERVACIONES_LENGTH));
-                      toast.warn(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres permitidos.`);
-                    }
-                  }}
-                  placeholder="Agrega indicaciones o detalles..."
-                  disabled={loading}
-                  required
-                  className={`w-full border rounded-md px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
-                    ${submitted && !comentario.trim()
-                      ? "border-red-500"
-                      : "border-gray-300"
-                    }`}
-                />
-                {submitted && !comentario.trim() && (
-                  <p className="text-red-600 text-xs mt-1">
-                    Las indicaciones son obligatorias.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Evidencia (Opcional)
-                </label>
-                <label
-                  htmlFor="file-upload"
-                  onClick={(e) => {
-                    if (loading) e.preventDefault();
-                  }}
-                  className={`w-full flex items-center justify-center gap-2 
-                    bg-amber-100 text-amber-900 
-                    font-semibold px-4 py-2 rounded-md 
-                    transition-all duration-200
-                    ${loading
-                      ? "opacity-50 cursor-not-allowed"
-                      : "cursor-pointer hover:bg-amber-200"
-                    }
-                  `}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    className="w-5 h-5"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10.5 3.5a.5.5 0 00-1 0V9H4a.5.5 0 000 1h5.5v5.5a.5.5 0 001 0V10H16a.5.5 0 000-1h-5.5V3.5z"
-                      clipRule="evenodd"
+                          ? "border-red-500"
+                          : "border-gray-300"
+                        }`}
                     />
-                  </svg>
-                  <span>
-                    {archivos.length > 0
-                      ? "Agregar más"
-                      : "Agregar / Tomar Foto"}
-                  </span>
-                </label>
-                <input
-                  id="file-upload"
-                  type="file"
-                  multiple
-                  disabled={loading}
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                {archivos.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-sm font-medium text-gray-800 mb-2">
-                      {archivos.length} archivo(s) para subir:
-                    </p>
-                    <ul className="space-y-2 max-h-32 overflow-y-auto pr-2">
-                      {archivos.map((file, index) => (
-                        <li
-                          key={index}
-                          className="flex items-center justify-between 
-                               bg-gray-100 p-2 rounded-md"
-                        >
-                          <img
-                            src={URL.createObjectURL(file)}
-                            alt={file.name}
-                            className="w-10 h-10 object-cover rounded-md"
-                            onLoad={(e) =>
-                              URL.revokeObjectURL(e.currentTarget.src)
-                            }
-                          />
-                          <span className="flex-1 text-sm text-gray-700 mx-3 truncate">
-                            {file.name}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveArchivo(index)}
-                            disabled={loading}
-                            className="flex-shrink-0 p-1 text-red-600 
-                               hover:bg-red-100 rounded-full
-                               disabled:opacity-50"
-                            aria-label="Eliminar archivo"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                              className="w-5 h-5"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="responsable-list"
-                  className="block text-sm font-semibold mb-1"
-                >
-                  {isKaizen ? "Selecciona Invitado(s)" : "Responsable(s)"}
-                </label>
-
-                <input
-                  type="text"
-                  placeholder="Buscar usuario..."
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                  disabled={loading || loadingUsuarios}
-                  className="w-full border rounded-md px-3 py-2 mb-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100"
-                />
-
-                {loadingUsuarios ? (
-                  <div
-                    className="relative w-full h-32 border rounded-md px-3 py-2 
-                   bg-gray-100 border-gray-300 
-                   flex items-center justify-center"
-                  >
-                    <p className="text-gray-500">Cargando usuarios...</p>
-                  </div>
-                ) : (
-                  <div
-                    id="responsable-list"
-                    className={`relative w-full h-32 border rounded-md 
-                      overflow-y-auto 
-                      focus:ring-2 focus:ring-amber-950 focus:outline-none 
-                      ${submitted && responsablesIds.length === 0
-                        ? "border-red-500"
-                        : "border-gray-300"
-                      }
-                    `}
-                    tabIndex={0}
-                  >
-                    {usuariosFiltrados.map((u) => (
-                      <label
-                        key={u.id}
-                        htmlFor={`resp-${u.id}`}
-                        className={`
-                          flex items-center gap-3 w-full px-3 py-2 
-                          cursor-pointer transition-colors
-                          ${responsablesIds.includes(u.id)
-                            ? "bg-amber-100 text-amber-900 font-semibold"
-                            : "text-gray-800 hover:bg-gray-50"
-                          }
-                        `}
-                      >
-                        <input
-                          type="checkbox"
-                          id={`resp-${u.id}`}
-                          checked={responsablesIds.includes(u.id)}
-                          onChange={() => handleToggleResponsable(u.id)}
-                          disabled={loading}
-                          className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
-                        />
-                        <span className={getRoleColorClass(u)}>
-                          {getDisplayName(u)}
-                        </span>
-
-                        {isKaizen && (
-                          <span className="text-xs text-gray-400 ml-auto">
-                            (Invitado)
-                          </span>
-                        )}
-                      </label>
-                    ))}
-
-                    {usuariosFiltrados.length === 0 && (
-                      <p className="text-center text-sm text-gray-500 py-4">
-                        {busqueda
-                          ? "No se encontraron resultados."
-                          : isKaizen
-                            ? "No se encontraron invitados registrados."
-                            : "No hay usuarios disponibles."}
+                    {submitted && !nombre.trim() && (
+                      <p className="text-red-600 text-xs mt-1">
+                        El nombre es obligatorio.
                       </p>
                     )}
                   </div>
-                )}
 
-                {submitted && responsablesIds.length === 0 && (
-                  <p className="text-red-600 text-xs mt-1">
-                    Debes seleccionar al menos un responsable.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Prioridad
-                </label>
-                <fieldset className="mt-2 grid grid-cols-3 gap-2">
-                  {PRIORIDADES_VALIDAS.map((p) => (
-                    <div key={p.value}>
-                      <input
-                        type="radio"
-                        id={`prioridad-${p.value}`}
-                        name="prioridad-radio-group"
-                        value={p.value}
-                        checked={prioridad === p.value}
-                        onChange={(e) =>
-                          setPrioridad(e.target.value as Urgencia)
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 flex justify-between">
+                      <span>Indicaciones</span>
+                      <span className={`text-xs ${comentario.length > MAX_OBSERVACIONES_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                        {comentario.length}/{MAX_OBSERVACIONES_LENGTH}
+                      </span>
+                    </label>
+                    <textarea
+                      value={comentario}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        if (newValue.length <= MAX_OBSERVACIONES_LENGTH) {
+                          setComentario(newValue);
+                        } else {
+                          setComentario(newValue.slice(0, MAX_OBSERVACIONES_LENGTH));
+                          toast.warn(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres permitidos.`);
                         }
-                        disabled={loading}
-                        className="sr-only peer"
-                      />
-                      <label
-                        htmlFor={`prioridad-${p.value}`}
-                        className={`
+                      }}
+                      placeholder="Agrega indicaciones o detalles..."
+                      disabled={loading}
+                      required
+                      className={`w-full border rounded-md px-3 py-2 h-20 lg:h-40 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
+                    ${submitted && !comentario.trim()
+                          ? "border-red-500"
+                          : "border-gray-300"
+                        }`}
+                    />
+                    {submitted && !comentario.trim() && (
+                      <p className="text-red-600 text-xs mt-1">
+                        Las indicaciones son obligatorias.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* --- COLUMNA 2: RESPONSABLES --- */}
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label
+                      htmlFor="responsable-list"
+                      className="block text-sm font-semibold mb-1"
+                    >
+                      {isKaizen ? "Selecciona Invitado(s)" : "Responsable(s)"}
+                    </label>
+
+                    <input
+                      type="text"
+                      placeholder="Buscar usuario..."
+                      value={busqueda}
+                      onChange={(e) => setBusqueda(e.target.value)}
+                      disabled={loading || loadingUsuarios}
+                      className="w-full border rounded-md px-3 py-2 mb-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100"
+                    />
+
+                    {loadingUsuarios ? (
+                      <div
+                        className="relative w-full h-32 lg:h-64 border rounded-md px-3 py-2 
+                    bg-gray-100 border-gray-300 
+                    flex items-center justify-center"
+                      >
+                        <p className="text-gray-500">Cargando usuarios...</p>
+                      </div>
+                    ) : (
+                      <div
+                        id="responsable-list"
+                        className={`relative w-full h-32 lg:h-64 border rounded-md 
+                      overflow-y-auto 
+                      focus:ring-2 focus:ring-amber-950 focus:outline-none 
+                      ${submitted && responsablesIds.length === 0
+                            ? "border-red-500"
+                            : "border-gray-300"
+                          }
+                    `}
+                        tabIndex={0}
+                      >
+                        {usuariosFiltrados.map((u) => (
+                          <label
+                            key={u.id}
+                            htmlFor={`resp-${u.id}`}
+                            className={`
+                          flex items-center gap-3 w-full px-3 py-2 
+                          cursor-pointer transition-colors
+                          ${responsablesIds.includes(u.id)
+                                ? "bg-amber-100 text-amber-900 font-semibold"
+                                : "text-gray-800 hover:bg-gray-50"
+                              }
+                        `}
+                          >
+                            <input
+                              type="checkbox"
+                              id={`resp-${u.id}`}
+                              checked={responsablesIds.includes(u.id)}
+                              onChange={() => handleToggleResponsable(u.id)}
+                              disabled={loading}
+                              className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
+                            />
+                            <span className={getRoleColorClass(u)}>
+                              {getDisplayName(u)}
+                            </span>
+
+                            {isKaizen && (
+                              <span className="text-xs text-gray-400 ml-auto">
+                                (Invitado)
+                              </span>
+                            )}
+                          </label>
+                        ))}
+
+                        {usuariosFiltrados.length === 0 && (
+                          <p className="text-center text-sm text-gray-500 py-4">
+                            {busqueda
+                              ? "No se encontraron resultados."
+                              : isKaizen
+                                ? "No se encontraron invitados registrados."
+                                : "No hay usuarios disponibles."}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {submitted && responsablesIds.length === 0 && (
+                      <p className="text-red-600 text-xs mt-1">
+                        Debes seleccionar al menos un responsable.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* --- COLUMNA 3: DETALLES Y EVIDENCIA --- */}
+                <div className="flex flex-col gap-4">
+
+                  {/* EVIDENCIA */}
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 flex justify-between">
+                      <span>Evidencia (Opcional)</span>
+                      <span className={`text-xs ${isMaxFilesReached ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                        {archivos.length}/{MAX_FILES_LIMIT}
+                      </span>
+                    </label>
+                    <label
+                      htmlFor="file-upload"
+                      onClick={(e) => {
+                        // Deshabilitar clic si está cargando o si ya se alcanzó el límite
+                        if (loading || isMaxFilesReached) e.preventDefault();
+                      }}
+                      className={`w-full flex items-center justify-center gap-2 
+                    bg-amber-100 text-amber-900 
+                    font-semibold px-4 py-2 rounded-md 
+                    transition-all duration-200
+                    ${loading || isMaxFilesReached
+                          ? "opacity-50 cursor-not-allowed"
+                          : "cursor-pointer hover:bg-amber-200"
+                        }
+                  `}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        className="w-5 h-5"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10.5 3.5a.5.5 0 00-1 0V9H4a.5.5 0 000 1h5.5v5.5a.5.5 0 001 0V10H16a.5.5 0 000-1h-5.5V3.5z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <span>
+                        {archivos.length > 0
+                          ? "Agregar más"
+                          : "Agregar / Tomar Foto"}
+                      </span>
+                    </label>
+                    <input
+                      id="file-upload"
+                      type="file"
+                      multiple
+                      disabled={loading || isMaxFilesReached}
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+
+                    {/* Mensaje de error tipo texto abajo del input */}
+                    {fileError && (
+                      <p className="text-red-600 text-xs mt-1">{fileError}</p>
+                    )}
+
+                    {archivos.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm font-medium text-gray-800 mb-2">
+                          {archivos.length} archivo(s) para subir:
+                        </p>
+                        <ul className="space-y-2 max-h-32 overflow-y-auto pr-2">
+                          {archivos.map((file, index) => (
+                            <li
+                              key={index}
+                              className="flex items-center justify-between 
+                               bg-gray-100 p-2 rounded-md"
+                            >
+                              <img
+                                src={URL.createObjectURL(file)}
+                                alt={file.name}
+                                className="w-10 h-10 object-cover rounded-md"
+                                onLoad={(e) =>
+                                  URL.revokeObjectURL(e.currentTarget.src)
+                                }
+                              />
+                              <span className="flex-1 text-sm text-gray-700 mx-3 truncate">
+                                {file.name}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveArchivo(index)}
+                                disabled={loading}
+                                className="flex-shrink-0 p-1 text-red-600 
+                               hover:bg-red-100 rounded-full
+                               disabled:opacity-50"
+                                aria-label="Eliminar archivo"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                  className="w-5 h-5"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PRIORIDAD */}
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">
+                      Prioridad
+                    </label>
+                    <fieldset className="mt-2 grid grid-cols-3 gap-2">
+                      {PRIORIDADES_VALIDAS.map((p) => (
+                        <div key={p.value}>
+                          <input
+                            type="radio"
+                            id={`prioridad-${p.value}`}
+                            name="prioridad-radio-group"
+                            value={p.value}
+                            checked={prioridad === p.value}
+                            onChange={(e) =>
+                              setPrioridad(e.target.value as Urgencia)
+                            }
+                            disabled={loading}
+                            className="sr-only peer"
+                          />
+                          <label
+                            htmlFor={`prioridad-${p.value}`}
+                            className={`
                           w-full block text-center px-3 py-2 rounded-md 
                           border text-sm font-semibold cursor-pointer transition-all
                           ${loading ? "opacity-50 cursor-not-allowed" : ""}
                           
                           ${p.value === "ALTA" &&
-                          `
+                              `
                             border-gray-300 bg-gray-50 text-gray-700
                             peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600
                             ${!loading && "hover:bg-red-100 hover:text-gray-700"
-                          }
+                              }
                           `
-                          }
+                              }
                           ${p.value === "MEDIA" &&
-                          `
+                              `
                             border-gray-300 bg-gray-50 text-gray-700
                             peer-checked:bg-amber-400 peer-checked:text-white peer-checked:border-amber-400
                             ${!loading &&
-                          "hover:bg-amber-100 hover:text-gray-700"
-                          }
+                              "hover:bg-amber-100 hover:text-gray-700"
+                              }
                           `
-                          }
+                              }
                           ${p.value === "BAJA" &&
-                          `
+                              `
                             border-gray-300 bg-gray-50 text-gray-700
                             peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-600
                             ${!loading &&
-                          "hover:bg-green-100 hover:text-gray-700"
-                          }
+                              "hover:bg-green-100 hover:text-gray-700"
+                              }
                           `
-                          }
+                              }
                         `}
-                      >
-                        {p.label}
-                      </label>
-                    </div>
-                  ))}
-                </fieldset>
+                          >
+                            {p.label}
+                          </label>
+                        </div>
+                      ))}
+                    </fieldset>
 
-                {submitted && !prioridad && (
-                  <p className="text-red-600 text-xs mt-1">
-                    Debes seleccionar una prioridad.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="nueva-fecha"
-                  className="block text-sm font-semibold mb-1"
-                >
-                  Fecha Límite
-                </label>
-
-                <div className="flex flex-col gap-2">
-                  <input
-                    type="date"
-                    id="nueva-fecha"
-                    value={fecha}
-                    onChange={(e) => setFecha(e.target.value)}
-                    required
-                    disabled={loading}
-                    // Usamos el helper local para establecer el min de hoy
-                    min={formatDateToInput(new Date())}
-                    className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
-                  ${submitted && !isDateValid()
-                        ? "border-red-500"
-                        : "border-gray-300"
-                      }
-                `}
-                  />
-
-                  <div className="flex items-center gap-4 mt-1">
-                    <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 select-none">
-                      <input
-                        type="checkbox"
-                        checked={usarHora}
-                        onChange={(e) => {
-                          setUsarHora(e.target.checked);
-                          if (!e.target.checked) setHora("");
-                        }}
-                        disabled={loading}
-                        className="w-4 h-4 text-amber-800 border-gray-300 rounded focus:ring-amber-950"
-                      />
-                      <span>¿Especificar hora límite?</span>
-                    </label>
-
-                    {usarHora && (
-                      <input
-                        type="time"
-                        value={hora}
-                        onChange={(e) => setHora(e.target.value)}
-                        disabled={loading}
-                        required={usarHora}
-                        className={`flex-1 border rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-amber-950 focus:outline-none animate-fade-in
-                          ${submitted && (
-                            (!hora) ||
-                            (!isTimeValidForToday()) // 🚀 MARCA ERROR VISUAL
-                          )
-                            ? "border-red-500 bg-red-50"
-                            : "border-gray-300"
-                          }
-                        `}
-                      />
+                    {submitted && !prioridad && (
+                      <p className="text-red-600 text-xs mt-1">
+                        Debes seleccionar una prioridad.
+                      </p>
                     )}
                   </div>
+
+                  {/* FECHA LIMITE */}
+                  <div>
+                    <label
+                      htmlFor="nueva-fecha"
+                      className="block text-sm font-semibold mb-1"
+                    >
+                      Fecha Límite
+                    </label>
+
+                    <div className="flex flex-col gap-2">
+                      <input
+                        type="date"
+                        id="nueva-fecha"
+                        value={fecha}
+                        onChange={(e) => setFecha(e.target.value)}
+                        required
+                        disabled={loading}
+                        // Usamos el helper local para establecer el min de hoy
+                        min={formatDateToInput(new Date())}
+                        className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
+                  ${submitted && !isDateValid()
+                            ? "border-red-500"
+                            : "border-gray-300"
+                          }
+                `}
+                      />
+
+                      <div className="flex items-center gap-4 mt-1">
+                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 select-none">
+                          <input
+                            type="checkbox"
+                            checked={usarHora}
+                            onChange={(e) => {
+                              setUsarHora(e.target.checked);
+                              if (!e.target.checked) setHora("");
+                            }}
+                            disabled={loading}
+                            className="w-4 h-4 text-amber-800 border-gray-300 rounded focus:ring-amber-950"
+                          />
+                          <span>¿Especificar hora límite?</span>
+                        </label>
+
+                        {usarHora && (
+                          <input
+                            type="time"
+                            value={hora}
+                            onChange={(e) => setHora(e.target.value)}
+                            disabled={loading}
+                            required={usarHora}
+                            className={`flex-1 border rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-amber-950 focus:outline-none animate-fade-in
+                          ${submitted && (
+                                (!hora) ||
+                                (!isTimeValidForToday()) // 🚀 MARCA ERROR VISUAL
+                              )
+                                ? "border-red-500 bg-red-50"
+                                : "border-gray-300"
+                              }
+                        `}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {submitted && !isDateValid() && (
+                      <p className="text-red-600 text-xs mt-1">
+                        La fecha límite es obligatoria.
+                      </p>
+                    )}
+                    {submitted && usarHora && !hora && (
+                      <p className="text-red-600 text-xs mt-1">
+                        Debes seleccionar una hora.
+                      </p>
+                    )}
+                    {/* 🚀 Mensaje de error para hora pasada */}
+                    {submitted && usarHora && hora && !isTimeValidForToday() && (
+                      <p className="text-red-600 text-xs mt-1">
+                        La hora no puede ser anterior a la actual.
+                      </p>
+                    )}
+
+                    <p className="text-[10px] text-gray-400 mt-1 italic">
+                      {usarHora
+                        ? "Se requiere entrega antes de la hora exacta."
+                        : "Se considera 'A Tiempo' hasta el final del día (23:59)."}
+                    </p>
+                  </div>
+
                 </div>
-
-                {submitted && !isDateValid() && (
-                  <p className="text-red-600 text-xs mt-1">
-                    La fecha límite es obligatoria.
-                  </p>
-                )}
-                {submitted && usarHora && !hora && (
-                  <p className="text-red-600 text-xs mt-1">
-                    Debes seleccionar una hora.
-                  </p>
-                )}
-                {/* 🚀 Mensaje de error para hora pasada */}
-                {submitted && usarHora && hora && !isTimeValidForToday() && (
-                  <p className="text-red-600 text-xs mt-1">
-                    La hora no puede ser anterior a la actual.
-                  </p>
-                )}
-
-                <p className="text-[10px] text-gray-400 mt-1 italic">
-                  {usarHora
-                    ? "Se requiere entrega antes de la hora exacta."
-                    : "Se considera 'A Tiempo' hasta el final del día (23:59)."}
-                </p>
               </div>
             </div>
           </div>

@@ -118,7 +118,6 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
             <table className="w-full text-sm font-sans">
               <thead className="bg-gray-100 text-black text-xs uppercase sticky top-0 z-20 shadow-inner">
                 <tr>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[5%]">ID</th>
                   <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[25%]">Nombre</th>
                   <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[20%]">Username</th>
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[15%]">Rol</th>
@@ -135,7 +134,6 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
 
                   return (
                     <tr key={row.id} className="hover:bg-gray-50 transition">
-                      <td className="px-3 py-3 text-center font-semibold w-[5%] text-gray-500">{row.id}</td>
                       <td className="px-3 py-3 text-left font-semibold text-gray-900 w-[25%]">{row.nombre}</td>
                       <td className="px-3 py-3 text-left text-gray-600 w-[20%] font-mono text-xs">{row.username}</td>
 
