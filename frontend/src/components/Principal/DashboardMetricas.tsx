@@ -29,14 +29,13 @@ interface Props {
   month: number;
 }
 
-// --- 1. FUNCIONES HELPER ---
+// --- 1. FUNCIONES HELPER ACTUALIZADAS ---
 
-const resetTime = (date: Date | string | null | undefined): number => {
+// 🚀 YA NO USAMOS resetTime. Usamos getTime() directo para precisión de horas/minutos.
+const getTimestamp = (date: Date | string | null | undefined): number => {
   if (!date) return 0;
   const d = typeof date === "string" ? new Date(date) : new Date(date);
-  if (isNaN(d.getTime())) return 0;
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
+  return isNaN(d.getTime()) ? 0 : d.getTime();
 };
 
 const getFechaEfectiva = (tarea: Tarea): Date | null => {
@@ -55,17 +54,23 @@ const getFechaEfectiva = (tarea: Tarea): Date | null => {
   return tarea.fechaLimite ? new Date(tarea.fechaLimite) : null;
 };
 
+// 🚀 Lógica de estado actualizada para considerar la HORA actual
 const getEstadoPendiente = (fechaEfectiva: Date | null) => {
   if (!fechaEfectiva) return "normal";
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  const limite = new Date(fechaEfectiva);
-  limite.setHours(0, 0, 0, 0);
-  const diffMs = limite.getTime() - hoy.getTime();
-  const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diasRestantes < 0) return "vencida";
-  if (diasRestantes >= 0 && diasRestantes <= 2) return "proxima";
+  const ahora = new Date().getTime(); // Hora exacta actual
+  const limite = new Date(fechaEfectiva).getTime(); // Hora exacta límite (ej: 16:00 o 23:59:59)
+
+  // Diferencia en milisegundos
+  const diffMs = limite - ahora;
+
+  // Si la diferencia es negativa, ya pasó la hora exacta -> VENCIDA
+  if (diffMs < 0) return "vencida";
+
+  // Si faltan menos de 48 horas (48 * 60 * 60 * 1000 ms) -> PROXIMA
+  const msEn48Horas = 48 * 60 * 60 * 1000;
+  if (diffMs <= msEn48Horas) return "proxima";
+
   return "normal";
 };
 
@@ -82,15 +87,23 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
   // --- 2. CÁLCULO MASIVO DE DATOS ---
   const data = useMemo(() => {
 
+    // 🚀 FILTRO INICIAL: Fecha Y Estatus.
+    // AQUÍ ELIMINAMOS LAS CANCELADAS DE LA ECUACIÓN DE MÉTRICAS.
     const tareasPeriodo = tareas.filter(t => {
+      // 1. Validar fecha
       if (!t.fechaRegistro) return false;
       const d = new Date(t.fechaRegistro);
-      return d.getFullYear() === year && (month === 0 || d.getMonth() + 1 === month);
+      const coincideFecha = d.getFullYear() === year && (month === 0 || d.getMonth() + 1 === month);
+
+      // 2. 🚀 EXCLUIR CANCELADAS
+      const noEsCancelada = t.estatus !== "CANCELADA";
+
+      return coincideFecha && noEsCancelada;
     });
 
-    // Contadores Globales (Tu lógica original se mantiene para los KPIs de arriba)
+    // Contadores Globales
     let contadores = {
-      total: tareasPeriodo.length,
+      total: tareasPeriodo.length, // Ahora el total no incluye canceladas
       concluidas: 0,
       pendientes: 0,
       aTiempoReal: 0,
@@ -108,43 +121,49 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
       urgencia: { ALTA: 0, MEDIA: 0, BAJA: 0 } as Record<string, number>
     };
 
-    // 📍 MAPA DE USUARIOS (ESTRUCTURA DEFINITIVA)
+    // Mapa de usuarios
     const userMap: Record<string, {
       nombre: string;
       rol: string;
-      total: number;       // Suma de Pendientes + Concluidas
-      pendientes: number;  // Actualmente abiertas
-      concluidas: number;  // Cerradas
-      aTiempo: number;     // Cerradas exitosamente en fecha (original o reprogramada)
-      vencidas: number;    // SUMA DE: (Pendientes ya vencidas) + (Concluidas Tarde)
+      total: number;
+      pendientes: number;
+      concluidas: number;
+      aTiempo: number;
+      vencidas: number;
     }> = {};
 
     const listaVencidas: Tarea[] = [];
     const listaProximas: Tarea[] = [];
 
     tareasPeriodo.forEach(t => {
-      // Cálculos de fechas para lógica global y personal
-      const fechaObjFinal = getFechaEfectiva(t); // Fecha "Real" (Original o Reprogramada)
-      const fechaLimiteFinal = fechaObjFinal ? resetTime(fechaObjFinal) : 0;
+      // Cálculos de fechas precisas
+      const fechaObjFinal = getFechaEfectiva(t);
+      // 🚀 Usamos getTimestamp para obtener precisión exacta
+      const fechaLimiteFinal = fechaObjFinal ? getTimestamp(fechaObjFinal) : 0;
 
       // ------------------------------------------------------------
-      // LÓGICA GLOBAL (KPIs Superiores)
+      // LÓGICA GLOBAL (KPIs)
       // ------------------------------------------------------------
       if (t.estatus === "CONCLUIDA" && t.fechaConclusion) {
         contadores.concluidas++;
-        const fechaFin = resetTime(t.fechaConclusion);
 
-        // AJUSTADO: Se compara contra fechaLimiteFinal (que ya considera reprogramaciones)
+        // 🚀 Comparamos hora exacta de conclusión vs hora exacta límite
+        const fechaFin = getTimestamp(t.fechaConclusion);
+
+        // AJUSTADO: Comparación precisa
         const cumplioAjustado = fechaLimiteFinal > 0 && fechaFin <= fechaLimiteFinal;
 
-        // REAL: Se compara contra la original (para estadísticas de planeación)
-        let fechaLimiteOriginal = t.fechaLimite ? resetTime(t.fechaLimite) : 0;
+        // REAL: Comparación contra fecha original
+        let fechaLimiteOriginal = t.fechaLimite ? getTimestamp(t.fechaLimite) : 0;
         let tieneCambios = false;
+
         if (t.historialFechas && t.historialFechas.length > 0) {
           tieneCambios = true;
+          // Ordenar historial para encontrar la fecha original más antigua o usar fechaAnterior
           const historialAntiguo = [...t.historialFechas].sort((a, b) => new Date(a.fechaCambio || "").getTime() - new Date(b.fechaCambio || "").getTime());
-          if (historialAntiguo[0]?.fechaAnterior) fechaLimiteOriginal = resetTime(historialAntiguo[0].fechaAnterior);
+          if (historialAntiguo[0]?.fechaAnterior) fechaLimiteOriginal = getTimestamp(historialAntiguo[0].fechaAnterior);
         }
+
         const cumplioReal = fechaLimiteOriginal > 0 && fechaFin <= fechaLimiteOriginal;
 
         if (cumplioReal) contadores.aTiempoReal++;
@@ -163,13 +182,13 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
           const key = resp.id;
           if (!userMap[key]) userMap[key] = { nombre: resp.nombre, rol: resp.rol || "USUARIO", total: 0, pendientes: 0, concluidas: 0, aTiempo: 0, vencidas: 0 };
 
-          userMap[key].total++;      // Suma al total histórico
-          userMap[key].concluidas++; // Suma a concluidas
+          userMap[key].total++;
+          userMap[key].concluidas++;
 
           if (cumplioAjustado) {
-            userMap[key].aTiempo++; // Punto positivo
+            userMap[key].aTiempo++;
           } else {
-            userMap[key].vencidas++; // Punto negativo (Concluida fuera de tiempo)
+            userMap[key].vencidas++; // Concluida Tarde cuenta como "Vencida" para el score
           }
         });
 
@@ -192,14 +211,15 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
           const key = resp.id;
           if (!userMap[key]) userMap[key] = { nombre: resp.nombre, rol: resp.rol || "USUARIO", total: 0, pendientes: 0, concluidas: 0, aTiempo: 0, vencidas: 0 };
 
-          userMap[key].total++;      // Suma al total asignado
-          userMap[key].pendientes++; // Suma a carga actual
+          userMap[key].total++;
+          userMap[key].pendientes++;
 
           if (estado === "vencida") {
-            userMap[key].vencidas++; // Punto negativo (Pendiente que ya caducó)
+            userMap[key].vencidas++; // Pendiente ya vencida cuenta negativo
           }
         });
       }
+      // Nota: Si es CANCELADA, ya fue filtrada al inicio, así que no entra aquí.
 
       // Lógica Global Extra (Motivos y Urgencia)
       if (t.historialFechas) {
@@ -236,7 +256,7 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
         {/* 🌟 KPI MAESTRO */}
         <div className="lg:col-span-4 bg-white p-5 rounded-xl shadow border-l-4 border-blue-600 flex flex-col justify-between relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-24 w-24 text-blue-600" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-24 w-24 text-blue-600" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
           </div>
           <div>
             <div className="flex justify-between items-center mb-2">
@@ -250,7 +270,7 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
             <div className="mt-4 w-full bg-gray-100 rounded-full h-2">
               <div className={`h-2 rounded-full transition-all duration-500 ${pctEficienciaGlobal >= 80 ? 'bg-green-500' : pctEficienciaGlobal >= 60 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${pctEficienciaGlobal}%` }}></div>
             </div>
-            <p className="text-xs text-gray-400 mt-3 italic">Mide el éxito total considerando la fecha vigente.</p>
+            <p className="text-xs text-gray-400 mt-3 italic">Basado en tareas concluidas (Excluye canceladas).</p>
           </div>
         </div>
 
@@ -258,7 +278,7 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
         <div className="lg:col-span-4 bg-white rounded-xl shadow flex flex-col overflow-hidden border border-gray-100">
           <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 flex justify-between items-center">
             <span className="text-xs font-bold text-gray-600 uppercase">Análisis de Planeación</span>
-            <span className="text-[10px] text-gray-400">Total: {contadores.concluidas}</span>
+            <span className="text-[10px] text-gray-400">Base: {contadores.concluidas}</span>
           </div>
           <div className="flex-grow flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-gray-100">
             <div className="flex-1 p-4 flex flex-col justify-center items-center text-center hover:bg-gray-50 transition">
@@ -284,14 +304,14 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
             <div className="p-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase font-bold">Vencidas</p>
+                  <p className="text-xs text-gray-500 uppercase font-bold">Vencidas (Hoy)</p>
                   <h3 className="text-3xl font-black text-red-600 mt-1">{contadores.pendientesVencidas}</h3>
                 </div>
                 <div className="p-2 bg-red-100 rounded-full text-red-600">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                 </div>
               </div>
-              <p className="text-[11px] text-gray-400 mt-2">Requieren atención inmediata.</p>
+              <p className="text-[11px] text-gray-400 mt-2">Ya pasaron su hora límite.</p>
             </div>
             {listaVencidas.length > 0 && (
               <div className="mt-auto">
@@ -304,7 +324,10 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
                     {listaVencidas.map(t => (
                       <li key={t.id} className="flex flex-col bg-white p-2 rounded border border-gray-200 shadow-sm">
                         <span className="text-xs font-bold text-gray-800 truncate" title={t.tarea}>{t.tarea}</span>
-                        <div className="text-[10px] text-gray-500 mt-0.5"><span className="font-semibold text-red-700">{renderResponsables(t.responsables)}</span></div>
+                        <div className="text-[10px] text-gray-500 mt-0.5">
+                          <span className="block text-red-500">Venció: {new Date(getFechaEfectiva(t) || "").toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="font-semibold text-gray-700">{renderResponsables(t.responsables)}</span>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -324,7 +347,7 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                 </div>
               </div>
-              <p className="text-[11px] text-gray-400 mt-2">Vencen en menos de 48 horas.</p>
+              <p className="text-[11px] text-gray-400 mt-2">Vencen en menos de 48h.</p>
             </div>
             {listaProximas.length > 0 && (
               <div className="mt-auto">
@@ -355,7 +378,7 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
             <span className="bg-purple-100 p-1 rounded text-purple-600">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" /></svg>
             </span>
-            Top Motivos
+            Top Motivos (Reprogramación)
           </h4>
           {topMotivos.length > 0 ? (
             <div className="space-y-4">
@@ -421,16 +444,16 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
                 <span className="text-xl font-black text-gray-800">{contadores.urgencia[nivel]}</span>
               </div>
             ))}
-            <div className="text-right text-xs text-gray-400 pt-1">Total tareas en periodo: {contadores.total}</div>
+            <div className="text-right text-xs text-gray-400 pt-1">Total (Activas + Concl.): {contadores.total}</div>
           </div>
         </div>
       </div>
 
-      {/* --- SECCIÓN 3: RENDIMIENTO EQUIPO (ACTUALIZADA) --- */}
+      {/* --- SECCIÓN 3: RENDIMIENTO EQUIPO --- */}
       <div className="bg-white rounded-xl shadow overflow-hidden border border-gray-200">
         <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
           <h4 className="text-lg font-bold text-gray-800">🏆 Rendimiento de Responsables</h4>
-          <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">Ordenado por Volumen</span>
+          <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">Excluye Canceladas</span>
         </div>
 
         {/* ==========================================
@@ -445,7 +468,7 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
                 <th className="px-6 py-3 text-center text-blue-600 bg-blue-50/30">Pendientes</th>
                 <th className="px-6 py-3 text-center text-gray-600 bg-gray-50/30">Concluidas</th>
                 <th className="px-6 py-3 text-center text-green-600 bg-green-50/30">A Tiempo</th>
-                <th className="px-6 py-3 text-center text-red-600 bg-red-50/30">Vencidas</th>
+                <th className="px-6 py-3 text-center text-red-600 bg-red-50/30">Vencidas/Tarde</th>
                 <th className="px-6 py-3 text-center">Eficacia</th>
               </tr>
             </thead>
@@ -455,25 +478,14 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
                   const colorClass = user.rol === 'ENCARGADO' ? COLOR_ROL.ENCARGADO : user.rol === 'USUARIO' ? COLOR_ROL.USUARIO : COLOR_ROL.OTROS;
                   const rolDisplay = ROLE_LABELS[user.rol] || user.rol;
 
-                  // 📊 CÁLCULO DE EFICACIA CORREGIDO:
-                  // Numerador: Concluidas A Tiempo
-                  // Denominador: Total de Tareas que ya tuvieron fecha límite (Concluidas + Pendientes Vencidas)
-                  // Tareas pendientes normales no cuentan para el score (ni bien ni mal)
-                  const totalEvaluables = user.concluidas + (user.vencidas - (user.concluidas - user.aTiempo));
-                  // Nota: user.vencidas incluye (Concluidas Tarde + Pendientes Vencidas).
-                  // Simplificación matemática: user.concluidas + (Pendientes Vencidas).
-                  // Para obtener Pendientes Vencidas: user.vencidas - (user.concluidas - user.aTiempo).
-                  // Por tanto: Denominador = user.aTiempo + (user.concluidas - user.aTiempo) + (user.vencidas - (user.concluidas - user.aTiempo)) = user.aTiempo + user.vencidas(solo pendientes) + retrasadas.
-                  // MÁS FÁCIL: Denominador = user.concluidas + (Pendientes Vencidas).
-                  // Pendientes Vencidas = user.vencidas (Total Malas) - (user.concluidas - user.aTiempo) (Malas ya cerradas).
-
+                  // 📊 CÁLCULO DE EFICACIA
                   const malasCerradas = user.concluidas - user.aTiempo;
                   const malasAbiertas = user.vencidas - malasCerradas;
                   const baseCalculo = user.concluidas + malasAbiertas;
 
                   const eficacia = baseCalculo > 0
                     ? Math.round((user.aTiempo / baseCalculo) * 100)
-                    : (user.pendientes > 0 ? 100 : 0); // Si solo tiene pendientes al día, 100%
+                    : (user.pendientes > 0 ? 100 : 0);
 
                   return (
                     <tr key={idx} className="hover:bg-gray-50 transition">

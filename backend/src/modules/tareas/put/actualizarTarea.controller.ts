@@ -48,9 +48,19 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
   }
 
   // 5. Preparar actualización
-  const dataParaActualizar: any = { ...validatedBody };
-  delete dataParaActualizar.responsables; 
-  delete dataParaActualizar.departamentoId; 
+  // Extraemos fechaLimite y responsables para manejarlos aparte
+  const { fechaLimite, responsables, ...restoDelBody } = validatedBody;
+  
+  const dataParaActualizar: any = { ...restoDelBody };
+  delete dataParaActualizar.departamentoId; // Por seguridad, aunque el schema lo permita, lo validamos abajo
+
+  // Manejo de Fecha Límite (CORREGIDO: Respetar hora del frontend)
+  if (fechaLimite) {
+    // 🚀 CAMBIO CLAVE: Ya NO forzamos la hora a 23:59:59 con setHours.
+    // Respetamos la fecha/hora exacta que envía el Frontend.
+    // Si el frontend manda 14:30, se guarda 14:30. Si manda 23:59:59, se guarda eso.
+    dataParaActualizar.fechaLimite = new Date(fechaLimite);
+  }
 
   // Cambio de Estatus
   if (validatedBody.estatus) {
@@ -67,18 +77,18 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
     dataParaActualizar.departamento = { connect: { id: validatedBody.departamentoId } };
   }
 
-  // Cambio de Responsables (Transacción)
+  // Cambio de Responsables (Lógica para transacción)
   let nuevosResponsablesIds: number[] = [];
-  if (validatedBody.responsables) {
-    nuevosResponsablesIds = validatedBody.responsables; // Guardamos para usar en notificaciones
+  if (responsables) {
+    nuevosResponsablesIds = responsables; // Guardamos para usar en notificaciones
     // Validar jerarquía aquí si es necesario (similar a crearTarea)
     dataParaActualizar.responsables = {
       deleteMany: {},
-      create: validatedBody.responsables.map((uid) => ({ usuario: { connect: { id: uid } } })),
+      create: responsables.map((uid) => ({ usuario: { connect: { id: uid } } })),
     };
   }
 
-  // 6. Ejecutar Update
+  // 6. Ejecutar Update (Dentro de una transacción implícita de update)
   const tareaActualizada = await prisma.tarea.update({
     where: { id: tareaId },
     data: dataParaActualizar,
@@ -134,6 +144,14 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
            nuevo: validatedBody.estatus 
        }
      );
+  } else if (!nuevosResponsablesIds.length && !validatedBody.estatus) {
+      // Si no hubo cambio de responsables ni de estatus, pero sí de otros datos (como fecha), registramos log genérico
+      await registrarBitacora(
+        "ACTUALIZAR_TAREA",
+        `${user.nombre} actualizó la tarea "${tareaActualizada.tarea}".`,
+        user.id,
+        { tareaId: tareaActualizada.id }
+      );
   }
 
   res.json({ ...tareaActualizada, responsables: tareaActualizada.responsables.map(r => r.usuario) });

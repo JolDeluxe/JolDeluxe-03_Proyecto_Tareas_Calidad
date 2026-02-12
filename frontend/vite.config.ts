@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => ({
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
         navigateFallbackDenylist: [/^\/api/],
         importScripts: ["/push-handler.js"],
       },

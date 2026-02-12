@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from "react";
+// 📍 src/components/Admin/ModalEditar.tsx
+
+import React, { useState, useEffect, useMemo } from "react";
 import { toast } from "react-toastify";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -20,17 +22,15 @@ interface ModalEditarProps {
 const MAX_NOMBRE_LENGTH = 50;
 const MAX_OBSERVACIONES_LENGTH = 160;
 
-// --- Helper (sin cambios) ---
+// --- Helper corregido para usar TIEMPO LOCAL (Importante para que coincida con la hora) ---
 const formatDateToInput = (fecha?: Date | null | string): string => {
   if (!fecha) return "";
-
   const fechaObj = typeof fecha === "string" ? new Date(fecha) : fecha;
-
   if (!(fechaObj instanceof Date) || isNaN(fechaObj.getTime())) return "";
 
-  const anio = fechaObj.getUTCFullYear();
-  const mes = String(fechaObj.getUTCMonth() + 1).padStart(2, "0");
-  const dia = String(fechaObj.getUTCDate()).padStart(2, "0");
+  const anio = fechaObj.getFullYear();
+  const mes = String(fechaObj.getMonth() + 1).padStart(2, "0");
+  const dia = String(fechaObj.getDate()).padStart(2, "0");
   return `${anio}-${mes}-${dia}`;
 };
 
@@ -43,7 +43,7 @@ const PRIORIDADES_VALIDAS: { value: Urgencia; label: string }[] = [
 
 export const MOTIVOS_CAMBIO_FECHA = [
   // --- 1. Gestión y Planificación (Lo más común) ---
-  "Solicitud del responsable", // (Neutral: Pide más tiempo)
+  "Solicitud del responsable",
   "Cambio de prioridades",
   "Ajuste de planificación",
   "Ampliación del alcance de la tarea",
@@ -55,7 +55,7 @@ export const MOTIVOS_CAMBIO_FECHA = [
   "Retraso en tarea previa",
 
   // --- 3. Personal y Equipo (Problemas internos) ---
-  "Retraso imputable al responsable", // 🚨 (Negativo: Fue su culpa/descuido)
+  "Retraso imputable al responsable",
   "Ausencia o baja médica del personal",
   "Sobrecarga de trabajo asignado",
   "Incidencia técnica o falla de equipo",
@@ -71,17 +71,22 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   onTareaActualizada,
   user,
 }) => {
-  // --- Estados del formulario (inicializados) ---
+  // --- Estados del formulario ---
   const [nombre, setNombre] = useState(tarea.tarea);
   const [comentario, setComentario] = useState(tarea.observaciones || "");
   const [prioridad, setPrioridad] = useState<Urgencia | "">(tarea.urgencia);
-  const [fecha, setFecha] = useState(formatDateToInput(tarea.fechaLimite));
+
+  // ⏰ ESTADOS DE FECHA Y HORA (Inicializados vacíos, se llenan en useEffect)
+  const [fecha, setFecha] = useState("");
+  const [usarHora, setUsarHora] = useState(false);
+  const [hora, setHora] = useState("");
+
   const [archivos, setArchivos] = useState<File[]>([]);
   const [imagenesExistentes, setImagenesExistentes] = useState<ImagenTarea[]>(
     tarea.imagenes || []
   );
 
-  // --- Estados de Datos (inicializados) ---
+  // --- Estados de Datos ---
   const [responsablesIds, setResponsablesIds] = useState<number[]>(
     tarea.responsables ? tarea.responsables.map((r) => r.id) : []
   );
@@ -94,52 +99,97 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
 
   const isKaizen = nombre.toUpperCase().startsWith("KAIZEN");
 
-  // --- Estados para el motivo de cambio (CORREGIDOS) ---
-  const [fechaStringOriginal] = useState(formatDateToInput(tarea.fechaLimite));
-  const [fechaISOOriginal] = useState(tarea.fechaLimite);
+  // --- Estados para el motivo de cambio ---
+  const [fechaISOOriginal, setFechaISOOriginal] = useState(tarea.fechaLimite);
   const [motivoCambio, setMotivoCambio] = useState("");
-  const fechaHaCambiado = fecha !== fechaStringOriginal;
+
+  // 🚀 DETECCIÓN DE FECHA/HORA AL ABRIR EL MODAL
+  useEffect(() => {
+    if (tarea.fechaLimite) {
+      const d = new Date(tarea.fechaLimite);
+
+      setFecha(formatDateToInput(d));
+
+      const h = d.getHours();
+      const m = d.getMinutes();
+
+      const esFinDeDia = h === 23 && m === 59;
+
+      if (!esFinDeDia) {
+        setUsarHora(true);
+        const horaStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+        setHora(horaStr);
+      } else {
+        setUsarHora(false);
+        setHora("");
+      }
+
+      setFechaISOOriginal(tarea.fechaLimite);
+    }
+  }, [tarea]);
+
+  // 🚀 CÁLCULO DINÁMICO: ¿Ha cambiado la fecha/hora real?
+  const fechaHaCambiado = useMemo(() => {
+    if (!fechaISOOriginal) return true;
+
+    let nuevaFecha: Date;
+    if (usarHora && hora) {
+      nuevaFecha = new Date(`${fecha}T${hora}:00`);
+    } else {
+      nuevaFecha = new Date(`${fecha}T23:59:59`);
+    }
+
+    const originalFecha = new Date(fechaISOOriginal);
+
+    const tNueva = Math.floor(nuevaFecha.getTime() / 1000);
+    const tOriginal = Math.floor(originalFecha.getTime() / 1000);
+
+    return tNueva !== tOriginal;
+  }, [fecha, usarHora, hora, fechaISOOriginal]);
+
+  // 🚀 Validación: Si es HOY, la hora no puede ser pasada
+  const isTimeValidForToday = () => {
+    if (!usarHora || !hora || !fecha) return true;
+
+    const now = new Date();
+    const fechaSeleccionada = new Date(`${fecha}T00:00:00`);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    fechaSeleccionada.setHours(0, 0, 0, 0);
+
+    if (fechaSeleccionada.getTime() > today.getTime()) return true;
+
+    if (fechaSeleccionada.getTime() === today.getTime()) {
+      const [h, m] = hora.split(":").map(Number);
+      const currentH = now.getHours();
+      const currentM = now.getMinutes();
+
+      if (h < currentH || (h === currentH && m < currentM)) {
+        return false;
+      }
+    }
+    return true;
+  };
 
   // --- Estados de UI ---
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const isUserInCalidad = user?.departamento?.nombre?.toUpperCase().includes("CALIDAD");
 
-  const isUserInCalidad = user?.departamento?.nombre
-    ?.toUpperCase()
-    .includes("CALIDAD");
-
-  /**
-   * Devuelve la clase de color basada en el rol.
-   */
   const getRoleColorClass = (userToDisplay: Usuario): string => {
-    if (userToDisplay.rol === Rol.ENCARGADO) {
-      return "text-blue-600 font-semibold";
-    }
-    if (userToDisplay.rol === Rol.USUARIO) {
-      return "text-red-700 font-semibold";
-    }
+    if (userToDisplay.rol === Rol.ENCARGADO) return "text-blue-600 font-semibold";
+    if (userToDisplay.rol === Rol.USUARIO) return "text-red-700 font-semibold";
     return "";
   };
 
-  /**
-   * Devuelve el nombre de usuario con el sufijo (Coordinador) o (Inspector)
-   */
   const getDisplayName = (userToDisplay: Usuario): string => {
-    if (isKaizen || !isUserInCalidad) {
-      return userToDisplay.nombre;
-    }
-
-    if (userToDisplay.rol === Rol.ENCARGADO) {
-      return `${userToDisplay.nombre} (Coordinador)`;
-    }
-    if (userToDisplay.rol === Rol.USUARIO) {
-      return `${userToDisplay.nombre} (Inspector)`;
-    }
-
+    if (isKaizen || !isUserInCalidad) return userToDisplay.nombre;
+    if (userToDisplay.rol === Rol.ENCARGADO) return `${userToDisplay.nombre} (Coordinador)`;
+    if (userToDisplay.rol === Rol.USUARIO) return `${userToDisplay.nombre} (Inspector)`;
     return userToDisplay.nombre;
   };
 
-  // --- Handlers de límite de caracteres ---
   const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     if (newValue.length <= MAX_NOMBRE_LENGTH) {
@@ -150,17 +200,13 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     }
   };
 
-  const handleComentarioChange = (
-    e: React.ChangeEvent<HTMLTextAreaElement>
-  ) => {
+  const handleComentarioChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     if (newValue.length <= MAX_OBSERVACIONES_LENGTH) {
       setComentario(newValue);
     } else {
       setComentario(newValue.slice(0, MAX_OBSERVACIONES_LENGTH));
-      toast.warn(
-        `Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres permitidos para las indicaciones.`
-      );
+      toast.warn(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres permitidos.`);
     }
   };
 
@@ -168,11 +214,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   useEffect(() => {
     const fetchUsuarios = async () => {
       if (!user) return;
-
       setLoadingUsuarios(true);
       try {
         let mainUsersPromise: Promise<Usuario[]>;
-
         switch (user.rol) {
           case Rol.ADMIN:
             mainUsersPromise = usuariosService.getEncargadosYUsuarios();
@@ -196,16 +240,12 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         const sortedUsers = usersData.sort((a, b) => {
           const isASelected = responsablesIds.includes(a.id);
           const isBSelected = responsablesIds.includes(b.id);
-
           if (isASelected && !isBSelected) return -1;
           if (!isASelected && isBSelected) return 1;
-
           const rolA = a.rol;
           const rolB = b.rol;
-
           if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return -1;
           if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return 1;
-
           return a.nombre.localeCompare(b.nombre);
         });
 
@@ -220,7 +260,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         setLoadingUsuarios(false);
       }
     };
-
     fetchUsuarios();
   }, [user, responsablesIds]);
 
@@ -235,26 +274,19 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const nuevosArchivos = Array.from(e.target.files);
-
-      // 🛑 1. Validación de tamaño (5MB)
       const TAMANO_MAXIMO = 5 * 1024 * 1024;
       const archivoPesado = nuevosArchivos.find((file) => file.size > TAMANO_MAXIMO);
 
       if (archivoPesado) {
         toast.error(`⚠️ El archivo "${archivoPesado.name}" pesa más de 5MB.`);
-        e.target.value = ""; // Limpiar para permitir reintento
+        e.target.value = "";
         return;
       }
-
-      // 🛑 2. Validación de cantidad (Máximo 5 en cola)
-      // Nota: Si quieres contar también las que YA existen en la tarea, 
-      // cambia la condición a: (archivos.length + imagenesExistentes.length + nuevosArchivos.length > 5)
       if (archivos.length + nuevosArchivos.length > 5) {
         toast.warning("Solo puedes subir un máximo de 5 evidencias mas.");
         e.target.value = "";
         return;
       }
-
       setArchivos((prevArchivos) => [...prevArchivos, ...nuevosArchivos]);
       e.target.value = "";
     }
@@ -266,7 +298,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     );
   };
 
-  // --- Handler: Borrar Imagen Existente ---
   const handleRemoveImagenExistente = async (imagenId: number) => {
     if (loading) return;
     setLoading(true);
@@ -284,14 +315,13 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     }
   };
 
-  // --- Handler de Responsables ---
   const handleToggleResponsable = (id: number) => {
     setResponsablesIds((prev) =>
       prev.includes(id) ? prev.filter((uid) => uid !== id) : [...prev, id]
     );
   };
 
-  // --- handleSubmit MODIFICADO PARA UPDATE ---
+  // --- handleSubmit ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
@@ -307,23 +337,30 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       return;
     }
 
+    if (usarHora && !hora) {
+      toast.warn("Has activado la hora opcional, por favor selecciona una hora.");
+      return;
+    }
+
+    // 🚀 Validación de hora pasada
+    if (!isTimeValidForToday()) {
+      toast.error("La hora seleccionada ya pasó. Elige una hora futura.");
+      return;
+    }
+
     if (fechaHaCambiado && !motivoCambio) {
-      toast.warn("Si cambias la fecha, debes seleccionar un motivo.");
+      toast.warn("Si cambias la fecha u hora, debes seleccionar un motivo.");
       return;
     }
 
     if (nombre.length > MAX_NOMBRE_LENGTH) {
-      toast.error(
-        `El Nombre excede el máximo permitido (${MAX_NOMBRE_LENGTH}).`
-      );
+      toast.error(`El Nombre excede el máximo permitido (${MAX_NOMBRE_LENGTH}).`);
       setLoading(false);
       return;
     }
 
     if (comentario.length > MAX_OBSERVACIONES_LENGTH) {
-      toast.error(
-        `El texto de Indicaciones excede el máximo permitido (${MAX_OBSERVACIONES_LENGTH}).`
-      );
+      toast.error(`El texto de Indicaciones excede el máximo permitido (${MAX_OBSERVACIONES_LENGTH}).`);
       setLoading(false);
       return;
     }
@@ -332,19 +369,22 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
 
     if (!user || !user.departamentoId || user.rol === Rol.SUPER_ADMIN) {
       if (!user || !user.departamentoId) {
-        toast.error(
-          "Error de autenticación: No se pudo identificar tu departamento."
-        );
+        toast.error("Error de autenticación: No se pudo identificar tu departamento.");
       } else if (user.rol === Rol.SUPER_ADMIN) {
-        toast.error(
-          "El SUPER_ADMIN (aún) no puede editar tareas desde este modal."
-        );
+        toast.error("El SUPER_ADMIN (aún) no puede editar tareas desde este modal.");
       }
       setLoading(false);
       return;
     }
 
     try {
+      let fechaLimiteFinal: Date;
+      if (usarHora && hora) {
+        fechaLimiteFinal = new Date(`${fecha}T${hora}:00`);
+      } else {
+        fechaLimiteFinal = new Date(`${fecha}T23:59:59`);
+      }
+
       if (fechaHaCambiado) {
         const payloadDatos = {
           tarea: nombre,
@@ -358,7 +398,7 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         await tareasService.update(tarea.id, payloadDatos as any);
         console.log(`✅ Datos de Tarea ID ${tarea.id} actualizados.`);
 
-        const nuevaFechaISO = new Date(`${fecha}T12:00:00.000Z`).toISOString();
+        const nuevaFechaISO = fechaLimiteFinal.toISOString();
         const payloadHistorial = {
           motivo: motivoCambio,
           nuevaFecha: nuevaFechaISO,
@@ -373,12 +413,12 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
           tarea: nombre,
           observaciones: comentario || null,
           urgencia: prioridad,
-          fechaLimite: new Date(`${fecha}T12:00:00.000Z`).toISOString(),
+          fechaLimite: fechaLimiteFinal.toISOString(),
           estatus: tarea.estatus,
           responsables: responsablesIds,
         };
 
-        console.log("📨 PASO 1: Actualizando tarea (sin cambio de fecha)...", payloadCompleto);
+        console.log("📨 PASO 1: Actualizando tarea...", payloadCompleto);
         await tareasService.update(tarea.id, payloadCompleto as any);
         console.log(`✅ Tarea ID ${tarea.id} actualizada.`);
       }
@@ -413,9 +453,7 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
           ? JSON.stringify(error.response.data.detalles)
           : error.response?.data?.error || "Datos inválidos";
 
-        toast.error(
-          `Datos guardados, pero falló el registro de fecha: ${detalleError}`
-        );
+        toast.error(`Datos guardados, pero falló el registro de fecha: ${detalleError}`);
         onTareaActualizada();
         onClose();
       } else {
@@ -431,7 +469,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     }
   };
 
-  // Filtrado de usuarios
   const usuariosFiltrados = (isKaizen ? listaInvitados : listaUsuarios).filter((u) =>
     u.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
@@ -445,7 +482,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         className="bg-white rounded-lg shadow-xl w-[90%] max-w-md relative flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* --- HEADER --- */}
         <div className="flex-shrink-0 p-6 pb-4 border-b border-gray-200">
           <button
             onClick={onClose}
@@ -460,25 +496,17 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
           </h2>
         </div>
 
-        {/* --- FORMULARIO --- */}
         <form
           onSubmit={handleSubmit}
           className="flex flex-col flex-grow min-h-0"
           noValidate
         >
-          {/* --- BODY (Scrollable) --- */}
           <div className="flex-grow overflow-y-auto p-6">
             <div className="flex flex-col gap-4 text-gray-800">
-              {/* --- Nombre (50 chars) --- */}
               <div>
                 <label className="block text-sm font-semibold mb-1 flex justify-between">
                   <span>Nombre</span>
-                  <span
-                    className={`text-xs ${nombre.length > MAX_NOMBRE_LENGTH
-                      ? "text-red-600 font-bold"
-                      : "text-gray-500"
-                      }`}
-                  >
+                  <span className={`text-xs ${nombre.length > MAX_NOMBRE_LENGTH ? "text-red-600 font-bold" : "text-gray-500"}`}>
                     {nombre.length}/{MAX_NOMBRE_LENGTH}
                   </span>
                 </label>
@@ -490,28 +518,17 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   required
                   disabled={loading}
                   className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
-                    ${submitted && !nombre.trim()
-                      ? "border-red-500"
-                      : "border-gray-300"
-                    }`}
+                    ${submitted && !nombre.trim() ? "border-red-500" : "border-gray-300"}`}
                 />
                 {submitted && !nombre.trim() && (
-                  <p className="text-red-600 text-xs mt-1">
-                    El nombre es obligatorio.
-                  </p>
+                  <p className="text-red-600 text-xs mt-1">El nombre es obligatorio.</p>
                 )}
               </div>
 
-              {/* --- Indicaciones (160 chars) --- */}
               <div>
                 <label className="block text-sm font-semibold mb-1 flex justify-between">
                   <span>Indicaciones</span>
-                  <span
-                    className={`text-xs ${comentario.length > MAX_OBSERVACIONES_LENGTH
-                      ? "text-red-600 font-bold"
-                      : "text-gray-500"
-                      }`}
-                  >
+                  <span className={`text-xs ${comentario.length > MAX_OBSERVACIONES_LENGTH ? "text-red-600 font-bold" : "text-gray-500"}`}>
                     {comentario.length}/{MAX_OBSERVACIONES_LENGTH}
                   </span>
                 </label>
@@ -522,70 +539,38 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   disabled={loading}
                   required
                   className={`w-full border rounded-md px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
-                    ${submitted && !comentario.trim()
-                      ? "border-red-500"
-                      : "border-gray-300"
-                    }`}
+                    ${submitted && !comentario.trim() ? "border-red-500" : "border-gray-300"}`}
                 />
                 {submitted && !comentario.trim() && (
-                  <p className="text-red-600 text-xs mt-1">
-                    Las indicaciones son obligatorias.
-                  </p>
+                  <p className="text-red-600 text-xs mt-1">Las indicaciones son obligatorias.</p>
                 )}
               </div>
 
-              {/* --- Evidencia --- */}
               <div>
                 <label className="block text-sm font-semibold mb-1">
                   Evidencia
                 </label>
-
-                {/* 1. Imágenes Existentes */}
                 {imagenesExistentes.length > 0 && (
                   <div className="mb-4">
-                    <p className="text-sm font-medium text-gray-800 mb-2">
-                      Imágenes actuales:
-                    </p>
+                    <p className="text-sm font-medium text-gray-800 mb-2">Imágenes actuales:</p>
                     <ul className="space-y-2 max-h-32 overflow-y-auto pr-2">
                       {imagenesExistentes.map((imagen) => (
-                        <li
-                          key={imagen.id}
-                          className="flex items-center justify-between bg-gray-100 p-2 rounded-md"
-                        >
-                          <a
-                            href={imagen.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <img
-                              src={imagen.url}
-                              alt={`Imagen ${imagen.id}`}
-                              className="w-10 h-10 object-cover rounded-md"
-                            />
+                        <li key={imagen.id} className="flex items-center justify-between bg-gray-100 p-2 rounded-md">
+                          <a href={imagen.url} target="_blank" rel="noopener noreferrer">
+                            <img src={imagen.url} alt={`Imagen ${imagen.id}`} className="w-10 h-10 object-cover rounded-md" />
                           </a>
                           <span className="flex-1 text-sm text-gray-700 mx-3 truncate">
                             {imagen.url.split("/").pop()?.substring(0, 20)}...
                           </span>
                           <button
                             type="button"
-                            onClick={() =>
-                              handleRemoveImagenExistente(imagen.id)
-                            }
+                            onClick={() => handleRemoveImagenExistente(imagen.id)}
                             disabled={loading}
                             className="flex-shrink-0 p-1 text-red-600 hover:bg-red-100 rounded-full disabled:opacity-50"
                             aria-label="Eliminar imagen existente"
                           >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                              className="w-5 h-5"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
-                                clipRule="evenodd"
-                              />
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
                             </svg>
                           </button>
                         </li>
@@ -593,73 +578,25 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                     </ul>
                   </div>
                 )}
-
-                {/* 2. Botón de Carga */}
                 <label
                   htmlFor="file-upload"
-                  onClick={(e) => {
-                    if (loading) e.preventDefault();
-                  }}
-                  className={`w-full flex items-center justify-center gap-2 
-                    bg-amber-100 text-amber-900 
-                    font-semibold px-4 py-2 rounded-md 
-                    transition-all duration-200
-                    ${loading
-                      ? "opacity-50 cursor-not-allowed"
-                      : "cursor-pointer hover:bg-amber-200"
-                    }
-                  `}
+                  onClick={(e) => { if (loading) e.preventDefault(); }}
+                  className={`w-full flex items-center justify-center gap-2 bg-amber-100 text-amber-900 font-semibold px-4 py-2 rounded-md transition-all duration-200 ${loading ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-200"}`}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    className="w-5 h-5"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10.5 3.5a.5.5 0 00-1 0V9H4a.5.5 0 000 1h5.5v5.5a.5.5 0 001 0V10H16a.5.5 0 000-1h-5.5V3.5z"
-                      clipRule="evenodd"
-                    />
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                    <path fillRule="evenodd" d="M10.5 3.5a.5.5 0 00-1 0V9H4a.5.5 0 000 1h5.5v5.5a.5.5 0 001 0V10H16a.5.5 0 000-1h-5.5V3.5z" clipRule="evenodd" />
                   </svg>
-                  <span>
-                    {archivos.length > 0
-                      ? "Agregar más"
-                      : "Agregar / Tomar Foto"}
-                  </span>
+                  <span>{archivos.length > 0 ? "Agregar más" : "Agregar / Tomar Foto"}</span>
                 </label>
-                <input
-                  id="file-upload"
-                  type="file"
-                  multiple
-                  disabled={loading}
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-
-                {/* 3. Archivos Nuevos */}
+                <input id="file-upload" type="file" multiple disabled={loading} onChange={handleFileChange} className="hidden" />
                 {archivos.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-sm font-medium text-gray-800 mb-2">
-                      {archivos.length} archivo(s) NUEVOS para subir:
-                    </p>
+                    <p className="text-sm font-medium text-gray-800 mb-2">{archivos.length} archivo(s) NUEVOS para subir:</p>
                     <ul className="space-y-2 max-h-32 overflow-y-auto pr-2">
                       {archivos.map((file, index) => (
-                        <li
-                          key={index}
-                          className="flex items-center justify-between bg-gray-100 p-2 rounded-md"
-                        >
-                          <img
-                            src={URL.createObjectURL(file)}
-                            alt={file.name}
-                            className="w-10 h-10 object-cover rounded-md"
-                            onLoad={(e) =>
-                              URL.revokeObjectURL(e.currentTarget.src)
-                            }
-                          />
-                          <span className="flex-1 text-sm text-gray-700 mx-3 truncate">
-                            {file.name}
-                          </span>
+                        <li key={index} className="flex items-center justify-between bg-gray-100 p-2 rounded-md">
+                          <img src={URL.createObjectURL(file)} alt={file.name} className="w-10 h-10 object-cover rounded-md" onLoad={(e) => URL.revokeObjectURL(e.currentTarget.src)} />
+                          <span className="flex-1 text-sm text-gray-700 mx-3 truncate">{file.name}</span>
                           <button
                             type="button"
                             onClick={() => handleRemoveArchivo(index)}
@@ -667,17 +604,8 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                             className="flex-shrink-0 p-1 text-red-600 hover:bg-red-100 rounded-full disabled:opacity-50"
                             aria-label="Eliminar archivo"
                           >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                              className="w-5 h-5"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
-                                clipRule="evenodd"
-                              />
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
                             </svg>
                           </button>
                         </li>
@@ -687,32 +615,10 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                 )}
               </div>
 
-              {/* --- Responsables --- */}
-              <div
-                id="responsable-list-editar"
-                className={`relative w-full h-32 border rounded-md 
-                  overflow-y-auto 
-                  focus:ring-2 focus:ring-amber-950 focus:outline-none 
-                  ${submitted && responsablesIds.length === 0
-                    ? "border-red-500"
-                    : "border-gray-300"
-                  }
-                `}
-                tabIndex={0}
-              >
-                {/* Barra de búsqueda dentro del contenedor o encima, como prefieras. 
-                    Dado que el contenedor tiene scroll, mejor ponerla encima.
-                    Voy a reestructurar esto ligeramente para poner el input fuera del scroll.
-                */}
-              </div>
-
-              {/* CORRECCIÓN: Estructura del bloque de responsables con búsqueda */}
               <div>
                 <label className="block text-sm font-semibold mb-1">
                   Responsables / Invitados
                 </label>
-
-                {/* Input de búsqueda */}
                 <input
                   type="text"
                   placeholder="Buscar usuario..."
@@ -721,32 +627,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   disabled={loading || loadingUsuarios}
                   className="w-full border rounded-md px-3 py-2 mb-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100"
                 />
-
-                <div
-                  id="responsable-list-editar"
-                  className={`relative w-full h-32 border rounded-md 
-                      overflow-y-auto 
-                      focus:ring-2 focus:ring-amber-950 focus:outline-none 
-                      ${submitted && responsablesIds.length === 0
-                      ? "border-red-500"
-                      : "border-gray-300"
-                    }
-                    `}
-                  tabIndex={0}
-                >
+                <div id="responsable-list-editar" className={`relative w-full h-32 border rounded-md overflow-y-auto focus:ring-2 focus:ring-amber-950 focus:outline-none ${submitted && responsablesIds.length === 0 ? "border-red-500" : "border-gray-300"}`} tabIndex={0}>
                   {usuariosFiltrados.map((u) => (
-                    <label
-                      key={u.id}
-                      htmlFor={`resp-edit-${u.id}`}
-                      className={`
-                          flex items-center gap-3 w-full px-3 py-2 
-                          cursor-pointer transition-colors
-                          ${responsablesIds.includes(u.id)
-                          ? "bg-amber-100 text-amber-900 font-semibold"
-                          : "text-gray-800 hover:bg-gray-50"
-                        }
-                        `}
-                    >
+                    <label key={u.id} htmlFor={`resp-edit-${u.id}`} className={`flex items-center gap-3 w-full px-3 py-2 cursor-pointer transition-colors ${responsablesIds.includes(u.id) ? "bg-amber-100 text-amber-900 font-semibold" : "text-gray-800 hover:bg-gray-50"}`}>
                       <input
                         type="checkbox"
                         id={`resp-edit-${u.id}`}
@@ -755,35 +638,20 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                         disabled={loading}
                         className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
                       />
-                      <span className={getRoleColorClass(u)}>
-                        {getDisplayName(u)}
-                      </span>
-
-                      {isKaizen && (
-                        <span className="text-xs text-gray-400 ml-auto">
-                          (Invitado)
-                        </span>
-                      )}
+                      <span className={getRoleColorClass(u)}>{getDisplayName(u)}</span>
+                      {isKaizen && <span className="text-xs text-gray-400 ml-auto">(Invitado)</span>}
                     </label>
                   ))}
-
                   {usuariosFiltrados.length === 0 && (
                     <p className="text-center text-gray-500 text-sm py-8">
-                      {busqueda
-                        ? "No se encontraron resultados."
-                        : isKaizen
-                          ? "No hay invitados disponibles."
-                          : "No hay usuarios en tu departamento."}
+                      {busqueda ? "No se encontraron resultados." : isKaizen ? "No hay invitados disponibles." : "No hay usuarios en tu departamento."}
                     </p>
                   )}
                 </div>
               </div>
 
-              {/* --- Prioridad --- */}
               <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Prioridad
-                </label>
+                <label className="block text-sm font-semibold mb-1">Prioridad</label>
                 <fieldset className="mt-2 grid grid-cols-3 gap-2">
                   {PRIORIDADES_VALIDAS.map((p) => (
                     <div key={p.value}>
@@ -793,40 +661,16 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                         name="prioridad-radio-group"
                         value={p.value}
                         checked={prioridad === p.value}
-                        onChange={(e) =>
-                          setPrioridad(e.target.value as Urgencia)
-                        }
+                        onChange={(e) => setPrioridad(e.target.value as Urgencia)}
                         disabled={loading}
                         className="sr-only peer"
                       />
                       <label
                         htmlFor={`prioridad-${p.value}`}
-                        className={`
-                          w-full block text-center px-3 py-2 rounded-md 
-                          border text-sm font-semibold cursor-pointer transition-all
-                          ${loading ? "opacity-50 cursor-not-allowed" : ""}
-                          
-                          ${p.value === "ALTA" &&
-                          `
-                              border-gray-300 bg-gray-50 text-gray-700
-                              peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600
-                              ${!loading && "hover:bg-red-100"}
-                            `
-                          }
-                          ${p.value === "MEDIA" &&
-                          `
-                              border-gray-300 bg-gray-50 text-gray-700
-                              peer-checked:bg-amber-400 peer-checked:text-white peer-checked:border-amber-400
-                              ${!loading && "hover:bg-amber-100"}
-                            `
-                          }
-                          ${p.value === "BAJA" &&
-                          `
-                              border-gray-300 bg-gray-50 text-gray-700
-                              peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-600
-                              ${!loading && "hover:bg-blue-100"}
-                            `
-                          }
+                        className={`w-full block text-center px-3 py-2 rounded-md border text-sm font-semibold cursor-pointer transition-all ${loading ? "opacity-50 cursor-not-allowed" : ""}
+                          ${p.value === "ALTA" && `border-gray-300 bg-gray-50 text-gray-700 peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600 ${!loading && "hover:bg-red-100"}`}
+                          ${p.value === "MEDIA" && `border-gray-300 bg-gray-50 text-gray-700 peer-checked:bg-amber-400 peer-checked:text-white peer-checked:border-amber-400 ${!loading && "hover:bg-amber-100"}`}
+                          ${p.value === "BAJA" && `border-gray-300 bg-gray-50 text-gray-700 peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-600 ${!loading && "hover:bg-blue-100"}`}
                         `}
                       >
                         {p.label}
@@ -835,49 +679,68 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                   ))}
                 </fieldset>
                 {submitted && !prioridad && (
-                  <p className="text-red-600 text-xs mt-1">
-                    Debes seleccionar una prioridad.
-                  </p>
+                  <p className="text-red-600 text-xs mt-1">Debes seleccionar una prioridad.</p>
                 )}
               </div>
 
-              {/* --- Fecha Límite --- */}
               <div>
-                <label
-                  htmlFor="nueva-fecha"
-                  className="block text-sm font-semibold mb-1"
-                >
-                  Fecha Límite
-                </label>
-                <input
-                  type="date"
-                  id="nueva-fecha"
-                  value={fecha}
-                  onChange={(e) => setFecha(e.target.value)}
-                  required
-                  disabled={loading}
-                  min={formatDateToInput(new Date())}
-                  className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
-                    ${submitted && !getSelectedDate()
-                      ? "border-red-500"
-                      : "border-gray-300"
-                    }
-                  `}
-                />
+                <label htmlFor="nueva-fecha" className="block text-sm font-semibold mb-1">Fecha Límite</label>
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="date"
+                    id="nueva-fecha"
+                    value={fecha}
+                    onChange={(e) => setFecha(e.target.value)}
+                    required
+                    disabled={loading}
+                    min={formatDateToInput(new Date())}
+                    className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
+                      ${submitted && !getSelectedDate() ? "border-red-500" : "border-gray-300"}`}
+                  />
+                  <div className="flex items-center gap-4 mt-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 select-none">
+                      <input
+                        type="checkbox"
+                        checked={usarHora}
+                        onChange={(e) => {
+                          setUsarHora(e.target.checked);
+                          if (!e.target.checked) setHora("");
+                        }}
+                        disabled={loading}
+                        className="w-4 h-4 text-amber-800 border-gray-300 rounded focus:ring-amber-950"
+                      />
+                      <span>¿Especificar hora límite?</span>
+                    </label>
+                    {usarHora && (
+                      <input
+                        type="time"
+                        value={hora}
+                        onChange={(e) => setHora(e.target.value)}
+                        disabled={loading}
+                        required={usarHora}
+                        className={`flex-1 border rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-amber-950 focus:outline-none animate-fade-in
+                          ${submitted && ((!hora) || (!isTimeValidForToday())) ? "border-red-500 bg-red-50" : "border-gray-300"}`}
+                      />
+                    )}
+                  </div>
+                </div>
                 {submitted && !getSelectedDate() && (
+                  <p className="text-red-600 text-xs mt-1">La fecha límite es obligatoria.</p>
+                )}
+                {submitted && usarHora && !hora && (
+                  <p className="text-red-600 text-xs mt-1">Debes seleccionar una hora.</p>
+                )}
+                {/* 🚀 Mensaje de error para hora pasada */}
+                {submitted && usarHora && hora && !isTimeValidForToday() && (
                   <p className="text-red-600 text-xs mt-1">
-                    La fecha límite es obligatoria.
+                    La hora no puede ser anterior a la actual.
                   </p>
                 )}
               </div>
 
-              {/* --- Motivo de Cambio (Condicional) --- */}
               {fechaHaCambiado && (
                 <div>
-                  <label
-                    htmlFor="motivo-cambio"
-                    className="block text-sm font-semibold mb-1 text-blue-800"
-                  >
+                  <label htmlFor="motivo-cambio" className="block text-sm font-semibold mb-1 text-blue-800">
                     Motivo del Cambio de Fecha
                   </label>
                   <select
@@ -887,31 +750,21 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                     disabled={loading}
                     required
                     className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-700 focus:outline-none
-                      ${submitted && fechaHaCambiado && !motivoCambio
-                        ? "border-red-500"
-                        : "border-gray-300"
-                      }`}
+                      ${submitted && fechaHaCambiado && !motivoCambio ? "border-red-500" : "border-gray-300"}`}
                   >
-                    <option value="" disabled>
-                      -- Selecciona un motivo --
-                    </option>
+                    <option value="" disabled>-- Selecciona un motivo --</option>
                     {MOTIVOS_CAMBIO_FECHA.map((motivo) => (
-                      <option key={motivo} value={motivo}>
-                        {motivo}
-                      </option>
+                      <option key={motivo} value={motivo}>{motivo}</option>
                     ))}
                   </select>
                   {submitted && fechaHaCambiado && !motivoCambio && (
-                    <p className="text-red-600 text-xs mt-1">
-                      El motivo es obligatorio si cambias la fecha.
-                    </p>
+                    <p className="text-red-600 text-xs mt-1">El motivo es obligatorio si cambias la fecha.</p>
                   )}
                 </div>
               )}
             </div>
           </div>
 
-          {/* --- FOOTER --- */}
           <div className="flex-shrink-0 flex justify-end gap-2 p-6 pt-4 border-t border-gray-200">
             <button
               type="button"
@@ -924,8 +777,7 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className={`${loading ? "opacity-70 cursor-not-allowed" : "hover:bg-green-700"
-                } bg-green-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
+              className={`${loading ? "opacity-70 cursor-not-allowed" : "hover:bg-green-700"} bg-green-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
             >
               {loading ? "Actualizando..." : "Guardar Cambios"}
             </button>

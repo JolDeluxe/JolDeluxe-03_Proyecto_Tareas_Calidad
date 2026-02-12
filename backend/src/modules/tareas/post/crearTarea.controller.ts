@@ -37,7 +37,7 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Uno o más responsables no existen o están inactivos." });
   }
 
-  // Validación jerárquica (Admin no puede asignar a otro Admin, etc.)
+  // Validación jerárquica
   for (const responsable of usuariosResponsables) {
     if (user.rol === "ADMIN") {
       const valido = 
@@ -48,15 +48,15 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
     }
   }
 
-  // 3. Ajuste de fecha (Final del día)
-  const fechaLimiteAjustada = new Date(data.fechaLimite);
-  fechaLimiteAjustada.setHours(23, 59, 59, 999);
+  // 🚀 CAMBIO CLAVE: Ya NO forzamos la hora a 23:59:59.
+  // Respetamos la fecha/hora exacta que envía el Frontend.
+  const fechaLimiteFinal = new Date(data.fechaLimite);
 
   // 4. Crear en BD
   const nuevaTarea = await prisma.tarea.create({
     data: {
       ...data,
-      fechaLimite: fechaLimiteAjustada,
+      fechaLimite: fechaLimiteFinal, // 👈 Usamos la fecha tal cual viene
       observaciones: observaciones ?? null,
       fechaRegistro: new Date(),
       asignador: { connect: { id: user.id } },
@@ -65,7 +65,6 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
         create: responsables.map((id) => ({ usuario: { connect: { id } } })),
       },
     },
-    // Incluimos el departamento explícitamente para el log
     include: {
         ...tareaConRelacionesInclude,
         departamento: { select: { nombre: true } }
@@ -80,7 +79,7 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
     `/admin`
   );
 
-  // --- LOG DE BITÁCORA (Con Departamento) ---
+  // --- LOG DE BITÁCORA ---
   const nombresAsignados = usuariosResponsables.map(u => u.nombre).join(", ");
   await registrarBitacora(
     "CREAR_TAREA",
@@ -92,7 +91,6 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
         responsablesIds: responsables 
     }
   );
-  // ------------------------------------------
 
   // 6. Respuesta limpia
   const tareaLimpia = {

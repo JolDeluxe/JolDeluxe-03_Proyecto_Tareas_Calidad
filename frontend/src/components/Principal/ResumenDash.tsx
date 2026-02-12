@@ -63,10 +63,10 @@ const ResumenPrincipalDash: React.FC<ResumenPrincipalPropsDash> = ({
     (t) => t.estatus.toUpperCase() === "CANCELADA"
   ).length;
 
-  // --- 3. Helper para Porcentajes ---
+  // 🚀 Cálculo de "Activas" para el denominador de porcentaje real (opcional)
+  // Pero para este resumen general, solemos querer ver el % del pastel total.
   const getPercent = (val: number) => {
     if (total === 0) return 0;
-    // Math.round para evitar decimales feos (ej. 33.333%)
     return Math.round((val / total) * 100);
   };
 
@@ -88,13 +88,13 @@ const ResumenPrincipalDash: React.FC<ResumenPrincipalPropsDash> = ({
     {
       id: "canceladas",
       label: "Canceladas",
-      color: "red",
+      color: "red", // Ojo: Las mantenemos rojas aquí para que se vean, pero no afectan DashboardMetricas
       value: canceladas,
       percent: getPercent(canceladas),
     },
     {
       id: "total",
-      label: "Total",
+      label: "Total Registros",
       color: "gray",
       value: total,
       percent: 100,
@@ -103,7 +103,7 @@ const ResumenPrincipalDash: React.FC<ResumenPrincipalPropsDash> = ({
 
   if (loading) {
     return (
-      <div className="text-2xl font-extrabold text-blue-900 justify-center text-center">
+      <div className="text-2xl font-extrabold text-blue-900 justify-center text-center animate-pulse mt-4">
         ...
       </div>
     );
@@ -135,7 +135,6 @@ const ResumenPrincipalDash: React.FC<ResumenPrincipalPropsDash> = ({
               <div className="text-xs uppercase tracking-wider font-bold opacity-70 mb-1">
                 {btn.label}
               </div>
-              {/* Contenedor flex para alinear número y porcentaje */}
               <div className="flex items-baseline justify-center gap-2">
                 <span className="text-4xl font-black tracking-tight">
                   {btn.value}

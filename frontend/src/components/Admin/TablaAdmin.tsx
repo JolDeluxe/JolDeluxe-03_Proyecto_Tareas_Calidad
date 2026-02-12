@@ -30,12 +30,89 @@ interface TablaProps {
   user: Usuario | null; // 👈 2. Recibir 'user' como prop
 }
 
-// 3. 🛠️ Utilidad de fecha robusta (maneja string o Date)
-const formateaFecha = (fechaInput?: Date | string | null): string => {
+// --- FUNCIONES HELPER PARA FECHAS Y HORAS ---
+
+/**
+ * Convierte una fecha a formato HH:MM AM/PM
+ */
+const formatTimeAMPM = (date: Date): string => {
+  let hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12; // la hora '0' debe ser '12'
+  const strMinutes = minutes < 10 ? '0' + minutes : minutes;
+  return hours + ':' + strMinutes + ' ' + ampm;
+}
+
+/**
+ * 🛠️ Utilidad de fecha robusta para Visualización en Tabla (Desktop).
+ * - Si es 23:59:59 -> Solo Fecha.
+ * - Si tiene hora -> Fecha (arriba) + Hora (abajo).
+ */
+const formateaFechaDesktop = (fechaInput?: Date | string | null) => {
+  if (!fechaInput) return "";
+
+  const dateObj = typeof fechaInput === "string" ? new Date(fechaInput) : fechaInput;
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return "";
+
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const y = dateObj.getFullYear();
+  const fechaStr = `${d}/${m}/${y}`;
+
+  // Verificar hora
+  const h = dateObj.getHours();
+  const min = dateObj.getMinutes();
+  const sec = dateObj.getSeconds();
+
+  // Si es "Fin del día" (23:59:59), solo retornamos la fecha en un span
+  if (h === 23 && min === 59 && sec >= 58) {
+    return <span>{fechaStr}</span>;
+  }
+
+  // Si tiene hora específica, retornamos estructura vertical
+  const horaStr = formatTimeAMPM(dateObj);
+
+  return (
+    <div className="flex flex-col items-center leading-tight">
+      <span>{fechaStr}</span>
+      <span className="text-[11px] font-normal opacity-80">{horaStr}</span>
+    </div>
+  );
+};
+
+// Formateador simple para strings (usado en móvil o celdas simples)
+// Si tiene hora, la muestra inline (ej: 28/02/2026 07:00 PM)
+const formateaFechaString = (fechaInput?: Date | string | null): string => {
+  if (!fechaInput) return "";
+  try {
+    const dateObj = typeof fechaInput === "string" ? new Date(fechaInput) : fechaInput;
+    if (isNaN(dateObj.getTime())) return "";
+
+    const d = String(dateObj.getDate()).padStart(2, "0");
+    const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const y = dateObj.getFullYear();
+    const fechaStr = `${d}/${m}/${y}`;
+
+    const h = dateObj.getHours();
+    const min = dateObj.getMinutes();
+    const sec = dateObj.getSeconds();
+
+    // Si es fin del día, solo fecha
+    if (h === 23 && min === 59 && sec >= 58) return fechaStr;
+
+    return `${fechaStr} ${formatTimeAMPM(dateObj)}`;
+  } catch {
+    return "";
+  }
+};
+
+// Formateador SOLO FECHA (para registro)
+const formateaSoloFecha = (fechaInput?: Date | string | null): string => {
   if (!fechaInput) return "";
   try {
     const fecha = new Date(fechaInput);
-    // Verificar si la fecha es válida
     if (isNaN(fecha.getTime())) return "";
     const d = String(fecha.getDate()).padStart(2, "0");
     const m = String(fecha.getMonth() + 1).padStart(2, "0");
@@ -72,11 +149,8 @@ const isRetrasada = (
     // Verificar si ambas fechas son válidas
     if (isNaN(limite.getTime()) || isNaN(conclusion.getTime())) return false;
 
-    // Comparar solo la fecha (ignorando la hora)
-    limite.setHours(0, 0, 0, 0);
-    conclusion.setHours(0, 0, 0, 0);
-
-    return conclusion > limite;
+    // Comparar timestamps para mayor precisión con hora
+    return conclusion.getTime() > limite.getTime();
   } catch {
     return false;
   }
@@ -253,7 +327,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
               <tbody className="divide-y divide-gray-200">
                 {tareasFiltradas.map((row: Tarea) => {
                   const hoy = new Date();
-                  hoy.setHours(0, 0, 0, 0);
 
                   // Lógica de fechas (asumida)
                   const fechaLimiteObj =
@@ -267,19 +340,16 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         ? new Date(row.fechaLimite)
                         : null;
 
-                  if (fechaLimiteObj) fechaLimiteObj.setHours(0, 0, 0, 0);
-
-                  const vencida =
-                    fechaLimiteObj &&
-                    fechaLimiteObj < hoy &&
-                    row.estatus === "PENDIENTE";
+                  let vencida = false;
+                  if (fechaLimiteObj) {
+                    // Comprobación de vencimiento
+                    vencida = fechaLimiteObj.getTime() < hoy.getTime() && row.estatus === "PENDIENTE";
+                  }
 
                   const retrasada = isRetrasada(
-                    fechaLimiteObj,
+                    row.fechaLimite,
                     row.fechaConclusion
                   );
-
-                  const fechaLimiteFinalStr = formateaFecha(fechaLimiteObj);
 
                   return (
                     <tr
@@ -295,17 +365,23 @@ const TablaAdmin: React.FC<TablaProps> = ({
                             EN REVISIÓN
                           </span>
                         )}
+                        {/* Feedback Rechazo */}
+                        {row.estatus === "PENDIENTE" && row.feedbackRevision && (
+                          <span className="block text-[10px] text-red-700 font-bold bg-red-100 w-fit px-1 rounded mt-1 border border-red-200">
+                            ⚠️ Corrección req.
+                          </span>
+                        )}
                       </td>
 
-                      {/* 🚀 Columna IMAGEN (Implementación del Badge) */}
+                      {/* 🚀 Columna IMAGEN */}
                       <td className="px-3 py-3 text-center w-[4%]">
                         {row.imagenes && row.imagenes.length > 0 ? (
                           <button
                             onClick={() => setModalImagenes(row.imagenes)}
                             title={`Ver ${row.imagenes.length} imagen(es)`}
                             className="inline-flex items-center justify-center w-6 h-6 rounded-full
-                                                                bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white
-                                                                transition-colors duration-200 shadow-sm"
+                                      bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white
+                                      transition-colors duration-200 shadow-sm"
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -356,9 +432,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         )}
                       </td>
 
-                      {/* Columna Registro */}
+                      {/* Columna Registro (Solo Fecha) */}
                       <td className="px-3 py-3 text-center w-[6%]">
-                        {formateaFecha(row.fechaRegistro)}
+                        {formateaSoloFecha(row.fechaRegistro)}
                       </td>
 
                       {/* === Celda Fecha límite e historial === */}
@@ -370,15 +446,17 @@ const TablaAdmin: React.FC<TablaProps> = ({
                             : "justify-center h-full"
                             } min-h-[50px]`}
                         >
-                          <p
+                          <div
                             className={`font-semibold ${vencida
                               ? "text-red-600 font-bold"
                               : "text-gray-800"
                               }`}
                           >
-                            {fechaLimiteFinalStr}
+                            {/* 🚀 AQUI USAMOS EL FORMATEADOR CON HORA */}
+                            {formateaFechaDesktop(fechaLimiteObj)}
+
                             {vencida && (
-                              <span className="ml-1 inline-flex items-center">
+                              <div className="flex justify-center mt-1">
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
                                   viewBox="0 0 24 24"
@@ -391,9 +469,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                     clipRule="evenodd"
                                   />
                                 </svg>
-                              </span>
+                              </div>
                             )}
-                          </p>
+                          </div>
 
                           {row.historialFechas &&
                             row.historialFechas.length > 0 && (
@@ -419,40 +497,27 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                       d="M19 9l-7 7-7-7"
                                     />
                                   </svg>
-                                  Ver historial ({row.historialFechas.length})
+                                  Historial ({row.historialFechas.length})
                                 </summary>
 
-                                <div className="mt-2 text-gray-700 bg-white/80 rounded-md p-2 border border-gray-200 text-left">
+                                <div className="mt-2 text-gray-700 bg-white/80 rounded-md p-2 border border-gray-200 text-left relative z-50 shadow-md">
                                   <ul className="space-y-2">
                                     {row.historialFechas.map(
-                                      (h: HistorialFecha, i: number) => (
+                                      (h: any, i: number) => (
                                         <li
                                           key={i}
                                           className="border-b border-gray-100 pb-1 last:border-none"
                                         >
-                                          <p>
-                                            <span className="font-semibold text-gray-800">
-                                              Modificación:
-                                            </span>{" "}
-                                            {formateaFecha(h.fechaCambio)}
-                                          </p>
-                                          <p>
-                                            <span className="font-semibold text-gray-800">
-                                              Anterior:
-                                            </span>{" "}
-                                            {formateaFecha(h.fechaAnterior)} →{" "}
-                                            <span className="font-semibold text-gray-800">
-                                              Nueva:
-                                            </span>{" "}
-                                            {formateaFecha(h.nuevaFecha)}
-                                          </p>
-                                          <p className="italic text-gray-600">
+                                          <div className="text-[10px]">
+                                            <span className="font-bold">Nueva:</span> {formateaFechaDesktop(h.nuevaFecha)}
+                                          </div>
+                                          <div className="text-[10px] text-gray-500">
                                             Por: {h.modificadoPor.nombre}
-                                          </p>
+                                          </div>
                                           {h.motivo && (
-                                            <p className="italic text-gray-600">
-                                              Motivo: {h.motivo}
-                                            </p>
+                                            <div className="text-[10px] italic text-gray-500">
+                                              "{h.motivo}"
+                                            </div>
                                           )}
                                         </li>
                                       )
@@ -470,8 +535,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         className={`px-3 py-3 text-center w-[7%] ${retrasada ? "text-red-600 font-bold" : "text-gray-800"
                           }`}
                       >
+                        {/* Usamos el formateador con hora también aquí para precisión */}
                         {row.fechaConclusion
-                          ? formateaFecha(row.fechaConclusion)
+                          ? formateaFechaDesktop(row.fechaConclusion)
                           : "—"}
                       </td>
 
@@ -533,11 +599,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
                 fechaLimiteDate instanceof Date &&
                 !isNaN(fechaLimiteDate.getTime())
               ) {
-                const fechaLimiteNormalizada = new Date(fechaLimiteDate);
-                fechaLimiteNormalizada.setHours(0, 0, 0, 0); // Normaliza la fecha límite
-
+                // Comprobación de vencimiento con hora real
                 vencida =
-                  fechaLimiteNormalizada < hoy && row.estatus !== "CONCLUIDA" && row.estatus !== "EN_REVISION";
+                  fechaLimiteDate.getTime() < new Date().getTime() && row.estatus !== "CONCLUIDA" && row.estatus !== "EN_REVISION";
               }
 
               const retrasada = isRetrasada(
@@ -545,10 +609,10 @@ const TablaAdmin: React.FC<TablaProps> = ({
                 row.fechaConclusion
               );
 
-              const fechaLimiteFinalStr = formateaFecha(fechaLimiteObj);
+              // 🚀 Usamos el helper de string para móvil
+              const fechaLimiteFinalStr = formateaFechaString(fechaLimiteObj);
 
-              // 🚀 ✅ SOLUCIÓN (VISTA MÓVIL):
-              //   Calculamos los permisos aquí también para que la lógica sea IDÉNTICA
+              // Permisos para móvil
               const puedeValidar =
                 user &&
                 (user.rol === Rol.SUPER_ADMIN ||
@@ -620,7 +684,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       <span className="font-semibold text-gray-700">
                         Registro:
                       </span>{" "}
-                      {formateaFecha(row.fechaRegistro)}
+                      {formateaSoloFecha(row.fechaRegistro)}
                     </p>
 
                     <p className="flex items-center text-xs">
@@ -682,7 +746,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         Conclusión:
                       </span>{" "}
                       <span className="ml-1">
-                        {formateaFecha(row.fechaConclusion)}
+                        {formateaFechaString(row.fechaConclusion)}
                       </span>
                       {retrasada && (
                         <span className="ml-1 inline-flex items-center">
@@ -737,17 +801,17 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                   <span className="font-semibold text-gray-800">
                                     Modificación:
                                   </span>{" "}
-                                  {formateaFecha(h.fechaCambio)}
+                                  {formateaFechaString(h.fechaCambio)}
                                 </p>
                                 <p>
                                   <span className="font-semibold text-gray-800">
                                     Anterior:
                                   </span>{" "}
-                                  {formateaFecha(h.fechaAnterior)} →{" "}
+                                  {formateaFechaString(h.fechaAnterior)} →{" "}
                                   <span className="font-semibold text-gray-800">
                                     Nueva:
                                   </span>{" "}
-                                  {formateaFecha(h.nuevaFecha)}
+                                  {formateaFechaString(h.nuevaFecha)}
                                 </p>
                                 <p className="italic text-gray-600">
                                   Por: {h.modificadoPor.nombre}
@@ -785,13 +849,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     </div>
                   )}
 
-                  {/* ⚙️ Acciones (Móvil) - LÓGICA CORREGIDA CON REVISIÓN */}
                   <div className="flex justify-around items-center mt-4 pt-2 border-t border-gray-200 h-[46px]">
-
-
-
-                    {/* BOTONES STANDARD (PENDIENTE / EDITAR / CANCELAR) */}
-
                     {/* CANCELAR */}
                     {puedeCancelar && (
                       <button
@@ -834,7 +892,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </button>
                     )}
 
-                    {/* VALIDAR (Solo si está pendiente, si está en revisión sale la lupita arriba) */}
+                    {/* VALIDAR */}
                     {row.estatus === "PENDIENTE" && puedeValidar && (
                       <button
                         onClick={() => abrirModalAceptar(row)}
@@ -855,14 +913,13 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </button>
                     )}
 
-                    {/* ✅ BOTÓN DE REVISIÓN EN MÓVIL */}
+                    {/* REVISAR (MÓVIL) */}
                     {row.estatus === "EN_REVISION" && puedeValidar ? (
                       <button
                         onClick={() => handleRevisar(row)}
                         className="flex flex-col items-center text-indigo-700 hover:text-indigo-800 transition"
                         title="Revisar evidencia"
                       >
-                        {/* Ícono Lupita */}
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
                           viewBox="0 -960 960 960"

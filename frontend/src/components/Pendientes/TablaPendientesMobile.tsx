@@ -1,3 +1,5 @@
+// 📍 src/components/Pendientes/TablaPendientesMobile.tsx
+
 import React from "react";
 import type {
   Tarea,
@@ -21,6 +23,28 @@ interface TablaPendientesMobileProps {
   onRevisar: (tarea: Tarea) => void;
 }
 
+// Helper: AM/PM
+const formatTimeAMPM = (date: Date): string => {
+  let hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const strMinutes = minutes < 10 ? '0' + minutes : minutes;
+  return hours + ':' + strMinutes + ' ' + ampm;
+}
+
+// Helper: Solo fecha para registro
+const formateaSoloFecha = (fecha?: Date | string | null): string => {
+  if (!fecha) return "";
+  const dateObj = typeof fecha === "string" ? new Date(fecha) : fecha;
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return "";
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const y = dateObj.getFullYear();
+  return `${d}/${m}/${y}`;
+};
+
 const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
   tareas,
   user,
@@ -35,7 +59,6 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
   return (
     <div className="grid lg:hidden grid-cols-1 md:grid-cols-2 gap-3 p-2 items-start">
       {tareas.map((row) => {
-        // Lógica de fechas
         const fechaFinalObj = getFechaFinalObj(row);
         const estado =
           row.estatus === "EN_REVISION" || row.estatus === "CONCLUIDA"
@@ -44,7 +67,6 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
         const vencida = estado === "vencida";
         const proxima = estado === "proxima";
 
-        // Permisos
         const isResponsable = row.responsables.some((r) => r.id === user?.id);
         const canReview =
           row.asignadorId === user?.id ||
@@ -52,31 +74,25 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
           user?.rol === "SUPER_ADMIN";
 
         const hayObservaciones = !!row.observaciones;
-        const hayHistorial =
-          row.historialFechas && row.historialFechas.length > 0;
-        const hayImagenes = row.imagenes && row.imagenes.length > 0;
 
         return (
           <div
             key={row.id}
-            // 🚨 CORRECCIÓN: Quitamos 'bg-white' para que se vea el color de 'getRowClass'
             className={`border border-gray-300 shadow-sm p-4 rounded-md ${getRowClass(
               row.estatus
             )}`}
           >
-            {/* --- CABECERA: Título y Prioridad --- */}
+            {/* --- CABECERA --- */}
             <div className="flex justify-between items-start mb-2">
               <div className="flex flex-col pr-2">
                 <h3 className="font-bold text-gray-800 text-base leading-snug">
                   {row.tarea}
                 </h3>
-                {/* Badge En Revisión */}
                 {row.estatus === "EN_REVISION" && (
                   <span className="text-[10px] font-bold text-indigo-800 bg-indigo-100 border border-indigo-300 px-1.5 py-0.5 rounded mt-1 w-fit">
                     EN REVISIÓN
                   </span>
                 )}
-                {/* Alerta de Rechazo */}
                 {row.estatus === "PENDIENTE" && row.feedbackRevision && (
                   <span className="text-[10px] font-bold text-red-800 bg-red-100 border border-red-300 px-1.5 py-0.5 rounded mt-1 w-fit flex items-center gap-1">
                     ⚠️ Corrección: "{row.feedbackRevision}"
@@ -100,7 +116,7 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
               </span>
             </div>
 
-            {/* --- CUERPO: Datos Detalles (Basado en tu diseño preferido) --- */}
+            {/* --- CUERPO --- */}
             <div className="text-xs text-gray-700 space-y-1 mb-2">
               <p>
                 <span className="font-bold">Asignado por:</span>{" "}
@@ -118,7 +134,8 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
 
               <p>
                 <span className="font-bold">Registro:</span>{" "}
-                {formateaFecha(row.fechaRegistro)}
+                {/* 🚀 SOLO FECHA */}
+                {formateaSoloFecha(row.fechaRegistro)}
               </p>
 
               <div className="flex items-center">
@@ -131,6 +148,7 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
                       : "text-gray-800"
                     }`}
                 >
+                  {/* 🚀 FECHA HORA (EN LÍNEA) */}
                   {formateaFecha(fechaFinalObj) || "—"}
                 </span>
                 {(vencida || proxima) && (
@@ -160,6 +178,7 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
               {row.fechaConclusion && (
                 <p>
                   <span className="font-bold">Conclusión:</span>{" "}
+                  {/* Conclusión también podría llevar hora si gustas, aquí dejé la función general */}
                   {formateaFecha(row.fechaConclusion)}
                 </p>
               )}
@@ -172,7 +191,7 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
               </p>
             )}
 
-            {/* Historial (Collapse) */}
+            {/* Historial */}
             {row.historialFechas && row.historialFechas.length > 0 && (
               <details
                 className={`mt-2 pt-2 text-xs transition-all duration-300 open:pb-2 ${hayObservaciones ? "border-t border-gray-300/50" : ""
@@ -221,7 +240,7 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
               </details>
             )}
 
-            {/* Ver Imágenes */}
+            {/* Imágenes */}
             {row.imagenes && row.imagenes.length > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-300/50 flex justify-center">
                 <button
@@ -242,13 +261,11 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
               </div>
             )}
 
-            {/* --- ACCIONES (Tu diseño solicitado: Icono arriba, Texto abajo) --- */}
+            {/* Acciones */}
             {((isResponsable && row.estatus === "PENDIENTE") ||
               (canReview && row.estatus === "EN_REVISION") ||
               (isResponsable && row.estatus === "EN_REVISION")) && (
                 <div className="flex justify-around items-center mt-4 pt-2 border-t border-gray-300/60 h-[46px]">
-
-                  {/* 1. ENTREGAR / CORREGIR */}
                   {isResponsable && row.estatus === "PENDIENTE" && (
                     <button
                       onClick={() => onEntregar(row)}
@@ -259,7 +276,6 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
                       title={row.feedbackRevision ? "Corregir" : "Entregar"}
                     >
                       {row.feedbackRevision ? (
-                        // 🟠 Icono Corregir
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
                           viewBox="0 -960 960 960"
@@ -271,7 +287,6 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
                           </g>
                         </svg>
                       ) : (
-                        // 🟢 Icono Entregar
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
                           viewBox="0 -960 960 960"
@@ -286,14 +301,12 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
                     </button>
                   )}
 
-                  {/* 2. REVISAR */}
                   {canReview && row.estatus === "EN_REVISION" && (
                     <button
                       onClick={() => onRevisar(row)}
                       className="flex flex-col items-center text-indigo-700 hover:text-indigo-800 transition"
                       title="Revisar"
                     >
-                      {/* Nuevo icono */}
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 -960 960 960"
@@ -301,12 +314,10 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
                       >
                         <path d="M440-240q116 0 198-81.5T720-520q0-116-82-198t-198-82q-117 0-198.5 82T160-520q0 117 81.5 198.5T440-240Zm0-280Zm0 160q-83 0-147.5-44.5T200-520q28-70 92.5-115T440-680q82 0 146.5 45T680-520q-29 71-93.5 115.5T440-360Zm0-60q55 0 101-26.5t72-73.5q-26-46-72-73t-101-27q-56 0-102 27t-72 73q26 47 72 73.5T440-420Zm0-40q25 0 42.5-17t17.5-43q0-25-17.5-42.5T440-580q-26 0-43 17.5T380-520q0 26 17 43t43 17Zm0 300q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T80-520q0-74 28.5-139.5t77-114.5q48.5-49 114-77.5T440-880q74 0 139.5 28.5T694-774q49 49 77.5 114.5T800-520q0 64-21 121t-58 104l159 159-57 56-159-158q-47 37-104 57.5T440-160Z" />
                       </svg>
-
                       <span className="text-[11px] font-bold mt-0.5">Revisar</span>
                     </button>
                   )}
 
-                  {/* 3. ESPERANDO */}
                   {isResponsable && row.estatus === "EN_REVISION" && (
                     <div className="flex flex-col items-center text-indigo-600 opacity-90 animate-pulse">
                       <svg
@@ -322,7 +333,6 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
                     </div>
                   )}
 
-                  {/* Fallback */}
                   {!(isResponsable && row.estatus === "PENDIENTE") &&
                     !(canReview && row.estatus === "EN_REVISION") &&
                     !(isResponsable && row.estatus === "EN_REVISION") && (
