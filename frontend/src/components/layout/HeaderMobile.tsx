@@ -49,9 +49,9 @@ const HeaderMobile: React.FC<HeaderMobileProps> = ({ user }) => {
     ];
 
     // ✅ CORREGIDO: "Todas" solo para el rol USUARIO
-    if (user.rol === Rol.USUARIO) {
-      items.push({ to: "/todas", label: "Todas" });
-    }
+    // if (user.rol === Rol.USUARIO) {
+    //   items.push({ to: "/todas", label: "Todas" });
+    // }
 
     if (puedeVerAdminTareas()) {
       items.push({ to: "/admin", label: "Gestionar Tareas" });

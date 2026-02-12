@@ -115,7 +115,7 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
             </Link>
 
             {/* ✅ CORREGIDO: "TODAS" Solo visible para ROL USUARIO */}
-            {esRolUsuario && (
+            {/* {esRolUsuario && (
               <Link
                 to="/todas"
                 className={`relative mx-3 px-4 py-1 group ${isActive("/todas") ? "text-amber-800" : "text-gray-900 hover:text-amber-800"}`}
@@ -123,7 +123,7 @@ const HeaderDesktop: React.FC<HeaderDesktopProps> = ({ user }) => {
                 TODAS
                 <span className={`absolute left-0 bottom-0 w-full h-[2px] bg-amber-600 transition-transform duration-300 origin-left ${isActive("/todas") ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}`}></span>
               </Link>
-            )}
+            )} */}
 
             {user && puedeVerAdminTareas() && (
               <Link
