@@ -16,8 +16,7 @@ export const crearUsuario = safeAsync(async (req: Request, res: Response) => {
     });
   }
 
-  // 2. VALIDACIÓN PREVIA: Verificar si el usuario ya existe
-  // Esto evita el error P2002 de Prisma y da un mensaje claro al usuario
+  // 2. VALIDACIÓN DE DUPLICADOS (Username)
   const usuarioExistente = await prisma.usuario.findUnique({
     where: {
       username: parseResult.data.username
@@ -25,11 +24,10 @@ export const crearUsuario = safeAsync(async (req: Request, res: Response) => {
   });
 
   if (usuarioExistente) {
-    return res.status(400).json({
-      error: "Datos de entrada inválidos",
+    return res.status(409).json({ 
+      error: "Conflicto de datos",
       detalles: {
-        // Usamos el mismo formato que Zod para que el frontend pinte el input en rojo
-        username: ["Este nombre de usuario ya está registrado. Por favor elige otro."]
+        username: ["Este nombre de usuario ya está registrado."]
       }
     });
   }
@@ -43,32 +41,32 @@ export const crearUsuario = safeAsync(async (req: Request, res: Response) => {
   
   let finalDepartamentoId = departamentoId;
 
-  // REGLAS PARA ADMIN DE DEPARTAMENTO
+  // REGLAS PARA CREADOR "ADMIN"
   if (creador.rol === "ADMIN") {
-    // Regla 1: Un ADMIN no puede crear SUPER_ADMIN ni otros ADMIN
-    if (rol === "SUPER_ADMIN" || rol === "ADMIN") {
+    if (["SUPER_ADMIN", "ADMIN"].includes(rol)) {
       return res.status(403).json({ 
         error: "Permiso denegado", 
-        detalle: "Como ADMIN solo puedes crear ENCARGADOS, USUARIOS o INVITADOS." 
+        message: "Como ADMIN solo puedes crear ENCARGADOS, USUARIOS o INVITADOS." 
       });
     }
 
-    // Regla 2: Un ADMIN solo puede crear usuarios para SU PROPIO departamento, 
-    // EXCEPTO si es INVITADO, en cuyo caso el departamentoId debe ser NULL.
     if (rol === "INVITADO") {
       finalDepartamentoId = null;
     } else {
       if (!creador.departamentoId) {
-        return res.status(500).json({ error: "Error de integridad: El ADMIN creador no tiene departamento asignado." });
+        return res.status(500).json({ error: "Error de integridad: Tu usuario ADMIN no tiene departamento." });
       }
       finalDepartamentoId = creador.departamentoId;
     }
   }
 
-  // REGLA PARA SUPER_ADMIN
+  // REGLAS PARA CREADOR "SUPER_ADMIN"
   if (creador.rol === "SUPER_ADMIN") {
     if (["ADMIN", "ENCARGADO", "USUARIO"].includes(rol) && !finalDepartamentoId) {
-        return res.status(400).json({ error: "Falta departamento", detalle: `El rol ${rol} requiere un departamentoId.` });
+        return res.status(400).json({ 
+          error: "Falta departamento", 
+          message: `Para crear un ${rol} debes seleccionar un departamento.` 
+        });
     }
     if (["INVITADO", "SUPER_ADMIN"].includes(rol)) {
         finalDepartamentoId = null;
@@ -79,22 +77,35 @@ export const crearUsuario = safeAsync(async (req: Request, res: Response) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // FIX: Spread operator para evitar el error de exactOptionalPropertyTypes
+  // =================================================================
+  // CONSTRUCCIÓN DEL OBJETO (ESTRATEGIA SEGURA - SIN SPREAD)
+  // =================================================================
+  
+  // 1. Definimos los campos base obligatorios
   const dataParaCrear: Prisma.UsuarioCreateInput = {
     nombre,
     username,
     password: hashedPassword,
     rol,
-    ...(finalDepartamentoId 
-      ? { departamento: { connect: { id: finalDepartamentoId } } } 
-      : {}
-    ),
+    estatus: "ACTIVO",
   };
+
+  // 2. Asignamos el departamento SOLO si existe un ID válido.
+  // Esto evita pasar 'undefined' y elimina el error TS-2375 de raíz.
+  if (finalDepartamentoId) {
+    dataParaCrear.departamento = { connect: { id: finalDepartamentoId } };
+  }
 
   const nuevoUsuario = await prisma.usuario.create({
     data: dataParaCrear,
     select: {
-      id: true, nombre: true, username: true, rol: true, estatus: true, departamentoId: true, fechaCreacion: true,
+      id: true, 
+      nombre: true, 
+      username: true, 
+      rol: true, 
+      estatus: true, 
+      departamento: { select: { id: true, nombre: true } }, 
+      fechaCreacion: true,
     },
   });
 

@@ -4,15 +4,20 @@ import { safeAsync } from "../../../utils/safeAsync.js";
 import { paramsSchema, subscriptionSchema } from "../schemas/usuario.schema.js";
 
 export const suscribirPush = safeAsync(async (req: Request, res: Response) => {
+  // 1. Validar ID de la URL
   const paramsParse = paramsSchema.safeParse(req.params);
   if (!paramsParse.success) {
-    return res.status(400).json({ error: "ID de URL inválido" });
+    return res.status(400).json({ error: "ID de usuario inválido en la URL" });
   }
 
-  if (req.user!.id !== paramsParse.data.id) {
-    return res.status(403).json({ error: "No autorizado para suscribir a este usuario." });
+  const targetUserId = paramsParse.data.id;
+
+  // 2. Seguridad: Solo el propio usuario puede suscribir SU dispositivo
+  if (req.user!.id !== targetUserId) {
+    return res.status(403).json({ error: "No puedes registrar notificaciones para otro usuario." });
   }
 
+  // 3. Validar Body (Keys de Push)
   const bodyParse = subscriptionSchema.safeParse(req.body);
   if (!bodyParse.success) {
     return res.status(400).json({
@@ -23,21 +28,24 @@ export const suscribirPush = safeAsync(async (req: Request, res: Response) => {
 
   const { endpoint, keys } = bodyParse.data;
 
+  // 4. Upsert (Crear o Actualizar)
+  // Lógica: Un endpoint de navegador es único. Si ese navegador ya estaba registrado
+  // (quizás con otro usuario anterior), lo actualizamos para que apunte al usuario actual.
   const subscripcion = await prisma.pushSubscription.upsert({
     where: { endpoint: endpoint },
     create: {
       endpoint: endpoint,
       p256dh: keys.p256dh,
       auth: keys.auth,
-      usuarioId: req.user!.id,
+      usuarioId: targetUserId,
     },
     update: {
       p256dh: keys.p256dh,
       auth: keys.auth,
-      usuarioId: req.user!.id,
+      usuarioId: targetUserId, // Nos "robamos" la suscripción si cambió de usuario en el mismo navegador
     },
   });
 
-  console.log(`✅ Suscripción guardada para usuario ${req.user!.id}`);
-  res.status(201).json(subscripcion);
+  console.log(`✅ Push registrada: Usuario ${targetUserId} - Device ID: ${subscripcion.id}`);
+  res.status(201).json({ message: "Suscripción exitosa" });
 });

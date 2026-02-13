@@ -6,6 +6,7 @@ import { safeAsync } from "../../../utils/safeAsync.js";
 import { paramsSchema, actualizarUsuarioSchema } from "../schemas/usuario.schema.js";
 
 export const actualizarUsuario = safeAsync(async (req: Request, res: Response) => {
+  // 1. Validar ID de URL
   const paramsParseResult = paramsSchema.safeParse(req.params);
   if (!paramsParseResult.success) {
     return res.status(400).json({
@@ -15,6 +16,7 @@ export const actualizarUsuario = safeAsync(async (req: Request, res: Response) =
   }
   const { id } = paramsParseResult.data;
 
+  // 2. Validar Body
   const bodyParseResult = actualizarUsuarioSchema.safeParse(req.body);
   if (!bodyParseResult.success) {
     return res.status(400).json({
@@ -22,10 +24,12 @@ export const actualizarUsuario = safeAsync(async (req: Request, res: Response) =
       detalles: bodyParseResult.error.flatten().fieldErrors,
     });
   }
-  const validatedBody = bodyParseResult.data;
+  
+  // Clonamos los datos para manipularlos si es necesario
+  const inputData = { ...bodyParseResult.data };
   const creador = req.user!;
 
-  // Buscamos al usuario que se quiere editar
+  // 3. Buscar usuario actual
   const usuarioActual = await prisma.usuario.findUnique({ where: { id } });
 
   if (!usuarioActual) {
@@ -33,10 +37,9 @@ export const actualizarUsuario = safeAsync(async (req: Request, res: Response) =
   }
 
   // =================================================================
-  // 🛡️ LÓGICA DE SEGURIDAD Y PERMISOS DE EDICIÓN
+  // 🛡️ LÓGICA DE SEGURIDAD (ADMIN vs OTROS)
   // =================================================================
 
-  // Regla 1: Si soy ADMIN, solo puedo tocar usuarios de MI departamento O INVITADOS
   if (creador.rol === "ADMIN") {
     const esDeMiDepartamento = usuarioActual.departamentoId === creador.departamentoId;
     const esInvitado = usuarioActual.rol === "INVITADO";
@@ -45,77 +48,87 @@ export const actualizarUsuario = safeAsync(async (req: Request, res: Response) =
         return res.status(403).json({ error: "No tienes permiso para editar usuarios de otro departamento." });
     }
 
-    // Regla 2: Si soy ADMIN, no puedo cambiar el departamento del usuario a otro distinto al mio
-    // Pero SI puedo cambiarlo a null (si lo convierto a invitado) o a mi departamento (si lo convierto a usuario)
-    if (validatedBody.departamentoId && validatedBody.departamentoId !== creador.departamentoId) {
+    if (inputData.departamentoId && inputData.departamentoId !== creador.departamentoId) {
         return res.status(403).json({ error: "No puedes transferir usuarios a otro departamento." });
     }
 
-    // Regla 3: Si soy ADMIN, no puedo ascender a nadie a SUPER_ADMIN o ADMIN
-    if (validatedBody.rol && ["SUPER_ADMIN", "ADMIN"].includes(validatedBody.rol)) {
+    if (inputData.rol && ["SUPER_ADMIN", "ADMIN"].includes(inputData.rol)) {
         return res.status(403).json({ error: "No tienes privilegios para asignar roles administrativos de alto nivel." });
     }
   }
 
   // =================================================================
 
-  if (usuarioActual.estatus === "INACTIVO" && validatedBody.estatus !== "ACTIVO") {
-    return res.status(403).json({ error: "No se puede modificar un usuario inactivo" });
+  if (usuarioActual.estatus === "INACTIVO" && inputData.estatus !== "ACTIVO") {
+    return res.status(403).json({ error: "No se puede modificar un usuario inactivo. Reactívalo primero." });
   }
 
-  // Lógica de validación de negocio original (Roles vs Deptos)
-  const datosFusionados = {
-    rol: validatedBody.rol ?? usuarioActual.rol,
-    departamentoId: validatedBody.departamentoId !== undefined ? validatedBody.departamentoId : usuarioActual.departamentoId,
-    estatus: validatedBody.estatus ?? usuarioActual.estatus,
-  };
+  // AUTO-CORRECCIONES LÓGICAS
+  
+  const rolFinal = inputData.rol ?? usuarioActual.rol;
+  const deptoIdFinal = inputData.departamentoId !== undefined ? inputData.departamentoId : usuarioActual.departamentoId;
 
-  // Validación cruzada: ROL vs DEPARTAMENTO
-  if ((datosFusionados.rol === "SUPER_ADMIN" || datosFusionados.rol === "INVITADO") && datosFusionados.departamentoId !== null) {
-    // Si un ADMIN está editando, esto podría pasar si intenta cambiar rol a INVITADO pero no envía departamentoId: null explícito.
-    // Lo corregimos automáticamente para evitar el error 400 si la intención es clara.
-    if(datosFusionados.rol === "INVITADO") {
-        validatedBody.departamentoId = null; // Auto-fix
-    } else {
-        return res.status(400).json({ error: "Conflicto de reglas", detalle: "Un SUPER_ADMIN o INVITADO no puede tener un departamentoId." });
+  // Caso 1: INVITADO o SUPER_ADMIN -> SIEMPRE SIN DEPARTAMENTO
+  if (["SUPER_ADMIN", "INVITADO"].includes(rolFinal)) {
+    if (deptoIdFinal !== null) {
+       inputData.departamentoId = null; // Forzamos null aquí
     }
   }
 
-  if ((datosFusionados.rol === "ADMIN" || datosFusionados.rol === "ENCARGADO" || datosFusionados.rol === "USUARIO") && datosFusionados.departamentoId === null) {
-    // Si soy ADMIN y convierto un INVITADO a USUARIO, debo asignar mi departamento automáticamente si no viene en el body
-    if (creador.rol === "ADMIN" && creador.departamentoId) {
-        validatedBody.departamentoId = creador.departamentoId; // Auto-fix
-    } else {
-        return res.status(400).json({ error: "Conflicto de reglas", detalle: `El rol ${datosFusionados.rol} debe tener un departamentoId.` });
+  // Caso 2: Internos -> Requieren Departamento
+  if (["ADMIN", "ENCARGADO", "USUARIO"].includes(rolFinal)) {
+    if (deptoIdFinal === null) {
+       if (creador.rol === "ADMIN" && creador.departamentoId) {
+          inputData.departamentoId = creador.departamentoId;
+       } else {
+          return res.status(400).json({ error: "Conflicto de reglas", detalle: `El rol ${rolFinal} requiere un departamentoId válido.` });
+       }
     }
   }
 
-  if (datosFusionados.estatus === "INACTIVO" && usuarioActual.estatus === "ACTIVO") {
+  if (inputData.estatus === "INACTIVO" && usuarioActual.estatus === "ACTIVO") {
     return res.status(400).json({ error: "Acción incorrecta", detalle: "Para desactivar un usuario, usa la ruta PUT /:id/estatus" });
   }
 
-  const dataParaActualizar: Prisma.UsuarioUpdateInput = { fechaEdicion: new Date() };
-
-  if (validatedBody.nombre !== undefined) dataParaActualizar.nombre = validatedBody.nombre;
-  if (validatedBody.username !== undefined) dataParaActualizar.username = validatedBody.username;
-  if (validatedBody.rol !== undefined) dataParaActualizar.rol = validatedBody.rol;
+  // =================================================================
+  // CONSTRUCCIÓN DEL OBJETO DE ACTUALIZACIÓN (SOLUCIÓN ERROR TS)
+  // =================================================================
   
-  // Lógica ajustada para update de departamentoId
-  if (validatedBody.departamentoId !== undefined) {
-    if (validatedBody.departamentoId === null) {
+  // Paso 1: Creamos el objeto con solo lo obligatorio
+  const dataParaActualizar: Prisma.UsuarioUpdateInput = { 
+    fechaEdicion: new Date(),
+  };
+
+  // Paso 2: Asignamos propiedad por propiedad SOLO si existe.
+  // Esto evita pasar 'undefined' y satisface a TypeScript estricto.
+  
+  if (inputData.nombre !== undefined) {
+    dataParaActualizar.nombre = inputData.nombre;
+  }
+  
+  if (inputData.username !== undefined) {
+    dataParaActualizar.username = inputData.username;
+  }
+  
+  if (inputData.rol !== undefined) {
+    dataParaActualizar.rol = inputData.rol;
+  }
+
+  if (inputData.password) {
+    dataParaActualizar.password = await bcrypt.hash(inputData.password, 10);
+  }
+
+  // Lógica de Departamento (Disconnect vs Connect)
+  // Aquí es crucial: si es null desconectamos, si es numero conectamos.
+  if (inputData.departamentoId !== undefined) {
+    if (inputData.departamentoId === null) {
         dataParaActualizar.departamento = { disconnect: true };
     } else {
-        dataParaActualizar.departamento = { connect: { id: validatedBody.departamentoId } };
+        dataParaActualizar.departamento = { connect: { id: inputData.departamentoId } };
     }
-  } else if (validatedBody.rol === "INVITADO") {
-      // Si cambiamos rol a invitado pero no enviamos departamentoId, desconectamos explícitamente
-      dataParaActualizar.departamento = { disconnect: true };
   }
 
-  if (validatedBody.password !== undefined) {
-    dataParaActualizar.password = await bcrypt.hash(validatedBody.password, 10);
-  }
-
+  // Ejecutamos la actualización
   const usuarioActualizado = await prisma.usuario.update({
     where: { id },
     data: dataParaActualizar,

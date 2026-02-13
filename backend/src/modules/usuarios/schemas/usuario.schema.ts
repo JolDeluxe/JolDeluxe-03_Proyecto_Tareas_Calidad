@@ -6,8 +6,17 @@ import { Rol, EstatusUsuario } from "@prisma/client";
 // ==========================================
 
 export const querySchema = z.object({
+  // Filtros existentes
   departamentoId: z.coerce.number().int().positive().optional(),
   estatus: z.nativeEnum(EstatusUsuario).optional(),
+  
+  // ✅ NUEVOS FILTROS (Agregados para la arquitectura robusta)
+  rol: z.nativeEnum(Rol).optional(), // Permite filtrar por rol específico
+  q: z.string().trim().optional(),   // Buscador general (nombre o username)
+  
+  // ✅ PAGINACIÓN (Con valores por defecto)
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().default(10),
 });
 
 export const paramsSchema = z.object({
@@ -32,8 +41,13 @@ export const subscriptionSchema = z.object({
   }),
 });
 
+
+export const identifierSchema = z.object({
+  id: z.string().trim().min(1, "El identificador no puede estar vacío"),
+});
+
 // ==========================================
-// SCHEMA PARA CREAR USUARIO (CORREGIDO)
+// SCHEMA PARA CREAR USUARIO
 // ==========================================
 
 export const crearUsuarioSchema = z
@@ -83,7 +97,6 @@ export const actualizarUsuarioSchema = z
     username: z.string().trim().min(4, "El username debe tener al menos 4 caracteres").optional(),
     password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres").optional(),
     rol: z.nativeEnum(Rol, { message: "Rol inválido" }).optional(),
-    // Aplicamos la misma lógica de unión para el update
     departamentoId: z.union([z.number().int().positive(), z.null()]).optional(),
     estatus: z.nativeEnum(EstatusUsuario).optional(),
   })

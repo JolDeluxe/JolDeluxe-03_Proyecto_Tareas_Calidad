@@ -4,6 +4,7 @@ import { safeAsync } from "../../../utils/safeAsync.js";
 import { paramsSchema, estatusSchema } from "../schemas/usuario.schema.js";
 
 export const cambiarEstatus = safeAsync(async (req: Request, res: Response) => {
+  // 1. Validar ID
   const paramsParseResult = paramsSchema.safeParse(req.params);
   if (!paramsParseResult.success) {
     return res.status(400).json({
@@ -14,6 +15,7 @@ export const cambiarEstatus = safeAsync(async (req: Request, res: Response) => {
   const { id } = paramsParseResult.data;
   const creador = req.user!;
 
+  // 2. Validar Body
   const bodyParseResult = estatusSchema.safeParse(req.body);
   if (!bodyParseResult.success) {
     return res.status(400).json({
@@ -27,16 +29,19 @@ export const cambiarEstatus = safeAsync(async (req: Request, res: Response) => {
   // 🛡️ LÓGICA DE SEGURIDAD
   // =================================================================
   
-  // Si soy ADMIN, verifico que el usuario sea de mi equipo antes de borrarlo/reactivarlo
+  // Obtenemos info básica del objetivo para validar permisos
+  const usuarioTarget = await prisma.usuario.findUnique({ 
+      where: { id },
+      select: { departamentoId: true, rol: true } 
+  });
+
+  if (!usuarioTarget) return res.status(404).json({ error: "Usuario no encontrado" });
+
+  // REGLAS PARA ADMIN
   if (creador.rol === "ADMIN") {
-      const usuarioTarget = await prisma.usuario.findUnique({ 
-          where: { id },
-          select: { departamentoId: true } 
-      });
-
-      if (!usuarioTarget) return res.status(404).json({ error: "Usuario no encontrado" });
-
-      if (usuarioTarget.departamentoId !== creador.departamentoId) {
+      // Solo puede tocar a su equipo (o invitados, aunque los invitados suelen ser globales, 
+      // aquí asumimos que el admin gestiona los invitados que asignó o que están en su contexto)
+      if (usuarioTarget.departamentoId !== creador.departamentoId && usuarioTarget.rol !== "INVITADO") {
           return res.status(403).json({ error: "No tienes permiso para cambiar el estatus de usuarios de otro departamento." });
       }
   }
