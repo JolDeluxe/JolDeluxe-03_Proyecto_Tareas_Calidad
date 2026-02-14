@@ -1,84 +1,111 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import type { Usuario } from "../../types/usuario";
 import { Rol } from "../../types/usuario";
 import ModalUsuario from "./ModalUsuario";
-import ModalConfirmarEstatus from "./ModalConfirmarEstatus"; // ✅ Importamos el nuevo modal
+import ModalConfirmarEstatus from "./ModalConfirmarEstatus";
 import { usuariosService } from "../../api/usuarios.service";
 import { toast } from "react-toastify";
 import type { Departamento } from "../../api/departamentos.service";
 
 interface TablaUsuariosProps {
-  filtro: string;
-  query: string;
   usuarios: Usuario[];
   loading: boolean;
   onRecargarUsuarios: () => void;
   currentUser: Usuario | null;
   departamentos: Departamento[];
+  // ✅ Props de Paginación
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}
+
+// Configuración de tipos para el ordenamiento
+type SortKey = keyof Usuario | "rolJerarquia";
+interface SortConfig {
+  key: SortKey;
+  direction: "asc" | "desc";
 }
 
 const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
-  filtro,
-  query,
   usuarios,
   loading,
   onRecargarUsuarios,
   currentUser,
   departamentos,
+  page,
+  totalPages,
+  onPageChange,
 }) => {
-  // --- Estados ---
+  // --- Estados Modales ---
   const [openModalEditar, setOpenModalEditar] = useState(false);
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<Usuario | null>(null);
 
-  // ✅ Estados para el modal de confirmación
+  // --- Estados Confirmación ---
   const [openModalConfirm, setOpenModalConfirm] = useState(false);
   const [usuarioAConfirmar, setUsuarioAConfirmar] = useState<Usuario | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
 
-  // --- HELPER: Normalización de texto ---
-  const normalizeText = (text: string) => {
-    return text
-      ? text
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-      : "";
+  // --- Estado de Ordenamiento (Default: Rol Ascendente -> Admin primero) ---
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "rolJerarquia", direction: "asc" });
+
+  // --- Lógica de Ordenamiento ---
+  const handleSort = (key: SortKey) => {
+    let direction: "asc" | "desc" = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
   };
 
-  // --- LÓGICA DE FILTRADO MAESTRA ---
-  const usuariosFiltrados = usuarios.filter((u) => {
-    // 1. Omitir Invitados
-    if (u.rol === Rol.INVITADO) return false;
+  // --- Procesamiento de Datos (Ordenamiento del array actual) ---
+  const dataToShow = useMemo(() => {
+    // Hacemos una copia para no mutar los props
+    const sorted = [...usuarios];
 
-    // 2. Filtro por Búsqueda
-    const textoUsuario = normalizeText(`${u.nombre} ${u.username}`);
-    const textoBusqueda = normalizeText(query);
-    const matchQuery = query.trim() === "" || textoUsuario.includes(textoBusqueda);
+    if (sortConfig !== null) {
+      sorted.sort((a, b) => {
+        // 1. Lógica especial para ROLES (Jerarquía personalizada)
+        if (sortConfig.key === "rolJerarquia") {
+          const roleWeight: Record<string, number> = {
+            [Rol.SUPER_ADMIN]: 0,
+            [Rol.ADMIN]: 1,
+            [Rol.ENCARGADO]: 2,
+            [Rol.USUARIO]: 3,
+            [Rol.INVITADO]: 4
+          };
 
-    // 3. Filtro por Categoría
-    let matchCategoria = true;
-    if (filtro === "TODOS") {
-      matchCategoria = u.estatus === "ACTIVO";
-    } else {
-      matchCategoria = u.rol === filtro;
+          const weightA = roleWeight[a.rol] ?? 99;
+          const weightB = roleWeight[b.rol] ?? 99;
+
+          if (weightA < weightB) return sortConfig.direction === "asc" ? -1 : 1;
+          if (weightA > weightB) return sortConfig.direction === "asc" ? 1 : -1;
+          return 0;
+        }
+
+        // 2. Lógica estándar para Strings (Nombre, Username, Estatus)
+        // Usamos una clave segura casteada a string para evitar errores de TS
+        const valA = String(a[sortConfig.key as keyof Usuario] || "").toLowerCase();
+        const valB = String(b[sortConfig.key as keyof Usuario] || "").toLowerCase();
+
+        if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+      });
     }
+    return sorted;
+  }, [usuarios, sortConfig]);
 
-    return matchQuery && matchCategoria;
-  });
-
-  // --- Handlers ---
+  // --- Handlers de Acción ---
   const abrirModalEditar = (usuario: Usuario) => {
     setUsuarioSeleccionado(usuario);
     setOpenModalEditar(true);
   };
 
-  // ✅ 1. Solo abre el modal, no ejecuta la acción todavía
   const solicitarCambioEstatus = (usuario: Usuario) => {
     setUsuarioAConfirmar(usuario);
     setOpenModalConfirm(true);
   };
 
-  // ✅ 2. Ejecuta la acción cuando el usuario confirma en el modal
   const handleConfirmarEstatus = async () => {
     if (!usuarioAConfirmar) return;
 
@@ -90,7 +117,7 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
       await usuariosService.updateEstatus(usuarioAConfirmar.id, nuevoEstatus);
       toast.success(`Usuario ${esActivo ? "desactivado" : "reactivado"} correctamente.`);
       onRecargarUsuarios();
-      setOpenModalConfirm(false); // Cerrar modal solo si éxito
+      setOpenModalConfirm(false);
       setUsuarioAConfirmar(null);
     } catch (error) {
       console.error(error);
@@ -98,6 +125,12 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
     } finally {
       setIsConfirming(false);
     }
+  };
+
+  // Helper para mostrar ícono de ordenamiento
+  const getSortIcon = (columnKey: SortKey) => {
+    if (sortConfig.key !== columnKey) return <span className="text-gray-300 text-[10px] ml-1">⇅</span>;
+    return sortConfig.direction === "asc" ? <span className="text-blue-600 ml-1">↑</span> : <span className="text-blue-600 ml-1">↓</span>;
   };
 
   if (loading) {
@@ -111,22 +144,42 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
 
   return (
     <div className="w-full text-sm font-sans pb-0.5">
-      {usuariosFiltrados.length > 0 ? (
+      {dataToShow.length > 0 ? (
         <>
           {/* VISTA ESCRITORIO */}
           <div className="hidden lg:block max-h-[calc(100vh-280px)] overflow-y-auto overflow-x-auto rounded-lg border border-gray-300">
             <table className="w-full text-sm font-sans">
               <thead className="bg-gray-100 text-black text-xs uppercase sticky top-0 z-20 shadow-inner">
                 <tr>
-                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[25%]">Nombre</th>
-                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[20%]">Username</th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[15%]">Rol</th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[15%]">Estatus</th>
+                  <th
+                    className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[25%] cursor-pointer hover:bg-gray-200 transition select-none"
+                    onClick={() => handleSort("nombre")}
+                  >
+                    Nombre {getSortIcon("nombre")}
+                  </th>
+                  <th
+                    className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[20%] cursor-pointer hover:bg-gray-200 transition select-none"
+                    onClick={() => handleSort("username")}
+                  >
+                    Username {getSortIcon("username")}
+                  </th>
+                  <th
+                    className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[15%] cursor-pointer hover:bg-gray-200 transition select-none"
+                    onClick={() => handleSort("rolJerarquia")}
+                  >
+                    Rol {getSortIcon("rolJerarquia")}
+                  </th>
+                  <th
+                    className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[15%] cursor-pointer hover:bg-gray-200 transition select-none"
+                    onClick={() => handleSort("estatus")}
+                  >
+                    Estatus {getSortIcon("estatus")}
+                  </th>
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[20%]">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {usuariosFiltrados.map((row) => {
+                {dataToShow.map((row) => {
                   const esMismoUsuario = currentUser?.id === row.id;
                   const esSuperAdmin = currentUser?.rol === Rol.SUPER_ADMIN;
                   const esAdminBuscado = row.rol === Rol.ADMIN;
@@ -175,7 +228,7 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
 
                           {currentUser?.id !== row.id && (esSuperAdmin || (currentUser?.rol === Rol.ADMIN && !esAdminBuscado)) && (
                             <button
-                              onClick={() => solicitarCambioEstatus(row)} // 👈 CAMBIO AQUÍ: Llamamos al modal
+                              onClick={() => solicitarCambioEstatus(row)}
                               title={row.estatus === "ACTIVO" ? "Desactivar" : "Reactivar"}
                               className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 cursor-pointer
                                 ${row.estatus === "ACTIVO"
@@ -184,11 +237,11 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
                                 }`}
                             >
                               {row.estatus === "ACTIVO" ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5" fill="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-6 h-6 text-red-700" fill="currentColor">
                                   <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
                                 </svg>
                               ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5" fill="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-6 h-6 text-green-700" fill="currentColor">
                                   <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Z" />
                                 </svg>
                               )}
@@ -205,7 +258,7 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
 
           {/* VISTA MÓVIL */}
           <div className="grid lg:hidden grid-cols-1 md:grid-cols-2 gap-3 p-2 items-start">
-            {usuariosFiltrados.map((row) => {
+            {dataToShow.map((row) => {
               const esMismoUsuario = currentUser?.id === row.id;
               const esSuperAdmin = currentUser?.rol === Rol.SUPER_ADMIN;
               const esAdminBuscado = row.rol === Rol.ADMIN;
@@ -257,7 +310,7 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
 
                     {currentUser?.id !== row.id && (esSuperAdmin || (currentUser?.rol === Rol.ADMIN && !esAdminBuscado)) && (
                       <button
-                        onClick={() => solicitarCambioEstatus(row)} // 👈 CAMBIO AQUÍ: Llamamos al modal
+                        onClick={() => solicitarCambioEstatus(row)}
                         className={`flex flex-col items-center transition cursor-pointer
                           ${row.estatus === "ACTIVO"
                             ? "text-red-700 hover:text-red-800"
@@ -286,6 +339,30 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
             })}
           </div>
 
+          {/* ✅ BARRA DE PAGINACIÓN */}
+          <div className="flex flex-col sm:flex-row justify-between items-center px-4 py-3 bg-gray-50 border-t border-gray-300 rounded-b-lg gap-3">
+            <span className="text-xs text-gray-600 font-medium">
+              Página <span className="font-bold text-gray-900">{page}</span> de <span className="font-bold text-gray-900">{totalPages}</span>
+            </span>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => onPageChange(page - 1)}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => onPageChange(page + 1)}
+                disabled={page === totalPages}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+
           {openModalEditar && (
             <ModalUsuario
               isOpen={openModalEditar}
@@ -297,7 +374,6 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
             />
           )}
 
-          {/* ✅ RENDERIZADO DEL MODAL DE CONFIRMACIÓN */}
           {openModalConfirm && (
             <ModalConfirmarEstatus
               isOpen={openModalConfirm}

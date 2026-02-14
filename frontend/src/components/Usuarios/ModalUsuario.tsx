@@ -111,7 +111,7 @@ const ModalUsuario = ({ isOpen, onClose, onSuccess, usuarioAEditar, currentUser,
   // --- LÓGICA DE VISUALIZACIÓN DE ROLES ---
   const rolesDisponibles = [
     { value: "USUARIO", label: "Operativo", visible: true },
-    { value: "ENCARGADO", label: "Coordinadores", visible: true },
+    { value: "ENCARGADO", label: "Supervisión", visible: true },
     { value: "ADMIN", label: "Gestión", visible: esSuperAdmin },
     { value: "SUPER_ADMIN", label: "Super Admin", visible: esSuperAdmin },
     { value: "INVITADO", label: "Invitado (Externo)", visible: esSuperAdmin },

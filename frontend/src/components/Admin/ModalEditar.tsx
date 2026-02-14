@@ -6,157 +6,275 @@ import "react-datepicker/dist/react-datepicker.css";
 
 import { tareasService } from "../../api/tareas.service";
 import { usuariosService } from "../../api/usuarios.service";
-import type { Tarea, Estatus, Urgencia, ImagenTarea } from "../../types/tarea";
+import type { Tarea, Urgencia } from "../../types/tarea";
 import type { Usuario } from "../../types/usuario";
 import { Rol } from "../../types/usuario";
-import api from "../../api/01_axiosInstance";
 
 interface ModalEditarProps {
   onClose: () => void;
-  onTareaActualizada: () => void;
-  user: Usuario | null;
+  onSuccess: () => void;
   tarea: Tarea;
+  user: Usuario | null;
 }
 
-// --- Constantes de la aplicación ---
 const MAX_NOMBRE_LENGTH = 50;
 const MAX_OBSERVACIONES_LENGTH = 160;
 const MAX_FILES_LIMIT = 5;
 
-// --- Helper corregido para usar TIEMPO LOCAL (Importante para que coincida con la hora) ---
-const formatDateToInput = (fecha?: Date | null | string): string => {
+// --- Helper para formatear Date a YYYY-MM-DD (Local) ---
+const formatDateToInput = (fecha?: Date | string | null): string => {
   if (!fecha) return "";
-  const fechaObj = typeof fecha === "string" ? new Date(fecha) : fecha;
-  if (!(fechaObj instanceof Date) || isNaN(fechaObj.getTime())) return "";
+  const dateObj = typeof fecha === "string" ? new Date(fecha) : fecha;
+  if (isNaN(dateObj.getTime())) return "";
 
-  const anio = fechaObj.getFullYear();
-  const mes = String(fechaObj.getMonth() + 1).padStart(2, "0");
-  const dia = String(fechaObj.getDate()).padStart(2, "0");
+  const anio = dateObj.getFullYear();
+  const mes = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const dia = String(dateObj.getDate()).padStart(2, "0");
   return `${anio}-${mes}-${dia}`;
 };
 
-// --- Constante (sin cambios) ---
 const PRIORIDADES_VALIDAS: { value: Urgencia; label: string }[] = [
   { value: "ALTA", label: "Alta" },
   { value: "MEDIA", label: "Media" },
   { value: "BAJA", label: "Baja" },
 ];
 
-export const MOTIVOS_CAMBIO_FECHA = [
-  // --- 1. Gestión y Planificación (Lo más común) ---
-  "Solicitud del responsable",
-  "Cambio de prioridades",
-  "Ajuste de planificación",
-  "Ampliación del alcance de la tarea",
-  "Error en la estimación de tiempo inicial",
-
-  // --- 2. Bloqueos del Proceso (No puedo avanzar) ---
-  "Falta de información/recursos",
-  "Espera de autorización/Visto bueno",
-  "Retraso en tarea previa",
-
-  // --- 3. Personal y Equipo (Problemas internos) ---
-  "Retraso imputable al responsable",
-  "Ausencia o baja médica del personal",
-  "Sobrecarga de trabajo asignado",
-  "Incidencia técnica o falla de equipo",
-
-  // --- 4. Factores Externos (Fuera de control) ---
-  "Retraso por parte de terceros",
-  "Condiciones externas / Fuerza mayor",
-];
-
 const ModalEditar: React.FC<ModalEditarProps> = ({
   onClose,
+  onSuccess,
   tarea,
-  onTareaActualizada,
   user,
 }) => {
   // --- Estados del formulario ---
-  const [nombre, setNombre] = useState(tarea.tarea);
-  const [comentario, setComentario] = useState(tarea.observaciones || "");
-  const [prioridad, setPrioridad] = useState<Urgencia | "">(tarea.urgencia);
+  const [nombre, setNombre] = useState("");
+  const [comentario, setComentario] = useState("");
+  const [prioridad, setPrioridad] = useState<Urgencia | "">("");
 
-  // ⏰ ESTADOS DE FECHA Y HORA (Inicializados vacíos, se llenan en useEffect)
+  // ⏰ ESTADOS DE FECHA Y HORA
   const [fecha, setFecha] = useState("");
   const [usarHora, setUsarHora] = useState(false);
   const [hora, setHora] = useState("");
 
-  const [archivos, setArchivos] = useState<File[]>([]);
-  const [imagenesExistentes, setImagenesExistentes] = useState<ImagenTarea[]>(
-    tarea.imagenes || []
-  );
-  // Nuevo estado para el error de archivos
+  // --- Estados de Archivos ---
+  const [archivosNuevos, setArchivosNuevos] = useState<File[]>([]);
+  const [imagenesExistentes, setImagenesExistentes] = useState<any[]>([]); // { id, url, ... }
+  // 🚀 Estado para rastrear qué imágenes se deben eliminar al guardar
+  const [imagenesAEliminar, setImagenesAEliminar] = useState<number[]>([]);
+
   const [fileError, setFileError] = useState("");
 
   // --- Estados de Datos ---
-  const [responsablesIds, setResponsablesIds] = useState<number[]>(
-    tarea.responsables ? tarea.responsables.map((r) => r.id) : []
-  );
+  const [responsablesIds, setResponsablesIds] = useState<number[]>([]);
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
   const [listaInvitados, setListaInvitados] = useState<Usuario[]>([]);
   const [loadingUsuarios, setLoadingUsuarios] = useState(true);
+  // 🚨 Estado para controlar error de carga de usuarios
+  const [errorUsuarios, setErrorUsuarios] = useState(false);
 
   // --- Estado para búsqueda ---
   const [busqueda, setBusqueda] = useState("");
 
-  const isKaizen = nombre.toUpperCase().startsWith("KAIZEN");
+  // --- Estados de UI ---
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
-  // --- Estados para el motivo de cambio ---
-  const [fechaISOOriginal, setFechaISOOriginal] = useState(tarea.fechaLimite);
-  const [motivoCambio, setMotivoCambio] = useState("");
+  // Determinar si es Kaizen basado en el nombre de la tarea actual
+  const isKaizen = tarea.tarea.trim().toUpperCase().startsWith("KAIZEN");
 
-  // 🚀 DETECCIÓN DE FECHA/HORA AL ABRIR EL MODAL
+  // ✅ NUEVA LÓGICA DE VISUALIZACIÓN DE NOMBRES
+  const getDisplayName = (userToDisplay: Usuario): string => {
+    if (isKaizen) {
+      return userToDisplay.nombre;
+    }
+    if (userToDisplay.rol === Rol.ENCARGADO) {
+      return `${userToDisplay.nombre} (Supervisión)`;
+    }
+    if (userToDisplay.rol === Rol.USUARIO) {
+      return `${userToDisplay.nombre} (Operativo)`;
+    }
+    return userToDisplay.nombre;
+  };
+
+  // ✅ NUEVA LÓGICA DE COLORES (Azul y Rosa)
+  const getRoleColorClass = (userToDisplay: Usuario): string => {
+    if (userToDisplay.rol === Rol.ENCARGADO) {
+      return "text-blue-700 font-semibold"; // Azul Supervisión
+    }
+    if (userToDisplay.rol === Rol.USUARIO) {
+      return "text-rose-700 font-semibold"; // Rosa Operativo
+    }
+    return "text-gray-800";
+  };
+
+  // --- 1. Inicializar Datos de la Tarea ---
   useEffect(() => {
-    if (tarea.fechaLimite) {
-      const d = new Date(tarea.fechaLimite);
+    if (tarea) {
+      setNombre(tarea.tarea);
+      setComentario(tarea.observaciones || "");
+      setPrioridad(tarea.urgencia);
+      setImagenesExistentes(tarea.imagenes || []);
+      setImagenesAEliminar([]); // Resetear lista de eliminación
 
-      setFecha(formatDateToInput(d));
+      // Mapear responsables actuales a IDs
+      const idsActuales = tarea.responsables?.map((r: any) => r.id || r.usuarioId) || [];
+      setResponsablesIds(idsActuales);
 
-      const h = d.getHours();
-      const m = d.getMinutes();
+      // Parsear Fecha y Hora Límite
+      if (tarea.fechaLimite) {
+        const dateObj = new Date(tarea.fechaLimite);
+        setFecha(formatDateToInput(dateObj));
 
-      const esFinDeDia = h === 23 && m === 59;
+        // Si la hora NO es 23:59:59 (o cerca), asumimos que se especificó hora
+        const h = dateObj.getHours();
+        const m = dateObj.getMinutes();
 
-      if (!esFinDeDia) {
-        setUsarHora(true);
-        const horaStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-        setHora(horaStr);
-      } else {
-        setUsarHora(false);
-        setHora("");
+        // Criterio simple: si no es el final del día, activamos hora
+        if (!(h === 23 && m === 59)) {
+          setUsarHora(true);
+          const hh = String(h).padStart(2, '0');
+          const mm = String(m).padStart(2, '0');
+          setHora(`${hh}:${mm}`);
+        }
       }
-
-      setFechaISOOriginal(tarea.fechaLimite);
     }
   }, [tarea]);
 
-  // 🚀 CÁLCULO DINÁMICO: ¿Ha cambiado la fecha/hora real?
-  const fechaHaCambiado = useMemo(() => {
-    if (!fechaISOOriginal) return true;
+  // --- 2. Cargar Usuarios ---
+  useEffect(() => {
+    const fetchUsuarios = async () => {
+      if (!user) return;
 
-    let nuevaFecha: Date;
-    if (usarHora && hora) {
-      nuevaFecha = new Date(`${fecha}T${hora}:00`);
+      setLoadingUsuarios(true);
+      setErrorUsuarios(false); // Resetear error al iniciar
+      try {
+        // Obtenemos TODOS los usuarios (límite alto)
+        const responseUsuarios = await usuariosService.getAll({ limit: 1000 });
+        const todosLosUsuarios = responseUsuarios.data;
+
+        // Separamos en dos listas: Internos e Invitados
+        const internos = todosLosUsuarios.filter(u => u.rol !== Rol.INVITADO);
+        const invitados = todosLosUsuarios.filter(u => u.rol === Rol.INVITADO);
+
+        // ✅ REGLAS DE VISIBILIDAD (FILTRADO)
+        let usuariosVisibles = [];
+
+        if (user.rol === Rol.ADMIN) {
+          // Admin ve: ENCARGADOS y USUARIOS. (No ve otros Admins)
+          usuariosVisibles = internos.filter(u =>
+            u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
+          );
+        } else if (user.rol === Rol.ENCARGADO) {
+          // Encargado ve: ENCARGADOS y USUARIOS. (No ve Admins)
+          usuariosVisibles = internos.filter(u =>
+            u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
+          );
+        } else {
+          // Fallback para SuperAdmin u otros (ven todo)
+          usuariosVisibles = internos;
+        }
+
+        // ✅ REGLAS DE ORDENAMIENTO (SORTING)
+        const sortedUsers = usuariosVisibles.sort((a, b) => {
+          const rolA = a.rol;
+          const rolB = b.rol;
+
+          // Si soy ENCARGADO, quiero ver primero a los USUARIOS (Operativos)
+          if (user.rol === Rol.ENCARGADO) {
+            if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return -1; // Usuario antes
+            if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return 1;
+          }
+          // Si soy ADMIN (o cualquier otro), jerarquía normal: ENCARGADO -> USUARIO
+          else {
+            if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return -1; // Encargado antes
+            if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return 1;
+          }
+
+          return a.nombre.localeCompare(b.nombre);
+        });
+
+        setListaUsuarios(sortedUsers);
+        setListaInvitados(
+          invitados.sort((a, b) => a.nombre.localeCompare(b.nombre))
+        );
+      } catch (error) {
+        console.error("Error al cargar usuarios:", error);
+        setErrorUsuarios(true); // 🚨 Activar estado de error
+      } finally {
+        setLoadingUsuarios(false);
+      }
+    };
+
+    fetchUsuarios();
+  }, [user]);
+
+  // 🔄 DETECTOR DE CAMBIOS (Para habilitar/deshabilitar botón)
+  const hayCambios = useMemo(() => {
+    // 1. Strings básicos
+    if (nombre !== tarea.tarea) return true;
+    if ((comentario || "") !== (tarea.observaciones || "")) return true;
+    if (prioridad !== tarea.urgencia) return true;
+
+    // 2. Imágenes
+    if (archivosNuevos.length > 0) return true;
+    if (imagenesAEliminar.length > 0) return true;
+
+    // 3. Responsables (Comparación de arrays ordenados)
+    const idsOriginales = tarea.responsables?.map((r: any) => r.id || r.usuarioId) || [];
+    const currentRespSorted = [...responsablesIds].sort((a, b) => a - b).join(',');
+    const originalRespSorted = [...idsOriginales].sort((a, b) => a - b).join(',');
+
+    if (currentRespSorted !== originalRespSorted) return true;
+
+    // 4. Fecha y Hora (Reconstruir lógica original)
+    if (tarea.fechaLimite) {
+      const dateObj = new Date(tarea.fechaLimite);
+      const fechaOriginalStr = formatDateToInput(dateObj);
+
+      const h = dateObj.getHours();
+      const m = dateObj.getMinutes();
+      // Si es 23:59, asumimos que no usaba hora
+      const usabaHoraOriginal = !(h === 23 && m === 59);
+
+      // Construir string de hora original "HH:MM"
+      const hh = String(h).padStart(2, '0');
+      const mm = String(m).padStart(2, '0');
+      const horaOriginalStr = usabaHoraOriginal ? `${hh}:${mm}` : "";
+
+      if (fecha !== fechaOriginalStr) return true;
+      if (usarHora !== usabaHoraOriginal) return true;
+      if (usarHora && hora !== horaOriginalStr) return true;
     } else {
-      nuevaFecha = new Date(`${fecha}T23:59:59`);
+      // Si no había fecha antes y ahora sí
+      if (fecha) return true;
     }
 
-    const originalFecha = new Date(fechaISOOriginal);
+    return false;
+  }, [
+    nombre,
+    comentario,
+    prioridad,
+    fecha,
+    usarHora,
+    hora,
+    archivosNuevos,
+    imagenesAEliminar,
+    responsablesIds,
+    tarea
+  ]);
 
-    const tNueva = Math.floor(nuevaFecha.getTime() / 1000);
-    const tOriginal = Math.floor(originalFecha.getTime() / 1000);
 
-    return tNueva !== tOriginal;
-  }, [fecha, usarHora, hora, fechaISOOriginal]);
+  // --- Validaciones ---
+  const isDateValid = () => {
+    if (!fecha) return false;
+    const dateObj = new Date(fecha);
+    return !isNaN(dateObj.getTime());
+  };
 
-  // 🚀 Validación: Si es HOY, la hora no puede ser pasada
   const isTimeValidForToday = () => {
     if (!usarHora || !hora || !fecha) return true;
 
     const now = new Date();
     const fechaSeleccionada = new Date(`${fecha}T00:00:00`);
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     fechaSeleccionada.setHours(0, 0, 0, 0);
@@ -175,22 +293,54 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     return true;
   };
 
-  // --- Estados de UI ---
-  const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const isUserInCalidad = user?.departamento?.nombre?.toUpperCase().includes("CALIDAD");
+  // --- Manejadores de Archivos (Nuevos) ---
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setFileError("");
+      const nuevos = Array.from(e.target.files);
+      const totalActual = imagenesExistentes.length + archivosNuevos.length + nuevos.length;
 
-  const getRoleColorClass = (userToDisplay: Usuario): string => {
-    if (userToDisplay.rol === Rol.ENCARGADO) return "text-blue-600 font-semibold";
-    if (userToDisplay.rol === Rol.USUARIO) return "text-red-700 font-semibold";
-    return "";
+      const TAMANO_MAXIMO = 20 * 1024 * 1024;
+      const archivoPesado = nuevos.find(file => file.size > TAMANO_MAXIMO);
+
+      if (archivoPesado) {
+        // Error se muestra inline abajo
+        setFileError(`⚠️ El archivo "${archivoPesado.name}" pesa más de 20MB.`);
+        e.target.value = "";
+        return;
+      }
+
+      if (totalActual > MAX_FILES_LIMIT) {
+        // Error se muestra inline abajo
+        setFileError(`Límite total de ${MAX_FILES_LIMIT} archivos.`);
+        e.target.value = "";
+        return;
+      }
+
+      setArchivosNuevos((prev) => [...prev, ...nuevos]);
+      e.target.value = "";
+    }
   };
 
-  const getDisplayName = (userToDisplay: Usuario): string => {
-    if (isKaizen || !isUserInCalidad) return userToDisplay.nombre;
-    if (userToDisplay.rol === Rol.ENCARGADO) return `${userToDisplay.nombre} (Coordinador)`;
-    if (userToDisplay.rol === Rol.USUARIO) return `${userToDisplay.nombre} (Inspector)`;
-    return userToDisplay.nombre;
+  const handleRemoveArchivoNuevo = (indexToRemove: number) => {
+    setArchivosNuevos((prev) => prev.filter((_, index) => index !== indexToRemove));
+    setFileError("");
+  };
+
+  // --- Manejador de Eliminación Visual de Imágenes Existentes ---
+  const handleMarcarImagenParaBorrar = (imagenId: number) => {
+    // 🚀 CAMBIO CLAVE: No llamamos a la API, solo actualizamos el estado local
+    setImagenesExistentes(prev => prev.filter(img => img.id !== imagenId));
+    setImagenesAEliminar(prev => [...prev, imagenId]);
+    // Sin toasts ni alerts
+  };
+
+  const handleToggleResponsable = (id: number) => {
+    setResponsablesIds((prev) =>
+      prev.includes(id)
+        ? prev.filter((uid) => uid !== id)
+        : [...prev, id]
+    );
   };
 
   const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -199,194 +349,43 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       setNombre(newValue);
     } else {
       setNombre(newValue.slice(0, MAX_NOMBRE_LENGTH));
-      toast.warn(`Máximo ${MAX_NOMBRE_LENGTH} caracteres para el nombre.`);
     }
   };
 
-  const handleComentarioChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
-    if (newValue.length <= MAX_OBSERVACIONES_LENGTH) {
-      setComentario(newValue);
-    } else {
-      setComentario(newValue.slice(0, MAX_OBSERVACIONES_LENGTH));
-      toast.warn(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres permitidos.`);
-    }
-  };
-
-  // --- Cargar usuarios ---
-  useEffect(() => {
-    const fetchUsuarios = async () => {
-      if (!user) return;
-      setLoadingUsuarios(true);
-      try {
-        let mainUsersPromise: Promise<Usuario[]>;
-        switch (user.rol) {
-          case Rol.ADMIN:
-            mainUsersPromise = usuariosService.getEncargadosYUsuarios();
-            break;
-          case Rol.ENCARGADO:
-            mainUsersPromise = usuariosService.getUsuarios();
-            break;
-          case Rol.SUPER_ADMIN:
-            mainUsersPromise = usuariosService.getAll();
-            break;
-          default:
-            mainUsersPromise = usuariosService.getAll();
-            break;
-        }
-
-        const [usersData, invitadosData] = await Promise.all([
-          mainUsersPromise,
-          usuariosService.getInvitados(),
-        ]);
-
-        const sortedUsers = usersData.sort((a, b) => {
-          const isASelected = responsablesIds.includes(a.id);
-          const isBSelected = responsablesIds.includes(b.id);
-          if (isASelected && !isBSelected) return -1;
-          if (!isASelected && isBSelected) return 1;
-          const rolA = a.rol;
-          const rolB = b.rol;
-          if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return -1;
-          if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return 1;
-          return a.nombre.localeCompare(b.nombre);
-        });
-
-        setListaUsuarios(sortedUsers);
-        setListaInvitados(
-          invitadosData.sort((a, b) => a.nombre.localeCompare(b.nombre))
-        );
-      } catch (error) {
-        console.error("Error al cargar usuarios:", error);
-        toast.error("No se pudo cargar la lista de usuarios.");
-      } finally {
-        setLoadingUsuarios(false);
-      }
-    };
-    fetchUsuarios();
-  }, [user, responsablesIds]);
-
-  // --- Handlers de DatePicker ---
-  const getSelectedDate = () => {
-    if (!fecha) return null;
-    const dateObj = new Date(`${fecha}T00:00:00.000Z`);
-    if (isNaN(dateObj.getTime())) return null;
-    return dateObj;
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFileError(""); // Limpiar error
-      const nuevosArchivos = Array.from(e.target.files);
-      const TAMANO_MAXIMO = 5 * 1024 * 1024;
-      const archivoPesado = nuevosArchivos.find((file) => file.size > TAMANO_MAXIMO);
-
-      if (archivoPesado) {
-        toast.error(`⚠️ El archivo "${archivoPesado.name}" pesa más de 5MB.`);
-        e.target.value = "";
-        return;
-      }
-
-      // Validacion modificada: considera imagenes existentes + nuevos archivos
-      if (archivos.length + imagenesExistentes.length + nuevosArchivos.length > MAX_FILES_LIMIT) {
-        setFileError(`Solo puedes tener un máximo de ${MAX_FILES_LIMIT} evidencias (imágenes existentes + nuevas).`);
-        e.target.value = "";
-        return;
-      }
-
-      setArchivos((prevArchivos) => [...prevArchivos, ...nuevosArchivos]);
-      e.target.value = "";
-    }
-  };
-
-  const handleRemoveArchivo = (indexToRemove: number) => {
-    setArchivos((prevArchivos) =>
-      prevArchivos.filter((_, index) => index !== indexToRemove)
-    );
-    setFileError(""); // Limpiar error si se libera espacio
-  };
-
-  const handleRemoveImagenExistente = async (imagenId: number) => {
-    if (loading) return;
-    setLoading(true);
-    try {
-      await tareasService.deleteImage(imagenId);
-      toast.success("Imagen eliminada.");
-      setImagenesExistentes((prev) =>
-        prev.filter((img) => img.id !== imagenId)
-      );
-      setFileError(""); // Limpiar error si se libera espacio al borrar imagen existente
-    } catch (error) {
-      console.error("Error al eliminar imagen:", error);
-      toast.error("No se pudo eliminar la imagen.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleToggleResponsable = (id: number) => {
-    setResponsablesIds((prev) =>
-      prev.includes(id) ? prev.filter((uid) => uid !== id) : [...prev, id]
-    );
-  };
-
-  // --- handleSubmit ---
+  // --- Submit (Actualizar) ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
 
+    // Validaciones
+    const nombreValido = nombre && nombre.trim().length > 0 && nombre.length <= MAX_NOMBRE_LENGTH;
+    const responsablesValidos = responsablesIds.length > 0;
+    const prioridadValida = !!prioridad;
+    const fechaValida = isDateValid();
+    const comentarioValido = comentario && comentario.trim().length > 0 && comentario.length <= MAX_OBSERVACIONES_LENGTH;
+    const horaValida = !usarHora || (usarHora && !!hora);
+    const tiempoValido = isTimeValidForToday();
+
     if (
-      !nombre ||
-      responsablesIds.length === 0 ||
-      !prioridad ||
-      !fecha ||
-      !comentario
+      !nombreValido ||
+      !responsablesValidos ||
+      !prioridadValida ||
+      !fechaValida ||
+      !comentarioValido ||
+      !horaValida ||
+      !tiempoValido
     ) {
-      toast.warn("Por favor, completa todos los campos obligatorios.");
+      // Si hay errores, no hacemos nada (los mensajes se muestran inline)
       return;
     }
 
-    if (usarHora && !hora) {
-      toast.warn("Has activado la hora opcional, por favor selecciona una hora.");
-      return;
-    }
-
-    // 🚀 Validación de hora pasada
-    if (!isTimeValidForToday()) {
-      toast.error("La hora seleccionada ya pasó. Elige una hora futura.");
-      return;
-    }
-
-    if (fechaHaCambiado && !motivoCambio) {
-      toast.warn("Si cambias la fecha u hora, debes seleccionar un motivo.");
-      return;
-    }
-
-    if (nombre.length > MAX_NOMBRE_LENGTH) {
-      toast.error(`El Nombre excede el máximo permitido (${MAX_NOMBRE_LENGTH}).`);
-      setLoading(false);
-      return;
-    }
-
-    if (comentario.length > MAX_OBSERVACIONES_LENGTH) {
-      toast.error(`El texto de Indicaciones excede el máximo permitido (${MAX_OBSERVACIONES_LENGTH}).`);
-      setLoading(false);
-      return;
-    }
+    // 🔒 Validación extra: Si no hay cambios, no hacemos nada (aunque el botón esté disabled)
+    if (!hayCambios) return;
 
     setLoading(true);
 
-    if (!user || !user.departamentoId || user.rol === Rol.SUPER_ADMIN) {
-      if (!user || !user.departamentoId) {
-        toast.error("Error de autenticación: No se pudo identificar tu departamento.");
-      } else if (user.rol === Rol.SUPER_ADMIN) {
-        toast.error("El SUPER_ADMIN (aún) no puede editar tareas desde este modal.");
-      }
-      setLoading(false);
-      return;
-    }
-
     try {
+      // Construir fecha límite
       let fechaLimiteFinal: Date;
       if (usarHora && hora) {
         fechaLimiteFinal = new Date(`${fecha}T${hora}:00`);
@@ -394,85 +393,41 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         fechaLimiteFinal = new Date(`${fecha}T23:59:59`);
       }
 
-      if (fechaHaCambiado) {
-        const payloadDatos = {
-          tarea: nombre,
-          observaciones: comentario || null,
-          urgencia: prioridad,
-          estatus: tarea.estatus,
-          responsables: responsablesIds,
-        };
-        console.log("📨 PASO 1: Actualizando datos de la tarea...", payloadDatos);
-
-        await tareasService.update(tarea.id, payloadDatos as any);
-        console.log(`✅ Datos de Tarea ID ${tarea.id} actualizados.`);
-
-        const nuevaFechaISO = fechaLimiteFinal.toISOString();
-        const payloadHistorial = {
-          motivo: motivoCambio,
-          nuevaFecha: nuevaFechaISO,
-          fechaAnterior: fechaISOOriginal,
-        };
-
-        console.log("📨 PASO 2: Actualizando fecha y historial...", payloadHistorial);
-        await tareasService.createHistorial(tarea.id, payloadHistorial as any);
-        console.log(`✅ Fecha e Historial de Tarea ID ${tarea.id} actualizados.`);
-      } else {
-        const payloadCompleto = {
-          tarea: nombre,
-          observaciones: comentario || null,
-          urgencia: prioridad,
-          fechaLimite: fechaLimiteFinal.toISOString(),
-          estatus: tarea.estatus,
-          responsables: responsablesIds,
-        };
-
-        console.log("📨 PASO 1: Actualizando tarea...", payloadCompleto);
-        await tareasService.update(tarea.id, payloadCompleto as any);
-        console.log(`✅ Tarea ID ${tarea.id} actualizada.`);
+      // 1. Eliminar imágenes marcadas para borrar (si las hay)
+      if (imagenesAEliminar.length > 0) {
+        console.log(`🗑️ Eliminando ${imagenesAEliminar.length} imágenes...`);
+        // Ejecutamos las promesas de eliminación en paralelo
+        await Promise.all(imagenesAEliminar.map(id => tareasService.deleteImage(id)));
       }
 
-      if (archivos.length > 0) {
-        console.log(`Subiendo ${archivos.length} imágenes NUEVAS...`);
+      // 2. Subir imágenes nuevas (si las hay)
+      if (archivosNuevos.length > 0) {
+        console.log(`📤 Subiendo ${archivosNuevos.length} nuevas imágenes...`);
         const formData = new FormData();
-        archivos.forEach((file) => {
+        archivosNuevos.forEach((file) => {
           formData.append("imagenes", file);
         });
         await tareasService.uploadImage(tarea.id, formData);
-        console.log(`✅ Imágenes subidas para Tarea ID: ${tarea.id}`);
       }
+
+      // 3. Actualizar datos de la tarea
+      const updatePayload = {
+        tarea: nombre,
+        observaciones: comentario,
+        urgencia: prioridad,
+        fechaLimite: fechaLimiteFinal.toISOString(),
+        responsables: responsablesIds,
+      };
+
+      console.log("📨 Actualizando datos de tarea...", updatePayload);
+      await tareasService.update(tarea.id, updatePayload as any);
 
       toast.success("Tarea actualizada correctamente.");
-      onTareaActualizada();
+      onSuccess();
       onClose();
     } catch (error: any) {
-      console.error(
-        "❌ Error en el proceso de actualización:",
-        error.response?.data || error.message
-      );
-      const isUploadError = error.config?.url.includes("/upload");
-      const isHistorialError = error.config?.url.includes("/historial");
-
-      if (isUploadError) {
-        toast.error("Tarea actualizada, pero falló la subida de imágenes.");
-        onTareaActualizada();
-        onClose();
-      } else if (isHistorialError) {
-        const detalleError = error.response?.data?.detalles
-          ? JSON.stringify(error.response.data.detalles)
-          : error.response?.data?.error || "Datos inválidos";
-
-        toast.error(`Datos guardados, pero falló el registro de fecha: ${detalleError}`);
-        onTareaActualizada();
-        onClose();
-      } else {
-        const mensajeError =
-          error.response?.data?.detalle ||
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          "No se pudo guardar la tarea.";
-        toast.error(`❌ ${mensajeError}`);
-      }
+      console.error("Error al actualizar:", error);
+      toast.error("Error al actualizar la tarea.");
     } finally {
       setLoading(false);
     }
@@ -482,9 +437,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     u.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
 
-  // Calcular total de archivos (existentes + nuevos) para deshabilitar botón
-  const totalFiles = imagenesExistentes.length + archivos.length;
-  const isFileLimitReached = totalFiles >= MAX_FILES_LIMIT;
+  // Calculamos el total considerando las que quedan (existentes - a eliminar + nuevas)
+  const totalArchivos = imagenesExistentes.length + archivosNuevos.length;
+  const isMaxFilesReached = totalArchivos >= MAX_FILES_LIMIT;
 
   return (
     <div
@@ -499,33 +454,28 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
           <button
             onClick={onClose}
             className="absolute top-2 right-3 text-gray-500 hover:text-gray-800 text-lg font-bold"
-            aria-label="Cerrar modal"
             disabled={loading}
           >
             ×
           </button>
           <h2 className="text-lg font-bold text-amber-950 text-center">
-            EDITAR TAREA
+            EDITAR TAREA #{tarea.id}
           </h2>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-col flex-grow min-h-0"
-          noValidate
-        >
+        <form onSubmit={handleSubmit} className="flex flex-col flex-grow min-h-0" noValidate>
           <div className="flex-grow overflow-y-auto p-6">
             <div className="flex flex-col gap-4 text-gray-800">
 
-              {/* --- BODY: GRID DE 3 COLUMNAS EN DESKTOP --- */}
+              {/* Grid 3 Columnas */}
               <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-6">
 
-                {/* --- COLUMNA 1: INFO BÁSICA --- */}
+                {/* COL 1: Info Básica */}
                 <div className="flex flex-col gap-4">
                   <div>
                     <label className="block text-sm font-semibold mb-1 flex justify-between">
                       <span>Nombre</span>
-                      <span className={`text-xs ${nombre.length > MAX_NOMBRE_LENGTH ? "text-red-600 font-bold" : "text-gray-500"}`}>
+                      <span className={`text-xs ${nombre.length > MAX_NOMBRE_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
                         {nombre.length}/{MAX_NOMBRE_LENGTH}
                       </span>
                     </label>
@@ -533,44 +483,54 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                       type="text"
                       value={nombre}
                       onChange={handleNombreChange}
-                      placeholder="Ej. Revisar reporte de calidad"
                       required
                       disabled={loading}
                       className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
-                        ${submitted && !nombre.trim() ? "border-red-500" : "border-gray-300"}`}
+                        ${submitted && !nombre.trim()
+                          ? "border-red-500"
+                          : "border-gray-300"
+                        }
+                      `}
                     />
                     {submitted && !nombre.trim() && (
-                      <p className="text-red-600 text-xs mt-1">El nombre es obligatorio.</p>
+                      <p className="text-red-600 text-xs mt-1">
+                        El nombre es obligatorio.
+                      </p>
                     )}
                   </div>
 
                   <div>
                     <label className="block text-sm font-semibold mb-1 flex justify-between">
                       <span>Indicaciones</span>
-                      <span className={`text-xs ${comentario.length > MAX_OBSERVACIONES_LENGTH ? "text-red-600 font-bold" : "text-gray-500"}`}>
+                      <span className={`text-xs ${comentario.length > MAX_OBSERVACIONES_LENGTH ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
                         {comentario.length}/{MAX_OBSERVACIONES_LENGTH}
                       </span>
                     </label>
                     <textarea
                       value={comentario}
-                      onChange={handleComentarioChange}
-                      placeholder="Agrega indicaciones o detalles..."
+                      onChange={(e) => setComentario(e.target.value.slice(0, MAX_OBSERVACIONES_LENGTH))}
                       disabled={loading}
                       required
-                      className={`w-full border rounded-md px-3 py-2 h-20 lg:h-40 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100
-                        ${submitted && !comentario.trim() ? "border-red-500" : "border-gray-300"}`}
+                      className={`w-full border rounded-md px-3 py-2 h-20 lg:h-40 resize-none focus:ring-2 focus:ring-amber-950 focus:outline-none 
+                        ${submitted && !comentario.trim()
+                          ? "border-red-500"
+                          : "border-gray-300"
+                        }
+                      `}
                     />
                     {submitted && !comentario.trim() && (
-                      <p className="text-red-600 text-xs mt-1">Las indicaciones son obligatorias.</p>
+                      <p className="text-red-600 text-xs mt-1">
+                        Las indicaciones son obligatorias.
+                      </p>
                     )}
                   </div>
                 </div>
 
-                {/* --- COLUMNA 2: RESPONSABLES --- */}
+                {/* COL 2: Responsables */}
                 <div className="flex flex-col gap-4">
                   <div>
                     <label className="block text-sm font-semibold mb-1">
-                      Responsables / Invitados
+                      {isKaizen ? "Selecciona Invitado(s)" : "Responsable(s)"}
                     </label>
                     <input
                       type="text"
@@ -580,137 +540,113 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                       disabled={loading || loadingUsuarios}
                       className="w-full border rounded-md px-3 py-2 mb-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100"
                     />
-                    <div
-                      id="responsable-list-editar"
-                      className={`relative w-full h-32 lg:h-64 border rounded-md overflow-y-auto focus:ring-2 focus:ring-amber-950 focus:outline-none ${submitted && responsablesIds.length === 0 ? "border-red-500" : "border-gray-300"}`}
-                      tabIndex={0}
-                    >
-                      {usuariosFiltrados.map((u) => (
-                        <label key={u.id} htmlFor={`resp-edit-${u.id}`} className={`flex items-center gap-3 w-full px-3 py-2 cursor-pointer transition-colors ${responsablesIds.includes(u.id) ? "bg-amber-100 text-amber-900 font-semibold" : "text-gray-800 hover:bg-gray-50"}`}>
-                          <input
-                            type="checkbox"
-                            id={`resp-edit-${u.id}`}
-                            checked={responsablesIds.includes(u.id)}
-                            onChange={() => handleToggleResponsable(u.id)}
-                            disabled={loading}
-                            className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
-                          />
-                          <span className={getRoleColorClass(u)}>{getDisplayName(u)}</span>
-                          {isKaizen && <span className="text-xs text-gray-400 ml-auto">(Invitado)</span>}
-                        </label>
-                      ))}
-                      {usuariosFiltrados.length === 0 && (
-                        <p className="text-center text-gray-500 text-sm py-8">
-                          {busqueda ? "No se encontraron resultados." : isKaizen ? "No hay invitados disponibles." : "No hay usuarios en tu departamento."}
-                        </p>
-                      )}
-                    </div>
+
+                    {loadingUsuarios ? (
+                      <div className="relative w-full h-32 lg:h-64 border rounded-md px-3 py-2 bg-gray-100 flex items-center justify-center">
+                        <p className="text-gray-500">Cargando usuarios...</p>
+                      </div>
+                    ) : (
+                      <div className={`relative w-full h-32 lg:h-64 border rounded-md overflow-y-auto 
+                        ${submitted && responsablesIds.length === 0 ? "border-red-500" : "border-gray-300"}
+                      `}>
+                        {usuariosFiltrados.map((u) => (
+                          <label
+                            key={u.id}
+                            className={`flex items-center gap-3 w-full px-3 py-2 cursor-pointer transition-colors
+                              ${responsablesIds.includes(u.id) ? "bg-amber-100 text-amber-900 font-semibold" : "text-gray-800 hover:bg-gray-50"}
+                            `}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={responsablesIds.includes(u.id)}
+                              onChange={() => handleToggleResponsable(u.id)}
+                              disabled={loading}
+                              className="w-4 h-4 text-amber-800 bg-gray-100 border-gray-300 rounded focus:ring-amber-950"
+                            />
+                            <span className={getRoleColorClass(u)}>
+                              {getDisplayName(u)}
+                            </span>
+                            {isKaizen && <span className="text-xs text-gray-400 ml-auto">(Invitado)</span>}
+                          </label>
+                        ))}
+
+                        {/* 🚨 Mensaje de error o lista vacía */}
+                        {usuariosFiltrados.length === 0 && (
+                          <p className={`text-center text-sm py-4 ${errorUsuarios ? "text-red-600 font-bold" : "text-gray-500"}`}>
+                            {errorUsuarios
+                              ? "Error al cargar usuarios"
+                              : busqueda
+                                ? "No se encontraron resultados."
+                                : isKaizen
+                                  ? "No se encontraron invitados registrados."
+                                  : "No hay usuarios disponibles."}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {submitted && responsablesIds.length === 0 && (
+                      <p className="text-red-600 text-xs mt-1">
+                        Debes seleccionar al menos un responsable.
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                {/* --- COLUMNA 3: DETALLES, EVIDENCIA Y CONFIG --- */}
+                {/* COL 3: Detalles y Archivos */}
                 <div className="flex flex-col gap-4">
 
-                  {/* EVIDENCIA */}
+                  {/* Subida de Archivos */}
                   <div>
                     <label className="block text-sm font-semibold mb-1 flex justify-between">
                       <span>Evidencia</span>
-                      <span className={`text-xs ${isFileLimitReached ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-                        {totalFiles}/{MAX_FILES_LIMIT}
+                      <span className={`text-xs ${isMaxFilesReached ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                        {totalArchivos}/{MAX_FILES_LIMIT}
                       </span>
                     </label>
-                    {/* Lista de Imágenes Existentes */}
-                    {imagenesExistentes.length > 0 && (
-                      <div className="mb-4">
-                        <p className="text-sm font-medium text-gray-800 mb-2">Imágenes actuales:</p>
-                        <ul className="space-y-2 max-h-32 overflow-y-auto pr-2">
-                          {imagenesExistentes.map((imagen) => (
-                            <li key={imagen.id} className="flex items-center justify-between bg-gray-100 p-2 rounded-md">
-                              <a href={imagen.url} target="_blank" rel="noopener noreferrer">
-                                <img src={imagen.url} alt={`Imagen ${imagen.id}`} className="w-10 h-10 object-cover rounded-md" />
-                              </a>
-                              <span className="flex-1 text-sm text-gray-700 mx-3 truncate">
-                                {imagen.url.split("/").pop()?.substring(0, 20)}...
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveImagenExistente(imagen.id)}
-                                disabled={loading}
-                                className="flex-shrink-0 p-1 text-red-600 hover:bg-red-100 rounded-full disabled:opacity-50"
-                                aria-label="Eliminar imagen existente"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-                                </svg>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Botón de Subida */}
                     <label
-                      htmlFor="file-upload"
-                      onClick={(e) => {
-                        // Deshabilitar clic si está cargando o límite alcanzado
-                        if (loading || isFileLimitReached) e.preventDefault();
-                      }}
-                      className={`w-full flex items-center justify-center gap-2 bg-amber-100 text-amber-900 font-semibold px-4 py-2 rounded-md transition-all duration-200 
-                        ${loading || isFileLimitReached
-                          ? "opacity-50 cursor-not-allowed"
-                          : "cursor-pointer hover:bg-amber-200"
-                        }`}
+                      htmlFor="edit-file-upload"
+                      onClick={(e) => { if (loading || isMaxFilesReached) e.preventDefault(); }}
+                      className={`w-full flex items-center justify-center gap-2 bg-amber-100 text-amber-900 font-semibold px-4 py-2 rounded-md transition-all 
+                        ${loading || isMaxFilesReached ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-200"}
+                      `}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                        <path fillRule="evenodd" d="M10.5 3.5a.5.5 0 00-1 0V9H4a.5.5 0 000 1h5.5v5.5a.5.5 0 001 0V10H16a.5.5 0 000-1h-5.5V3.5z" clipRule="evenodd" />
-                      </svg>
-                      <span>{archivos.length > 0 ? "Agregar más" : "Agregar / Tomar Foto"}</span>
+                      <span>Agregar / Tomar Foto</span>
                     </label>
-                    <input
-                      id="file-upload"
-                      type="file"
-                      multiple
-                      disabled={loading || isFileLimitReached}
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
+                    <input id="edit-file-upload" type="file" multiple disabled={loading || isMaxFilesReached} onChange={handleFileChange} className="hidden" />
 
-                    {/* Mensaje de error en línea */}
-                    {fileError && (
-                      <p className="text-red-600 text-xs mt-1">
-                        {fileError}
-                      </p>
-                    )}
+                    {/* Mensaje de error tipo texto abajo del input */}
+                    {fileError && <p className="text-red-600 text-xs mt-1">{fileError}</p>}
 
-                    {/* Lista de Nuevos Archivos */}
-                    {archivos.length > 0 && (
-                      <div className="mt-4">
-                        <p className="text-sm font-medium text-gray-800 mb-2">{archivos.length} archivo(s) NUEVOS para subir:</p>
-                        <ul className="space-y-2 max-h-32 overflow-y-auto pr-2">
-                          {archivos.map((file, index) => (
-                            <li key={index} className="flex items-center justify-between bg-gray-100 p-2 rounded-md">
-                              <img src={URL.createObjectURL(file)} alt={file.name} className="w-10 h-10 object-cover rounded-md" onLoad={(e) => URL.revokeObjectURL(e.currentTarget.src)} />
-                              <span className="flex-1 text-sm text-gray-700 mx-3 truncate">{file.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveArchivo(index)}
-                                disabled={loading}
-                                className="flex-shrink-0 p-1 text-red-600 hover:bg-red-100 rounded-full disabled:opacity-50"
-                                aria-label="Eliminar archivo"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-                                </svg>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                    {/* Lista de Imágenes (Existentes + Nuevas) */}
+                    <div className="mt-4 space-y-2 max-h-48 overflow-y-auto pr-2">
+
+                      {/* Imágenes de BD */}
+                      {imagenesExistentes.map((img) => (
+                        <div key={img.id} className="flex items-center justify-between bg-white border border-gray-200 p-2 rounded-md">
+                          <img src={img.url} alt="Existente" className="w-10 h-10 object-cover rounded-md" />
+                          <span className="text-xs text-gray-500 mx-2">Guardada</span>
+                          {/* 🚀 CAMBIO CLAVE: Usamos la nueva función handleMarcarImagenParaBorrar */}
+                          <button type="button" onClick={() => handleMarcarImagenParaBorrar(img.id)} className="p-1 text-red-600 hover:bg-red-100 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" /></svg>
+                          </button>
+                        </div>
+                      ))}
+
+                      {/* Imágenes Nuevas */}
+                      {archivosNuevos.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between bg-gray-100 p-2 rounded-md">
+                          <img src={URL.createObjectURL(file)} alt={file.name} className="w-10 h-10 object-cover rounded-md" onLoad={(e) => URL.revokeObjectURL(e.currentTarget.src)} />
+                          <span className="flex-1 text-sm text-gray-700 mx-3 truncate">{file.name}</span>
+                          <button type="button" onClick={() => handleRemoveArchivoNuevo(index)} className="p-1 text-red-600 hover:bg-red-100 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" /></svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* PRIORIDAD */}
+                  {/* Prioridad */}
                   <div>
                     <label className="block text-sm font-semibold mb-1">Prioridad</label>
                     <fieldset className="mt-2 grid grid-cols-3 gap-2">
@@ -718,8 +654,8 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                         <div key={p.value}>
                           <input
                             type="radio"
-                            id={`prioridad-${p.value}`}
-                            name="prioridad-radio-group"
+                            id={`edit-prioridad-${p.value}`}
+                            name="edit-prioridad-radio-group"
                             value={p.value}
                             checked={prioridad === p.value}
                             onChange={(e) => setPrioridad(e.target.value as Urgencia)}
@@ -727,11 +663,27 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                             className="sr-only peer"
                           />
                           <label
-                            htmlFor={`prioridad-${p.value}`}
-                            className={`w-full block text-center px-3 py-2 rounded-md border text-sm font-semibold cursor-pointer transition-all ${loading ? "opacity-50 cursor-not-allowed" : ""}
-                              ${p.value === "ALTA" && `border-gray-300 bg-gray-50 text-gray-700 peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600 ${!loading && "hover:bg-red-100"}`}
-                              ${p.value === "MEDIA" && `border-gray-300 bg-gray-50 text-gray-700 peer-checked:bg-amber-400 peer-checked:text-white peer-checked:border-amber-400 ${!loading && "hover:bg-amber-100"}`}
-                              ${p.value === "BAJA" && `border-gray-300 bg-gray-50 text-gray-700 peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-600 ${!loading && "hover:bg-blue-100"}`}
+                            htmlFor={`edit-prioridad-${p.value}`}
+                            className={`
+                              w-full block text-center px-3 py-2 rounded-md 
+                              border text-sm font-semibold cursor-pointer transition-all
+                              ${loading ? "opacity-50 cursor-not-allowed" : ""}
+                              
+                              ${p.value === "ALTA" && `
+                                border-gray-300 bg-gray-50 text-gray-700
+                                peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600
+                                ${!loading && "hover:bg-red-100 hover:text-gray-700"}
+                              `}
+                              ${p.value === "MEDIA" && `
+                                border-gray-300 bg-gray-50 text-gray-700
+                                peer-checked:bg-amber-400 peer-checked:text-white peer-checked:border-amber-400
+                                ${!loading && "hover:bg-amber-100 hover:text-gray-700"}
+                              `}
+                              ${p.value === "BAJA" && `
+                                border-gray-300 bg-gray-50 text-gray-700
+                                peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-600
+                                ${!loading && "hover:bg-green-100 hover:text-gray-700"}
+                              `}
                             `}
                           >
                             {p.label}
@@ -740,24 +692,26 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                       ))}
                     </fieldset>
                     {submitted && !prioridad && (
-                      <p className="text-red-600 text-xs mt-1">Debes seleccionar una prioridad.</p>
+                      <p className="text-red-600 text-xs mt-1">
+                        Debes seleccionar una prioridad.
+                      </p>
                     )}
                   </div>
 
-                  {/* FECHA */}
+                  {/* Fecha Límite */}
                   <div>
-                    <label htmlFor="nueva-fecha" className="block text-sm font-semibold mb-1">Fecha Límite</label>
+                    <label className="block text-sm font-semibold mb-1">Fecha Límite</label>
                     <div className="flex flex-col gap-2">
                       <input
                         type="date"
-                        id="nueva-fecha"
                         value={fecha}
                         onChange={(e) => setFecha(e.target.value)}
                         required
                         disabled={loading}
                         min={formatDateToInput(new Date())}
-                        className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
-                          ${submitted && !getSelectedDate() ? "border-red-500" : "border-gray-300"}`}
+                        className={`w-full border rounded-md px-3 py-2 focus:outline-none
+                          ${submitted && !isDateValid() ? "border-red-500" : "border-gray-300"}
+                        `}
                       />
                       <div className="flex items-center gap-4 mt-1">
                         <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 select-none">
@@ -769,9 +723,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                               if (!e.target.checked) setHora("");
                             }}
                             disabled={loading}
-                            className="w-4 h-4 text-amber-800 border-gray-300 rounded focus:ring-amber-950"
+                            className="w-4 h-4"
                           />
-                          <span>¿Especificar hora límite?</span>
+                          <span>¿Especificar hora?</span>
                         </label>
                         {usarHora && (
                           <input
@@ -780,51 +734,32 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                             onChange={(e) => setHora(e.target.value)}
                             disabled={loading}
                             required={usarHora}
-                            className={`flex-1 border rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-amber-950 focus:outline-none animate-fade-in
-                              ${submitted && ((!hora) || (!isTimeValidForToday())) ? "border-red-500 bg-red-50" : "border-gray-300"}`}
+                            className={`flex-1 border rounded-md px-2 py-1 text-sm focus:outline-none 
+                              ${submitted && (!hora || !isTimeValidForToday()) ? "border-red-500 bg-red-50" : "border-gray-300"}
+                            `}
                           />
                         )}
                       </div>
                     </div>
-                    {submitted && !getSelectedDate() && (
-                      <p className="text-red-600 text-xs mt-1">La fecha límite es obligatoria.</p>
-                    )}
-                    {submitted && usarHora && !hora && (
-                      <p className="text-red-600 text-xs mt-1">Debes seleccionar una hora.</p>
-                    )}
-                    {/* 🚀 Mensaje de error para hora pasada */}
-                    {submitted && usarHora && hora && !isTimeValidForToday() && (
+                    {submitted && !isDateValid() && (
                       <p className="text-red-600 text-xs mt-1">
-                        La hora no puede ser anterior a la actual.
+                        La fecha límite es obligatoria.
                       </p>
                     )}
+                    {submitted && usarHora && !hora && (
+                      <p className="text-red-600 text-xs mt-1">
+                        Debes seleccionar una hora.
+                      </p>
+                    )}
+                    {submitted && usarHora && hora && !isTimeValidForToday() && (
+                      <p className="text-red-600 text-xs mt-1">La hora no puede ser anterior a la actual.</p>
+                    )}
+                    <p className="text-[10px] text-gray-400 mt-1 italic">
+                      {usarHora
+                        ? "Se requiere entrega antes de la hora exacta."
+                        : "Se considera 'A Tiempo' hasta el final del día (23:59)."}
+                    </p>
                   </div>
-
-                  {/* MOTIVO DE CAMBIO */}
-                  {fechaHaCambiado && (
-                    <div>
-                      <label htmlFor="motivo-cambio" className="block text-sm font-semibold mb-1 text-blue-800">
-                        Motivo del Cambio de Fecha
-                      </label>
-                      <select
-                        id="motivo-cambio"
-                        value={motivoCambio}
-                        onChange={(e) => setMotivoCambio(e.target.value)}
-                        disabled={loading}
-                        required
-                        className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-700 focus:outline-none
-                          ${submitted && fechaHaCambiado && !motivoCambio ? "border-red-500" : "border-gray-300"}`}
-                      >
-                        <option value="" disabled>-- Selecciona un motivo --</option>
-                        {MOTIVOS_CAMBIO_FECHA.map((motivo) => (
-                          <option key={motivo} value={motivo}>{motivo}</option>
-                        ))}
-                      </select>
-                      {submitted && fechaHaCambiado && !motivoCambio && (
-                        <p className="text-red-600 text-xs mt-1">El motivo es obligatorio si cambias la fecha.</p>
-                      )}
-                    </div>
-                  )}
 
                 </div>
               </div>
@@ -832,20 +767,21 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
           </div>
 
           <div className="flex-shrink-0 flex justify-end gap-2 p-6 pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-2 rounded-md transition-all duration-200 disabled:opacity-70"
-            >
+            <button type="button" onClick={onClose} disabled={loading} className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-2 rounded-md transition-all cursor-pointer">
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={loading}
-              className={`${loading ? "opacity-70 cursor-not-allowed" : "hover:bg-green-700"} bg-green-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
+              // 🔒 Deshabilitar si está cargando o NO HAY CAMBIOS
+              disabled={loading || !hayCambios}
+              className={`font-semibold px-4 py-2 rounded-md transition-all
+                ${loading || !hayCambios
+                  ? "bg-blue-300 text-white cursor-not-allowed opacity-70"
+                  : "bg-blue-600 hover:bg-blue-700 text-white"
+                }
+              `}
             >
-              {loading ? "Actualizando..." : "Guardar Cambios"}
+              {loading ? "Guardando..." : "Actualizar Tarea"}
             </button>
           </div>
         </form>

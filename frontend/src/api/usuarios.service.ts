@@ -3,8 +3,31 @@ import api from "./01_axiosInstance";
 import type { Usuario, Rol, EstatusUsuario } from "../types/usuario";
 
 // ===================================================================
-// TIPOS DE PAYLOAD
+// TIPOS DE PAYLOAD Y RESPUESTAS
 // ===================================================================
+
+// Estructura de respuesta paginada que viene del Backend
+export interface PaginatedResponse<T> {
+  status: string;
+  meta: {
+    totalItems: number;
+    itemsPorPagina: number;
+    paginaActual: number;
+    totalPaginas: number;
+    resumenRoles: Record<string, number>;
+  };
+  data: T[];
+}
+
+// Filtros disponibles para el GET
+export type GetUsuariosParams = {
+  page?: number;
+  limit?: number;
+  q?: string;            // Búsqueda por nombre/username
+  rol?: Rol;             // Filtro por rol específico
+  departamentoId?: number;
+  estatus?: EstatusUsuario;
+};
 
 export type CrearUsuarioPayload = {
   nombre: string;
@@ -42,46 +65,34 @@ export interface PushSubscriptionPayload {
 
 export const usuariosService = {
   /**
-   * 🔹 Obtener usuarios (GET /api/usuarios)
-   * El backend ya filtra automáticamente según el rol del usuario (Admin ve suyos + invitados).
+   * 🔹 Obtener usuarios activos (Paginado y Filtrado)
+   * GET /api/usuarios
+   * Soporta: page, limit, q (busqueda), rol, depto.
    */
-  getAll: async (params?: {
-    departamentoId?: number;
-    estatus?: EstatusUsuario;
-  }): Promise<Usuario[]> => {
-    const { data } = await api.get("/usuarios", { params });
+  getAll: async (params?: GetUsuariosParams): Promise<PaginatedResponse<Usuario>> => {
+    const { data } = await api.get<PaginatedResponse<Usuario>>("/usuarios", { params });
     return data;
   },
 
-  getInvitados: async (): Promise<Usuario[]> => {
-    const { data } = await api.get<Usuario[]>("/usuarios/invitados");
+  /**
+   * 🔹 Obtener usuarios inactivos (Papelera)
+   * GET /api/usuarios/inactivos
+   */
+  getInactivos: async (params?: GetUsuariosParams): Promise<PaginatedResponse<Usuario>> => {
+    const { data } = await api.get<PaginatedResponse<Usuario>>("/usuarios/inactivos", { params });
     return data;
   },
 
-  getUsuarios: async (params?: {
-    estatus?: EstatusUsuario;
-  }): Promise<Usuario[]> => {
-    const { data } = await api.get<Usuario[]>("/usuarios/usuarios", { params });
-    return data;
-  },
-
-  getEncargadosYUsuarios: async (params?: {
-    estatus?: EstatusUsuario;
-  }): Promise<Usuario[]> => {
-    const { data } = await api.get<Usuario[]>(
-      "/usuarios/encargados-y-usuarios",
-      { params }
-    );
-    return data;
-  },
-
-  getById: async (id: number): Promise<Usuario> => {
-    const { data } = await api.get(`/usuarios/${id}`);
+  /**
+   * 🔹 Obtener usuario por ID (o Username si el back lo soporta)
+   */
+  getById: async (id: number | string): Promise<Usuario> => {
+    const { data } = await api.get<Usuario>(`/usuarios/${id}`);
     return data;
   },
 
   create: async (payload: CrearUsuarioPayload): Promise<Usuario> => {
-    const { data } = await api.post("/usuarios", payload);
+    const { data } = await api.post<Usuario>("/usuarios", payload);
     return data;
   },
 
@@ -89,7 +100,7 @@ export const usuariosService = {
     id: number,
     payload: ActualizarUsuarioPayload
   ): Promise<Usuario> => {
-    const { data } = await api.put(`/usuarios/${id}`, payload);
+    const { data } = await api.put<Usuario>(`/usuarios/${id}`, payload);
     return data;
   },
 
@@ -98,7 +109,7 @@ export const usuariosService = {
     estatus: EstatusUsuario
   ): Promise<Usuario> => {
     const payload: ActualizarEstatusPayload = { estatus };
-    const { data } = await api.put(`/usuarios/${id}/estatus`, payload);
+    const { data } = await api.put<Usuario>(`/usuarios/${id}/estatus`, payload);
     return data;
   },
 

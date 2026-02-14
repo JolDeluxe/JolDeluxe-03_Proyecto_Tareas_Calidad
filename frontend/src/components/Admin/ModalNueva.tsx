@@ -9,7 +9,6 @@ import { usuariosService } from "../../api/usuarios.service";
 import type { Tarea, Estatus, Urgencia } from "../../types/tarea";
 import type { Usuario } from "../../types/usuario";
 import { Rol } from "../../types/usuario";
-// import api from "../../api/01_axiosInstance"; // Comentado si no se usa directamente en este archivo
 
 interface ModalNuevaProps {
   onClose: () => void;
@@ -52,7 +51,6 @@ const PRIORIDADES_VALIDAS: { value: Urgencia; label: string }[] = [
 
 const ModalNueva: React.FC<ModalNuevaProps> = ({
   onClose,
-  tarea,
   onTareaAgregada,
   user,
 }) => {
@@ -76,6 +74,8 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
   const [listaInvitados, setListaInvitados] = useState<Usuario[]>([]);
   const [loadingUsuarios, setLoadingUsuarios] = useState(true);
+  // 🚨 Estado para controlar error de carga de usuarios
+  const [errorUsuarios, setErrorUsuarios] = useState(false);
 
   // --- Estado para búsqueda ---
   const [busqueda, setBusqueda] = useState("");
@@ -84,73 +84,93 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const isUserInCalidad = user?.departamento?.nombre
-    ?.toUpperCase()
-    .includes("CALIDAD");
-
+  // ✅ NUEVA LÓGICA DE VISUALIZACIÓN DE NOMBRES
   const getDisplayName = (userToDisplay: Usuario): string => {
-    if (isKaizen || !isUserInCalidad) {
+    if (isKaizen) {
       return userToDisplay.nombre;
     }
+    // Etiquetas globales para todos los departamentos
     if (userToDisplay.rol === Rol.ENCARGADO) {
-      return `${userToDisplay.nombre} (Coordinador)`;
+      return `${userToDisplay.nombre} (Supervisión)`;
     }
     if (userToDisplay.rol === Rol.USUARIO) {
-      return `${userToDisplay.nombre} (Inspector)`;
+      return `${userToDisplay.nombre} (Operativo)`;
     }
     return userToDisplay.nombre;
   };
 
+  // ✅ NUEVA LÓGICA DE COLORES (Azul y Rosa)
   const getRoleColorClass = (userToDisplay: Usuario): string => {
     if (userToDisplay.rol === Rol.ENCARGADO) {
-      return "text-blue-600 font-semibold";
+      return "text-blue-700 font-semibold"; // Azul Supervisión
     }
     if (userToDisplay.rol === Rol.USUARIO) {
-      return "text-red-700 font-semibold";
+      return "text-rose-700 font-semibold"; // Rosa Operativo
     }
-    return "";
+    return "text-gray-800";
   };
 
-  // --- Cargar usuarios ---
+  // --- Cargar usuarios (Con nuevas reglas de filtrado y ordenamiento) ---
   useEffect(() => {
     const fetchUsuarios = async () => {
       if (!user) return;
 
       setLoadingUsuarios(true);
+      setErrorUsuarios(false); // Resetear error al iniciar
       try {
-        let mainUsersPromise: Promise<Usuario[]>;
+        // Obtenemos TODOS los usuarios (límite alto para dropdown)
+        const responseUsuarios = await usuariosService.getAll({ limit: 1000 });
+        const todosLosUsuarios = responseUsuarios.data;
 
-        switch (user.rol) {
-          case Rol.ADMIN:
-            mainUsersPromise = usuariosService.getEncargadosYUsuarios();
-            break;
-          case Rol.ENCARGADO:
-            mainUsersPromise = usuariosService.getUsuarios();
-            break;
-          default:
-            mainUsersPromise = usuariosService.getAll();
+        // Separamos en dos listas: Internos e Invitados
+        const internos = todosLosUsuarios.filter(u => u.rol !== Rol.INVITADO);
+        const invitados = todosLosUsuarios.filter(u => u.rol === Rol.INVITADO);
+
+        // ✅ REGLAS DE VISIBILIDAD (FILTRADO)
+        let usuariosVisibles = [];
+
+        if (user.rol === Rol.ADMIN) {
+          // Admin ve: ENCARGADOS y USUARIOS. (No ve otros Admins)
+          usuariosVisibles = internos.filter(u =>
+            u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
+          );
+        } else if (user.rol === Rol.ENCARGADO) {
+          // Encargado ve: ENCARGADOS y USUARIOS. (No ve Admins)
+          usuariosVisibles = internos.filter(u =>
+            u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
+          );
+        } else {
+          // Fallback para SuperAdmin u otros (ven todo)
+          usuariosVisibles = internos;
         }
 
-        const [usersData, invitadosData] = await Promise.all([
-          mainUsersPromise,
-          usuariosService.getInvitados(),
-        ]);
-
-        const sortedUsers = usersData.sort((a, b) => {
+        // ✅ REGLAS DE ORDENAMIENTO (SORTING)
+        const sortedUsers = usuariosVisibles.sort((a, b) => {
           const rolA = a.rol;
           const rolB = b.rol;
-          if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return -1;
-          if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return 1;
+
+          // Si soy ENCARGADO, quiero ver primero a los USUARIOS (Operativos)
+          if (user.rol === Rol.ENCARGADO) {
+            if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return -1; // Usuario antes
+            if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return 1;
+          }
+          // Si soy ADMIN (o cualquier otro), jerarquía normal: ENCARGADO -> USUARIO
+          else {
+            if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return -1; // Encargado antes
+            if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return 1;
+          }
+
+          // Orden secundario: Alfabético
           return a.nombre.localeCompare(b.nombre);
         });
 
         setListaUsuarios(sortedUsers);
         setListaInvitados(
-          invitadosData.sort((a, b) => a.nombre.localeCompare(b.nombre))
+          invitados.sort((a, b) => a.nombre.localeCompare(b.nombre))
         );
       } catch (error) {
         console.error("Error al cargar usuarios:", error);
-        toast.error("No se pudo cargar la lista de usuarios.");
+        setErrorUsuarios(true); // 🚨 Activar estado de error
       } finally {
         setLoadingUsuarios(false);
       }
@@ -204,7 +224,8 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
       const archivoPesado = nuevosArchivos.find(file => file.size > TAMANO_MAXIMO);
 
       if (archivoPesado) {
-        toast.error(`⚠️ El archivo "${archivoPesado.name}" pesa más de 5MB.`);
+        // Error se muestra inline abajo
+        setFileError(`⚠️ El archivo "${archivoPesado.name}" pesa más de 20MB.`);
         e.target.value = "";
         return;
       }
@@ -241,8 +262,9 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     if (newValue.length <= MAX_NOMBRE_LENGTH) {
       setNombre(newValue);
     } else {
+      // Si se pasa, cortamos y mostramos en UI (opcionalmente) o simplemente no dejamos escribir más
+      // Aquí simplemente cortamos
       setNombre(newValue.slice(0, MAX_NOMBRE_LENGTH));
-      toast.warn(`Máximo ${MAX_NOMBRE_LENGTH} caracteres para el nombre.`);
     }
   };
 
@@ -251,42 +273,27 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     e.preventDefault();
     setSubmitted(true);
 
+    // Validaciones
+    const nombreValido = nombre && nombre.trim().length > 0 && nombre.length <= MAX_NOMBRE_LENGTH;
+    const responsablesValidos = responsablesIds.length > 0;
+    const prioridadValida = !!prioridad;
+    const fechaValida = isDateValid();
+    const comentarioValido = comentario && comentario.trim().length > 0 && comentario.length <= MAX_OBSERVACIONES_LENGTH;
+    const horaValida = !usarHora || (usarHora && !!hora);
+    const tiempoValido = isTimeValidForToday();
+    const kaizenValido = !isKaizen || (isKaizen && responsablesIds.length > 0); // Validación redundante con responsablesValidos pero explícita para lógica
+
     if (
-      !nombre ||
-      responsablesIds.length === 0 ||
-      !prioridad ||
-      !fecha ||
-      !comentario
+      !nombreValido ||
+      !responsablesValidos ||
+      !prioridadValida ||
+      !fechaValida ||
+      !comentarioValido ||
+      !horaValida ||
+      !tiempoValido ||
+      !kaizenValido
     ) {
-      toast.warn("Por favor, completa todos los campos obligatorios.");
-      return;
-    }
-
-    if (usarHora && !hora) {
-      toast.warn("Has activado la hora opcional, por favor selecciona una hora.");
-      return;
-    }
-
-    // 🚀 Validación de hora pasada
-    if (!isTimeValidForToday()) {
-      toast.error("La hora seleccionada ya pasó. Elige una hora futura.");
-      return;
-    }
-
-    if (nombre.length > MAX_NOMBRE_LENGTH) {
-      toast.error(`El Nombre excede el máximo permitido (${MAX_NOMBRE_LENGTH}).`);
-      setLoading(false);
-      return;
-    }
-
-    if (comentario.length > MAX_OBSERVACIONES_LENGTH) {
-      toast.error(`El texto de Indicaciones excede el máximo permitido (${MAX_OBSERVACIONES_LENGTH}).`);
-      setLoading(false);
-      return;
-    }
-
-    if (isKaizen && responsablesIds.length === 0) {
-      toast.error("Las tareas Kaizen requieren seleccionar un Invitado.");
+      // Si hay errores, no hacemos nada (los mensajes se muestran inline)
       return;
     }
 
@@ -331,6 +338,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
       }
 
       if (isNaN(fechaLimiteFinal.getTime())) {
+        // Este caso es raro dado las validaciones previas, pero por seguridad
         toast.error("Fecha u hora inválida.");
         setLoading(false);
         return;
@@ -505,7 +513,6 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                           setComentario(newValue);
                         } else {
                           setComentario(newValue.slice(0, MAX_OBSERVACIONES_LENGTH));
-                          toast.warn(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres permitidos.`);
                         }
                       }}
                       placeholder="Agrega indicaciones o detalles..."
@@ -598,13 +605,16 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                           </label>
                         ))}
 
+                        {/* 🚨 Mensaje de error o de lista vacía */}
                         {usuariosFiltrados.length === 0 && (
-                          <p className="text-center text-sm text-gray-500 py-4">
-                            {busqueda
-                              ? "No se encontraron resultados."
-                              : isKaizen
-                                ? "No se encontraron invitados registrados."
-                                : "No hay usuarios disponibles."}
+                          <p className={`text-center text-sm py-4 ${errorUsuarios ? "text-red-600 font-bold" : "text-gray-500"}`}>
+                            {errorUsuarios
+                              ? "Error al cargar usuarios"
+                              : busqueda
+                                ? "No se encontraron resultados."
+                                : isKaizen
+                                  ? "No se encontraron invitados registrados."
+                                  : "No hay usuarios disponibles."}
                           </p>
                         )}
                       </div>

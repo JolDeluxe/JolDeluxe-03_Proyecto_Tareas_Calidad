@@ -1,6 +1,6 @@
 // 📍 src/components/Admin/TablaAdmin.tsx
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 // 1. 🚀 Importar servicios y tipos
 import { tareasService } from "../../api/tareas.service";
 import type {
@@ -28,6 +28,14 @@ interface TablaProps {
   loading: boolean;
   onRecargarTareas: () => void;
   user: Usuario | null; // 👈 2. Recibir 'user' como prop
+}
+
+// ✅ TIPOS PARA EL ORDENAMIENTO (Eliminada "observaciones")
+type SortKey = "asignador" | "responsables" | "urgencia" | "fechaRegistro" | "fechaLimite" | "estatus";
+
+interface SortConfig {
+  key: SortKey;
+  direction: "asc" | "desc";
 }
 
 // --- FUNCIONES HELPER PARA FECHAS Y HORAS ---
@@ -83,7 +91,6 @@ const formateaFechaDesktop = (fechaInput?: Date | string | null) => {
 };
 
 // Formateador simple para strings (usado en móvil o celdas simples)
-// Si tiene hora, la muestra inline (ej: 28/02/2026 07:00 PM)
 const formateaFechaString = (fechaInput?: Date | string | null): string => {
   if (!fechaInput) return "";
   try {
@@ -156,6 +163,17 @@ const isRetrasada = (
   }
 };
 
+// Helper para obtener fecha efectiva (considerando historial) para ordenamiento
+const getFechaLimiteEfectiva = (tarea: Tarea): number => {
+  if (tarea.historialFechas && tarea.historialFechas.length > 0) {
+    const last = tarea.historialFechas[tarea.historialFechas.length - 1];
+    // ✅ FIX: Validamos que nuevaFecha exista antes de usar new Date
+    return last.nuevaFecha ? new Date(last.nuevaFecha).getTime() : 0;
+  }
+  // ✅ FIX: Validamos que fechaLimite exista antes de usar new Date
+  return tarea.fechaLimite ? new Date(tarea.fechaLimite).getTime() : 0;
+};
+
 const TablaAdmin: React.FC<TablaProps> = ({
   filtro,
   responsable,
@@ -178,6 +196,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
 
   // ✅ NUEVO: Estado para el modal de revisión
   const [tareaParaRevisar, setTareaParaRevisar] = useState<Tarea | null>(null);
+
+  // ✅ NUEVO: Estado de Ordenamiento (Default: Registro Descendente)
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "fechaRegistro", direction: "desc" });
 
   // 🧩 Modales (Funciones se quedan)
   const abrirModalAceptar = (tarea: Tarea) => {
@@ -242,29 +263,95 @@ const TablaAdmin: React.FC<TablaProps> = ({
     onRecargarTareas();
   };
 
-  // 9. 🚀 Lógica de filtro (AQUÍ ESTÁ LA MAGIA QUE PEDISTE)
-  const tareasFiltradas = tareas.filter((t) => {
-    const estatus = t.estatus;
+  // ✅ LÓGICA DE ORDENAMIENTO (Handler)
+  const handleSort = (key: SortKey) => {
+    let direction: "asc" | "desc" = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+  };
 
-    const pasaEstatus =
-      // 🔥 CAMBIO CLAVE: Si es TOTAL, solo mostramos PENDIENTE y EN_REVISION (Ocultamos Concluidas y Canceladas)
-      (filtro.toUpperCase() === "TOTAL" && (estatus === "PENDIENTE" || estatus === "EN_REVISION")) ||
+  // Helper para mostrar ícono de ordenamiento
+  const getSortIcon = (columnKey: SortKey) => {
+    if (sortConfig.key !== columnKey) return <span className="text-gray-300 text-[10px] ml-1">⇅</span>;
+    return sortConfig.direction === "asc" ? <span className="text-blue-600 ml-1">↑</span> : <span className="text-blue-600 ml-1">↓</span>;
+  };
 
-      // Filtros individuales por si das clic a los botones específicos
-      (filtro.toUpperCase() === "PENDIENTES" && estatus === "PENDIENTE") ||
-      (filtro.toUpperCase() === "EN_REVISION" && estatus === "EN_REVISION") ||
-      (filtro.toUpperCase() === "CONCLUIDAS" && estatus === "CONCLUIDA");
+  // 9. 🚀 Lógica de filtro Y ORDENAMIENTO (UseMemo)
+  const tareasOrdenadas = useMemo(() => {
+    // 1. Filtrado
+    const filtradas = tareas.filter((t) => {
+      const estatus = t.estatus;
 
-    const pasaResponsable =
-      responsable === "Todos" ||
-      t.responsables.some((r) => r.id.toString() === responsable);
+      const pasaEstatus =
+        // 🔥 CAMBIO CLAVE: Si es TOTAL, solo mostramos PENDIENTE y EN_REVISION
+        (filtro.toUpperCase() === "TOTAL" && (estatus === "PENDIENTE" || estatus === "EN_REVISION")) ||
+        // Filtros individuales
+        (filtro.toUpperCase() === "PENDIENTES" && estatus === "PENDIENTE") ||
+        (filtro.toUpperCase() === "EN_REVISION" && estatus === "EN_REVISION") ||
+        (filtro.toUpperCase() === "CONCLUIDAS" && estatus === "CONCLUIDA");
 
-    const texto = `${t.tarea} ${t.observaciones || ""}`.toLowerCase();
-    const pasaBusqueda =
-      query.trim() === "" || texto.includes(query.toLowerCase());
+      const pasaResponsable =
+        responsable === "Todos" ||
+        t.responsables.some((r) => r.id.toString() === responsable);
 
-    return pasaEstatus && pasaResponsable && pasaBusqueda;
-  });
+      const texto = `${t.tarea} ${t.observaciones || ""}`.toLowerCase();
+      const pasaBusqueda =
+        query.trim() === "" || texto.includes(query.toLowerCase());
+
+      return pasaEstatus && pasaResponsable && pasaBusqueda;
+    });
+
+    // 2. Ordenamiento
+    if (sortConfig) {
+      filtradas.sort((a, b) => {
+        let valA: any = "";
+        let valB: any = "";
+
+        switch (sortConfig.key) {
+          case "asignador":
+            valA = (a.asignador?.nombre || "").toLowerCase();
+            valB = (b.asignador?.nombre || "").toLowerCase();
+            break;
+          case "responsables":
+            // Ordenamos por el string unido de nombres
+            valA = a.responsables.map(r => r.nombre).join("").toLowerCase();
+            valB = b.responsables.map(r => r.nombre).join("").toLowerCase();
+            break;
+          case "urgencia":
+            // Pesos: ALTA(3) > MEDIA(2) > BAJA(1)
+            const weights = { ALTA: 3, MEDIA: 2, BAJA: 1 };
+            valA = weights[a.urgencia] || 0;
+            valB = weights[b.urgencia] || 0;
+            // Para números, retornamos directamente la diferencia
+            return sortConfig.direction === "asc" ? valA - valB : valB - valA;
+          case "fechaRegistro":
+            // ✅ FIX: Validación de null/undefined para fechaRegistro
+            valA = a.fechaRegistro ? new Date(a.fechaRegistro).getTime() : 0;
+            valB = b.fechaRegistro ? new Date(b.fechaRegistro).getTime() : 0;
+            return sortConfig.direction === "asc" ? valA - valB : valB - valA;
+          case "fechaLimite":
+            valA = getFechaLimiteEfectiva(a);
+            valB = getFechaLimiteEfectiva(b);
+            return sortConfig.direction === "asc" ? valA - valB : valB - valA;
+          case "estatus":
+            valA = a.estatus;
+            valB = b.estatus;
+            break;
+          default:
+            return 0;
+        }
+
+        // Comparación por defecto para strings
+        if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return filtradas;
+  }, [tareas, filtro, responsable, query, sortConfig]);
 
   if (loading) {
     return (
@@ -280,44 +367,72 @@ const TablaAdmin: React.FC<TablaProps> = ({
 
   return (
     <div className="w-full text-sm font-sans pb-0.5">
-      {tareasFiltradas.length > 0 ? (
+      {tareasOrdenadas.length > 0 ? (
         <>
           {/* 💻 VISTA ESCRITORIO */}
           <div className="hidden lg:block max-h-[calc(100vh-280px)] overflow-y-auto overflow-x-auto rounded-lg border border-gray-300">
             <table className="w-full text-sm font-sans">
               <thead className="bg-gray-100 text-black text-xs uppercase sticky top-0 z-20 shadow-inner">
                 <tr>
+                  {/* TAREA - SIN FILTRO */}
                   <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[18%] break-words">
                     Tarea
                   </th>
-                  {/* 🚀 NUEVA COLUMNA DE IMAGEN */}
+                  {/* IMG - SIN FILTRO */}
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[4%]">
                     Img
                   </th>
+                  {/* OBSERVACIONES - SIN FILTRO */}
                   <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[12%] break-words">
                     Observaciones
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">
-                    Asignado por
+                  {/* ASIGNADO POR - CON FILTRO */}
+                  <th
+                    className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%] cursor-pointer hover:bg-gray-200 transition select-none"
+                    onClick={() => handleSort("asignador")}
+                  >
+                    Asignado por {getSortIcon("asignador")}
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[13%]">
-                    Responsable(s)
+                  {/* RESPONSABLE(S) - CON FILTRO */}
+                  <th
+                    className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[13%] cursor-pointer hover:bg-gray-200 transition select-none"
+                    onClick={() => handleSort("responsables")}
+                  >
+                    Responsable(s) {getSortIcon("responsables")}
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[6%]">
-                    Prioridad
+                  {/* PRIORIDAD - CON FILTRO */}
+                  <th
+                    className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[6%] cursor-pointer hover:bg-gray-200 transition select-none"
+                    onClick={() => handleSort("urgencia")}
+                  >
+                    Prioridad {getSortIcon("urgencia")}
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[6%]">
-                    Registro
+                  {/* REGISTRO - CON FILTRO */}
+                  <th
+                    className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[6%] cursor-pointer hover:bg-gray-200 transition select-none"
+                    onClick={() => handleSort("fechaRegistro")}
+                  >
+                    Registro {getSortIcon("fechaRegistro")}
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[10%]">
-                    Fecha límite / Historial
+                  {/* FECHA LIMITE / HISTORIAL - CON FILTRO */}
+                  <th
+                    className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[10%] cursor-pointer hover:bg-gray-200 transition select-none"
+                    onClick={() => handleSort("fechaLimite")}
+                  >
+                    Fecha límite / Historial {getSortIcon("fechaLimite")}
                   </th>
+                  {/* CONCLUSION - SIN FILTRO */}
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">
                     Conclusión
                   </th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">
-                    Estatus
+                  {/* ESTATUS - CON FILTRO */}
+                  <th
+                    className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%] cursor-pointer hover:bg-gray-200 transition select-none"
+                    onClick={() => handleSort("estatus")}
+                  >
+                    Estatus {getSortIcon("estatus")}
                   </th>
+                  {/* ACCIONES - SIN FILTRO */}
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">
                     Acciones
                   </th>
@@ -325,7 +440,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
               </thead>
 
               <tbody className="divide-y divide-gray-200">
-                {tareasFiltradas.map((row: Tarea) => {
+                {tareasOrdenadas.map((row: Tarea) => {
                   const hoy = new Date();
 
                   // Lógica de fechas (asumida)
@@ -381,7 +496,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                             title={`Ver ${row.imagenes.length} imagen(es)`}
                             className="inline-flex items-center justify-center w-6 h-6 rounded-full
                                       bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white
-                                      transition-colors duration-200 shadow-sm"
+                                      transition-colors duration-200 shadow-sm cursor-pointer"
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -558,17 +673,19 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </td>
 
                       {/* Columna Acciones */}
-                      {user && (
-                        <Acciones
-                          tarea={row}
-                          user={user}
-                          onCompletar={() => abrirModalAceptar(row)}
-                          onEditar={() => abrirModalEditar(row)}
-                          onBorrar={() => abrirModalEliminar(row)}
-                          // ✅ NUEVO: Pasamos la función de revisar
-                          onRevisar={() => handleRevisar(row)}
-                        />
-                      )}
+                      <td className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">
+                        {user && (
+                          <Acciones
+                            tarea={row}
+                            user={user}
+                            onCompletar={() => abrirModalAceptar(row)}
+                            onEditar={() => abrirModalEditar(row)}
+                            onBorrar={() => abrirModalEliminar(row)}
+                            // ✅ NUEVO: Pasamos la función de revisar
+                            onRevisar={() => handleRevisar(row)}
+                          />
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -578,7 +695,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
 
           {/* 📱 VISTA MÓVIL */}
           <div className="grid lg:hidden grid-cols-1 md:grid-cols-2 gap-3 p-2 items-start">
-            {tareasFiltradas.map((row: Tarea) => {
+            {tareasOrdenadas.map((row: Tarea) => {
               // Lógica de fechas (similar a la de escritorio)
               const hoy = new Date();
               hoy.setHours(0, 0, 0, 0);
@@ -833,7 +950,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     <div className="mt-3 pt-3 border-t border-gray-200 flex justify-center">
                       <button
                         onClick={() => setModalImagenes(row.imagenes)}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer"
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -854,7 +971,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     {puedeCancelar && (
                       <button
                         onClick={() => abrirModalEliminar(row)}
-                        className="flex flex-col items-center text-red-700 hover:text-red-800 transition"
+                        className="flex flex-col items-center text-red-700 hover:text-red-800 transition cursor-pointer"
                         title="Cancelar tarea"
                       >
                         <svg
@@ -875,7 +992,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     {puedeEditar && (
                       <button
                         onClick={() => abrirModalEditar(row)}
-                        className="flex flex-col items-center text-amber-700 hover:text-amber-800 transition"
+                        className="flex flex-col items-center text-amber-700 hover:text-amber-800 transition cursor-pointer"
                         title="Editar tarea"
                       >
                         <svg
@@ -896,7 +1013,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     {row.estatus === "PENDIENTE" && puedeValidar && (
                       <button
                         onClick={() => abrirModalAceptar(row)}
-                        className="flex flex-col items-center text-green-700 hover:text-green-800 transition"
+                        className="flex flex-col items-center text-green-700 hover:text-green-800 transition cursor-pointer"
                         title="Marcar como completada"
                       >
                         <svg
@@ -917,7 +1034,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     {row.estatus === "EN_REVISION" && puedeValidar ? (
                       <button
                         onClick={() => handleRevisar(row)}
-                        className="flex flex-col items-center text-indigo-700 hover:text-indigo-800 transition"
+                        className="flex flex-col items-center text-indigo-700 hover:text-indigo-800 transition cursor-pointer"
                         title="Revisar evidencia"
                       >
                         <svg
@@ -932,53 +1049,18 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         </span>
                       </button>
                     ) : null}
-
-                    {row.estatus === "CONCLUIDA" && (
-                      <div
-                        className="flex flex-col items-center text-green-700 opacity-80"
-                        title="Tarea completada"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 -960 960 960"
-                          className="w-6 h-6 text-green-700"
-                          fill="currentColor"
-                        >
-                          <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q8 0 15 1.5t14 4.5l-74 74H200v560h560v-266l80-80v346q0 33-23.5 56.5T760-120H200Zm261-160L235-506l56-56 170 170 367-367 57 55-424 424Z" />
-                        </svg>
-                        <span className="text-[11px] font-semibold">Hecha</span>
-                      </div>
-                    )}
-                    {row.estatus === "CANCELADA" && (
-                      <div
-                        className="flex flex-col items-center text-red-700 opacity-80"
-                        title="Tarea cancelada"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          className="w-6 h-6 text-red-700"
-                        >
-                          <path d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" />
-                        </svg>
-                        <span className="text-[11px] font-semibold">
-                          Cancelada
-                        </span>
-                      </div>
-                    )}
                   </div>
                 </div>
               );
             })}
           </div>
 
-          {/* 🪟 Modales */}
           {openModalEditar && tareaSeleccionada && (
             <ModalEditar
               onClose={() => setOpenModalEditar(false)}
-              tarea={tareaSeleccionada}
-              onTareaActualizada={onRecargarTareas}
+              tarea={tareaSeleccionada}  // ✅ Asegúrate que no sea null
+              // ✅ FIX: Corregido el nombre de la prop
+              onSuccess={onRecargarTareas}
               user={user}
             />
           )}

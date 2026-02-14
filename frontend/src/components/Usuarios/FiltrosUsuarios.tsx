@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import type { Usuario } from "../../types/usuario";
 
 interface FiltrosProps {
@@ -8,8 +8,18 @@ interface FiltrosProps {
 
 const FiltrosUsuarios: React.FC<FiltrosProps> = ({
   onBuscarChange,
-  // user, // Prop disponible por si quieres mostrar algo específico del usuario logueado
 }) => {
+  const [localValue, setLocalValue] = useState("");
+
+  // Debounce: Espera 500ms después de que el usuario deja de escribir para avisar al padre
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onBuscarChange(localValue);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [localValue, onBuscarChange]);
+
   return (
     <div className="w-full bg-white font-sans border-b border-gray-200">
 
@@ -23,8 +33,9 @@ const FiltrosUsuarios: React.FC<FiltrosProps> = ({
           </div>
           <input
             type="text"
-            placeholder="Buscar usuario por nombre o username..."
-            onChange={(e) => onBuscarChange(e.target.value)}
+            value={localValue}
+            placeholder="Buscar por nombre o username..."
+            onChange={(e) => setLocalValue(e.target.value)}
             className="block w-full pl-10 pr-4 py-2.5 text-sm text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:bg-white transition-all outline-none"
           />
         </div>
@@ -41,8 +52,9 @@ const FiltrosUsuarios: React.FC<FiltrosProps> = ({
             </div>
             <input
               type="text"
+              value={localValue}
               placeholder="Buscar usuario..."
-              onChange={(e) => onBuscarChange(e.target.value)}
+              onChange={(e) => setLocalValue(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
             />
           </div>
