@@ -1,26 +1,35 @@
+// 📍 src/components/Admin/FechasAdmin.tsx
+
 import React, { useState, useEffect } from "react";
-import { api } from "../data/api";
+import { tareasService } from "../../api/tareas.service"; // ✅ Usamos el servicio centralizado
 
 interface FechasProps {
   onChange?: (year: number, month: number) => void;
 }
 
-const Fechas: React.FC<FechasProps> = ({ onChange }) => {
-  const [tareas, setTareas] = useState<any[]>([]);
-  const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [month, setMonth] = useState<number>(0);
+const FechasAdmin: React.FC<FechasProps> = ({ onChange }) => {
+  const currentDate = new Date();
+
+  // ✅ Inicializamos con Año y Mes actuales
+  const [year, setYear] = useState<number>(currentDate.getFullYear());
+  const [month, setMonth] = useState<number>(currentDate.getMonth() + 1); // +1 porque getMonth() es 0-11
+
   const [years, setYears] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // 🔹 Cargar tareas desde backend (solo una vez)
+  // 🔹 Cargar tareas desde backend para extraer años disponibles
   useEffect(() => {
-    const fetchTareas = async () => {
+    const fetchFechas = async () => {
       try {
-        const res = await api.get("/tareas");
-        setTareas(res.data);
+        setLoading(true);
+        // Pedimos un límite alto para analizar todo el historial de fechas
+        const response = await tareasService.getAll({ limit: 2000 });
+        const tareasData = response.data;
 
-        // Extrae años únicos de las fechas ISO
+        // Extrae años únicos
         const uniqueYears = new Set<number>();
-        res.data.forEach((t: any) => {
+
+        tareasData.forEach((t: any) => {
           const fechas = [
             t.fechaRegistro,
             t.fechaLimite,
@@ -40,41 +49,46 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
         const yearsArray = Array.from(uniqueYears).sort((a, b) => a - b);
         setYears(yearsArray);
 
-        // Si el año actual no está en los datos, toma el más cercano
-        if (
-          !yearsArray.includes(new Date().getFullYear()) &&
-          yearsArray.length > 0
-        ) {
+        // Lógica inteligente: Si el año actual no está en la BD, selecciona el más cercano
+        const actualYear = new Date().getFullYear();
+
+        if (yearsArray.length > 0 && !yearsArray.includes(actualYear)) {
           const closest = yearsArray.reduce((prev, curr) =>
-            Math.abs(curr - new Date().getFullYear()) <
-            Math.abs(prev - new Date().getFullYear())
+            Math.abs(curr - actualYear) < Math.abs(prev - actualYear)
               ? curr
               : prev
           );
           setYear(closest);
+        } else if (yearsArray.includes(actualYear)) {
+          setYear(actualYear);
         }
+
       } catch (error) {
-        console.error("Error al cargar fechas:", error);
+        console.error("Error al cargar rango de fechas:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchTareas();
+    fetchFechas();
   }, []);
 
-  // 🔸 Dispara cambio cada vez que cambian year o month
+  // 🔸 Dispara el cambio al padre cada vez que cambian año o mes
   useEffect(() => {
-    onChange?.(year, month);
-  }, [year, month]);
+    if (!loading) {
+      onChange?.(year, month);
+    }
+  }, [year, month, loading]);
 
+  // ✅ CAMBIO CLAVE AQUÍ: Al cambiar año, reseteamos mes a 0 (Todos)
   const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newYear = parseInt(e.target.value);
     setYear(newYear);
-    onChange?.(newYear, month);
+    setMonth(0); // <--- Reseteo automático para evitar confusión
   };
 
   const handleMonthChange = (m: number) => {
     setMonth(m);
-    onChange?.(year, m);
   };
 
   const meses = [
@@ -91,6 +105,10 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
     { num: 11, name: "Noviembre" },
     { num: 12, name: "Diciembre" },
   ];
+
+  if (loading && years.length === 0) {
+    return <div className="text-center text-xs text-gray-400 py-2">Cargando fechas...</div>;
+  }
 
   return (
     <div className="flex flex-col items-center space-y-5 mb-8 font-sans w-full px-3">
@@ -116,6 +134,8 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
                 {y}
               </option>
             ))}
+            {/* Fallback por si la lista está vacía */}
+            {years.length === 0 && <option value={year}>{year}</option>}
           </select>
         </form>
       </div>
@@ -124,11 +144,10 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
       <div className="hidden sm:flex justify-center flex-wrap gap-2 mb-6 text-sm font-bold uppercase font-sans">
         <button
           onClick={() => handleMonthChange(0)}
-          className={`px-4 py-2 text-lg rounded-full transition-all duration-200 mr-7 ${
-            month === 0
+          className={`px-4 py-2 text-lg rounded-full transition-all duration-200 mr-7 ${month === 0
               ? "bg-amber-950 text-white shadow-md"
               : "hover:bg-gray-200 hover:text-amber-800 focus:bg-gray-200 focus:text-amber-800 transition"
-          }`}
+            }`}
         >
           Todos
         </button>
@@ -137,11 +156,10 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
           <button
             key={m.num}
             onClick={() => handleMonthChange(m.num)}
-            className={`px-4 py-2 text-lg rounded-full transition-all duration-200 ${
-              month === m.num
+            className={`px-4 py-2 text-lg rounded-full transition-all duration-200 ${month === m.num
                 ? "bg-amber-950 text-white shadow-md"
                 : "hover:bg-gray-200 hover:text-amber-800 focus:bg-gray-200 focus:text-amber-800 transition"
-            }`}
+              }`}
           >
             {m.name}
           </button>
@@ -162,11 +180,7 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
           <select
             id="year-mobile"
             value={year}
-            onChange={(e) => {
-              const newYear = parseInt(e.target.value);
-              setYear(newYear);
-              onChange?.(newYear, month);
-            }}
+            onChange={(e) => handleYearChange(e as any)}
             className="w-full appearance-none bg-white border border-gray-300 rounded-md py-2.5 pl-4 pr-10
                       text-[15px] font-medium text-gray-800 focus:border-amber-700 focus:ring-amber-700
                       focus:ring-2 shadow focus:shadow-md transition-all"
@@ -176,6 +190,7 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
                 {y}
               </option>
             ))}
+            {years.length === 0 && <option value={year}>{year}</option>}
           </select>
 
           <svg
@@ -206,11 +221,7 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
           <select
             id="month-mobile"
             value={month}
-            onChange={(e) => {
-              const newMonth = parseInt(e.target.value);
-              setMonth(newMonth);
-              onChange?.(year, newMonth);
-            }}
+            onChange={(e) => handleMonthChange(parseInt(e.target.value))}
             className="w-full appearance-none bg-white border border-gray-300 rounded-md py-2.5 pl-4 pr-10
                       text-[15px] font-medium text-gray-800 focus:border-amber-700 focus:ring-amber-700
                       focus:ring-2 shadow focus:shadow-md transition-all"
@@ -243,4 +254,4 @@ const Fechas: React.FC<FechasProps> = ({ onChange }) => {
   );
 };
 
-export default Fechas;
+export default FechasAdmin;

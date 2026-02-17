@@ -39,6 +39,23 @@ const PRIORIDADES_VALIDAS: { value: Urgencia; label: string }[] = [
   { value: "BAJA", label: "Baja" },
 ];
 
+export const MOTIVOS_CAMBIO_FECHA = [
+  "Solicitud del responsable",
+  "Cambio de prioridades",
+  "Ajuste de planificación",
+  "Ampliación del alcance de la tarea",
+  "Error en la estimación de tiempo inicial",
+  "Falta de información/recursos",
+  "Espera de autorización/Visto bueno",
+  "Retraso en tarea previa",
+  "Retraso imputable al responsable",
+  "Ausencia o baja médica del personal",
+  "Sobrecarga de trabajo asignado",
+  "Incidencia técnica o falla de equipo",
+  "Retraso por parte de terceros",
+  "Condiciones externas / Fuerza mayor",
+];
+
 const ModalEditar: React.FC<ModalEditarProps> = ({
   onClose,
   onSuccess,
@@ -55,10 +72,13 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   const [usarHora, setUsarHora] = useState(false);
   const [hora, setHora] = useState("");
 
+  // --- Estados para el motivo de cambio ---
+  const [fechaStringOriginal, setFechaStringOriginal] = useState("");
+  const [motivo, setMotivo] = useState("");
+
   // --- Estados de Archivos ---
   const [archivosNuevos, setArchivosNuevos] = useState<File[]>([]);
-  const [imagenesExistentes, setImagenesExistentes] = useState<any[]>([]); // { id, url, ... }
-  // 🚀 Estado para rastrear qué imágenes se deben eliminar al guardar
+  const [imagenesExistentes, setImagenesExistentes] = useState<any[]>([]);
   const [imagenesAEliminar, setImagenesAEliminar] = useState<number[]>([]);
 
   const [fileError, setFileError] = useState("");
@@ -68,7 +88,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
   const [listaInvitados, setListaInvitados] = useState<Usuario[]>([]);
   const [loadingUsuarios, setLoadingUsuarios] = useState(true);
-  // 🚨 Estado para controlar error de carga de usuarios
   const [errorUsuarios, setErrorUsuarios] = useState(false);
 
   // --- Estado para búsqueda ---
@@ -81,7 +100,12 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   // Determinar si es Kaizen basado en el nombre de la tarea actual
   const isKaizen = tarea.tarea.trim().toUpperCase().startsWith("KAIZEN");
 
-  // ✅ NUEVA LÓGICA DE VISUALIZACIÓN DE NOMBRES
+  // Lógica de comparación de fecha para saber si pedir motivo
+  const fechaHaCambiado = useMemo(() => {
+    if (!fecha || !fechaStringOriginal) return false;
+    return fecha !== fechaStringOriginal;
+  }, [fecha, fechaStringOriginal]);
+
   const getDisplayName = (userToDisplay: Usuario): string => {
     if (isKaizen) {
       return userToDisplay.nombre;
@@ -95,13 +119,12 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     return userToDisplay.nombre;
   };
 
-  // ✅ NUEVA LÓGICA DE COLORES (Azul y Rosa)
   const getRoleColorClass = (userToDisplay: Usuario): string => {
     if (userToDisplay.rol === Rol.ENCARGADO) {
-      return "text-blue-700 font-semibold"; // Azul Supervisión
+      return "text-blue-700 font-semibold";
     }
     if (userToDisplay.rol === Rol.USUARIO) {
-      return "text-rose-700 font-semibold"; // Rosa Operativo
+      return "text-rose-700 font-semibold";
     }
     return "text-gray-800";
   };
@@ -113,22 +136,20 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       setComentario(tarea.observaciones || "");
       setPrioridad(tarea.urgencia);
       setImagenesExistentes(tarea.imagenes || []);
-      setImagenesAEliminar([]); // Resetear lista de eliminación
+      setImagenesAEliminar([]);
 
-      // Mapear responsables actuales a IDs
       const idsActuales = tarea.responsables?.map((r: any) => r.id || r.usuarioId) || [];
       setResponsablesIds(idsActuales);
 
-      // Parsear Fecha y Hora Límite
       if (tarea.fechaLimite) {
         const dateObj = new Date(tarea.fechaLimite);
-        setFecha(formatDateToInput(dateObj));
+        const fStr = formatDateToInput(dateObj);
+        setFecha(fStr);
+        setFechaStringOriginal(fStr);
 
-        // Si la hora NO es 23:59:59 (o cerca), asumimos que se especificó hora
         const h = dateObj.getHours();
         const m = dateObj.getMinutes();
 
-        // Criterio simple: si no es el final del día, activamos hora
         if (!(h === 23 && m === 59)) {
           setUsarHora(true);
           const hh = String(h).padStart(2, '0');
@@ -145,47 +166,38 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       if (!user) return;
 
       setLoadingUsuarios(true);
-      setErrorUsuarios(false); // Resetear error al iniciar
+      setErrorUsuarios(false);
       try {
-        // Obtenemos TODOS los usuarios (límite alto)
         const responseUsuarios = await usuariosService.getAll({ limit: 1000 });
         const todosLosUsuarios = responseUsuarios.data;
 
-        // Separamos en dos listas: Internos e Invitados
         const internos = todosLosUsuarios.filter(u => u.rol !== Rol.INVITADO);
         const invitados = todosLosUsuarios.filter(u => u.rol === Rol.INVITADO);
 
-        // ✅ REGLAS DE VISIBILIDAD (FILTRADO)
         let usuariosVisibles = [];
 
         if (user.rol === Rol.ADMIN) {
-          // Admin ve: ENCARGADOS y USUARIOS. (No ve otros Admins)
           usuariosVisibles = internos.filter(u =>
             u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
           );
         } else if (user.rol === Rol.ENCARGADO) {
-          // Encargado ve: ENCARGADOS y USUARIOS. (No ve Admins)
           usuariosVisibles = internos.filter(u =>
             u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
           );
         } else {
-          // Fallback para SuperAdmin u otros (ven todo)
           usuariosVisibles = internos;
         }
 
-        // ✅ REGLAS DE ORDENAMIENTO (SORTING)
         const sortedUsers = usuariosVisibles.sort((a, b) => {
           const rolA = a.rol;
           const rolB = b.rol;
 
-          // Si soy ENCARGADO, quiero ver primero a los USUARIOS (Operativos)
           if (user.rol === Rol.ENCARGADO) {
-            if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return -1; // Usuario antes
+            if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return -1;
             if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return 1;
           }
-          // Si soy ADMIN (o cualquier otro), jerarquía normal: ENCARGADO -> USUARIO
           else {
-            if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return -1; // Encargado antes
+            if (rolA === Rol.ENCARGADO && rolB === Rol.USUARIO) return -1;
             if (rolA === Rol.USUARIO && rolB === Rol.ENCARGADO) return 1;
           }
 
@@ -198,7 +210,7 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         );
       } catch (error) {
         console.error("Error al cargar usuarios:", error);
-        setErrorUsuarios(true); // 🚨 Activar estado de error
+        setErrorUsuarios(true);
       } finally {
         setLoadingUsuarios(false);
       }
@@ -207,35 +219,26 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     fetchUsuarios();
   }, [user]);
 
-  // 🔄 DETECTOR DE CAMBIOS (Para habilitar/deshabilitar botón)
+  // 🔄 DETECTOR DE CAMBIOS
   const hayCambios = useMemo(() => {
-    // 1. Strings básicos
     if (nombre !== tarea.tarea) return true;
     if ((comentario || "") !== (tarea.observaciones || "")) return true;
     if (prioridad !== tarea.urgencia) return true;
-
-    // 2. Imágenes
     if (archivosNuevos.length > 0) return true;
     if (imagenesAEliminar.length > 0) return true;
 
-    // 3. Responsables (Comparación de arrays ordenados)
     const idsOriginales = tarea.responsables?.map((r: any) => r.id || r.usuarioId) || [];
     const currentRespSorted = [...responsablesIds].sort((a, b) => a - b).join(',');
     const originalRespSorted = [...idsOriginales].sort((a, b) => a - b).join(',');
 
     if (currentRespSorted !== originalRespSorted) return true;
 
-    // 4. Fecha y Hora (Reconstruir lógica original)
     if (tarea.fechaLimite) {
       const dateObj = new Date(tarea.fechaLimite);
       const fechaOriginalStr = formatDateToInput(dateObj);
-
       const h = dateObj.getHours();
       const m = dateObj.getMinutes();
-      // Si es 23:59, asumimos que no usaba hora
       const usabaHoraOriginal = !(h === 23 && m === 59);
-
-      // Construir string de hora original "HH:MM"
       const hh = String(h).padStart(2, '0');
       const mm = String(m).padStart(2, '0');
       const horaOriginalStr = usabaHoraOriginal ? `${hh}:${mm}` : "";
@@ -244,7 +247,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       if (usarHora !== usabaHoraOriginal) return true;
       if (usarHora && hora !== horaOriginalStr) return true;
     } else {
-      // Si no había fecha antes y ahora sí
       if (fecha) return true;
     }
 
@@ -262,8 +264,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     tarea
   ]);
 
-
-  // --- Validaciones ---
   const isDateValid = () => {
     if (!fecha) return false;
     const dateObj = new Date(fecha);
@@ -272,6 +272,20 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
 
   const isTimeValidForToday = () => {
     if (!usarHora || !hora || !fecha) return true;
+
+    if (tarea.fechaLimite) {
+      const dateObj = new Date(tarea.fechaLimite);
+      const fechaOriginal = formatDateToInput(dateObj);
+      const h = dateObj.getHours();
+      const m = dateObj.getMinutes();
+      const hh = String(h).padStart(2, '0');
+      const mm = String(m).padStart(2, '0');
+      const horaOriginal = `${hh}:${mm}`;
+
+      if (fecha === fechaOriginal && hora === horaOriginal) {
+        return true;
+      }
+    }
 
     const now = new Date();
     const fechaSeleccionada = new Date(`${fecha}T00:00:00`);
@@ -293,7 +307,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     return true;
   };
 
-  // --- Manejadores de Archivos (Nuevos) ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFileError("");
@@ -304,14 +317,12 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       const archivoPesado = nuevos.find(file => file.size > TAMANO_MAXIMO);
 
       if (archivoPesado) {
-        // Error se muestra inline abajo
         setFileError(`⚠️ El archivo "${archivoPesado.name}" pesa más de 20MB.`);
         e.target.value = "";
         return;
       }
 
       if (totalActual > MAX_FILES_LIMIT) {
-        // Error se muestra inline abajo
         setFileError(`Límite total de ${MAX_FILES_LIMIT} archivos.`);
         e.target.value = "";
         return;
@@ -327,12 +338,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     setFileError("");
   };
 
-  // --- Manejador de Eliminación Visual de Imágenes Existentes ---
   const handleMarcarImagenParaBorrar = (imagenId: number) => {
-    // 🚀 CAMBIO CLAVE: No llamamos a la API, solo actualizamos el estado local
     setImagenesExistentes(prev => prev.filter(img => img.id !== imagenId));
     setImagenesAEliminar(prev => [...prev, imagenId]);
-    // Sin toasts ni alerts
   };
 
   const handleToggleResponsable = (id: number) => {
@@ -352,12 +360,10 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     }
   };
 
-  // --- Submit (Actualizar) ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
 
-    // Validaciones
     const nombreValido = nombre && nombre.trim().length > 0 && nombre.length <= MAX_NOMBRE_LENGTH;
     const responsablesValidos = responsablesIds.length > 0;
     const prioridadValida = !!prioridad;
@@ -365,6 +371,7 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     const comentarioValido = comentario && comentario.trim().length > 0 && comentario.length <= MAX_OBSERVACIONES_LENGTH;
     const horaValida = !usarHora || (usarHora && !!hora);
     const tiempoValido = isTimeValidForToday();
+    const motivoValido = !fechaHaCambiado || (fechaHaCambiado && motivo.trim().length > 0);
 
     if (
       !nombreValido ||
@@ -373,19 +380,17 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       !fechaValida ||
       !comentarioValido ||
       !horaValida ||
-      !tiempoValido
+      !tiempoValido ||
+      !motivoValido
     ) {
-      // Si hay errores, no hacemos nada (los mensajes se muestran inline)
       return;
     }
 
-    // 🔒 Validación extra: Si no hay cambios, no hacemos nada (aunque el botón esté disabled)
     if (!hayCambios) return;
 
     setLoading(true);
 
     try {
-      // Construir fecha límite
       let fechaLimiteFinal: Date;
       if (usarHora && hora) {
         fechaLimiteFinal = new Date(`${fecha}T${hora}:00`);
@@ -393,16 +398,11 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         fechaLimiteFinal = new Date(`${fecha}T23:59:59`);
       }
 
-      // 1. Eliminar imágenes marcadas para borrar (si las hay)
       if (imagenesAEliminar.length > 0) {
-        console.log(`🗑️ Eliminando ${imagenesAEliminar.length} imágenes...`);
-        // Ejecutamos las promesas de eliminación en paralelo
         await Promise.all(imagenesAEliminar.map(id => tareasService.deleteImage(id)));
       }
 
-      // 2. Subir imágenes nuevas (si las hay)
       if (archivosNuevos.length > 0) {
-        console.log(`📤 Subiendo ${archivosNuevos.length} nuevas imágenes...`);
         const formData = new FormData();
         archivosNuevos.forEach((file) => {
           formData.append("imagenes", file);
@@ -410,17 +410,31 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         await tareasService.uploadImage(tarea.id, formData);
       }
 
-      // 3. Actualizar datos de la tarea
-      const updatePayload = {
-        tarea: nombre,
-        observaciones: comentario,
-        urgencia: prioridad,
-        fechaLimite: fechaLimiteFinal.toISOString(),
-        responsables: responsablesIds,
-      };
+      if (fechaHaCambiado) {
+        const payloadDatos = {
+          tarea: nombre,
+          observaciones: comentario,
+          urgencia: prioridad,
+          responsables: responsablesIds,
+        };
+        await tareasService.update(tarea.id, payloadDatos as any);
 
-      console.log("📨 Actualizando datos de tarea...", updatePayload);
-      await tareasService.update(tarea.id, updatePayload as any);
+        const payloadHistorial = {
+          motivo: motivo,
+          nuevaFecha: fechaLimiteFinal.toISOString(),
+          fechaAnterior: tarea.fechaLimite,
+        };
+        await tareasService.createHistorial(tarea.id, payloadHistorial as any);
+      } else {
+        const updatePayload = {
+          tarea: nombre,
+          observaciones: comentario,
+          urgencia: prioridad,
+          fechaLimite: fechaLimiteFinal.toISOString(),
+          responsables: responsablesIds,
+        };
+        await tareasService.update(tarea.id, updatePayload as any);
+      }
 
       toast.success("Tarea actualizada correctamente.");
       onSuccess();
@@ -437,7 +451,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     u.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
 
-  // Calculamos el total considerando las que quedan (existentes - a eliminar + nuevas)
   const totalArchivos = imagenesExistentes.length + archivosNuevos.length;
   const isMaxFilesReached = totalArchivos >= MAX_FILES_LIMIT;
 
@@ -467,7 +480,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
           <div className="flex-grow overflow-y-auto p-6">
             <div className="flex flex-col gap-4 text-gray-800">
 
-              {/* Grid 3 Columnas */}
               <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-6">
 
                 {/* COL 1: Info Básica */}
@@ -570,7 +582,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                           </label>
                         ))}
 
-                        {/* 🚨 Mensaje de error o lista vacía */}
                         {usuariosFiltrados.length === 0 && (
                           <p className={`text-center text-sm py-4 ${errorUsuarios ? "text-red-600 font-bold" : "text-gray-500"}`}>
                             {errorUsuarios
@@ -615,25 +626,19 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                     </label>
                     <input id="edit-file-upload" type="file" multiple disabled={loading || isMaxFilesReached} onChange={handleFileChange} className="hidden" />
 
-                    {/* Mensaje de error tipo texto abajo del input */}
                     {fileError && <p className="text-red-600 text-xs mt-1">{fileError}</p>}
 
-                    {/* Lista de Imágenes (Existentes + Nuevas) */}
                     <div className="mt-4 space-y-2 max-h-48 overflow-y-auto pr-2">
-
-                      {/* Imágenes de BD */}
                       {imagenesExistentes.map((img) => (
                         <div key={img.id} className="flex items-center justify-between bg-white border border-gray-200 p-2 rounded-md">
                           <img src={img.url} alt="Existente" className="w-10 h-10 object-cover rounded-md" />
                           <span className="text-xs text-gray-500 mx-2">Guardada</span>
-                          {/* 🚀 CAMBIO CLAVE: Usamos la nueva función handleMarcarImagenParaBorrar */}
                           <button type="button" onClick={() => handleMarcarImagenParaBorrar(img.id)} className="p-1 text-red-600 hover:bg-red-100 rounded-full">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" /></svg>
                           </button>
                         </div>
                       ))}
 
-                      {/* Imágenes Nuevas */}
                       {archivosNuevos.map((file, index) => (
                         <div key={index} className="flex items-center justify-between bg-gray-100 p-2 rounded-md">
                           <img src={URL.createObjectURL(file)} alt={file.name} className="w-10 h-10 object-cover rounded-md" onLoad={(e) => URL.revokeObjectURL(e.currentTarget.src)} />
@@ -754,12 +759,28 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                     {submitted && usarHora && hora && !isTimeValidForToday() && (
                       <p className="text-red-600 text-xs mt-1">La hora no puede ser anterior a la actual.</p>
                     )}
-                    <p className="text-[10px] text-gray-400 mt-1 italic">
-                      {usarHora
-                        ? "Se requiere entrega antes de la hora exacta."
-                        : "Se considera 'A Tiempo' hasta el final del día (23:59)."}
-                    </p>
                   </div>
+
+                  {/* Motivo de cambio (Auditoría) */}
+                  {fechaHaCambiado && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-md animate-fade-in">
+                      <label className="block text-sm font-bold text-red-800 mb-1">
+                        Motivo del Cambio de Fecha *
+                      </label>
+                      <select
+                        value={motivo}
+                        onChange={(e) => setMotivo(e.target.value)}
+                        required
+                        className={`w-full border rounded p-2 bg-white text-sm focus:outline-none ${submitted && !motivo.trim() ? 'border-red-500' : 'border-red-300'}`}
+                      >
+                        <option value="">-- Seleccione un motivo --</option>
+                        {MOTIVOS_CAMBIO_FECHA.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                      {submitted && !motivo.trim() && (
+                        <p className="text-red-600 text-[10px] font-bold mt-1">El motivo es obligatorio para reprogramar.</p>
+                      )}
+                    </div>
+                  )}
 
                 </div>
               </div>
@@ -772,7 +793,6 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
             </button>
             <button
               type="submit"
-              // 🔒 Deshabilitar si está cargando o NO HAY CAMBIOS
               disabled={loading || !hayCambios}
               className={`font-semibold px-4 py-2 rounded-md transition-all
                 ${loading || !hayCambios

@@ -1,70 +1,53 @@
 // 📍 src/components/Admin/FiltrosAdmin.tsx
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { usuariosService } from "../../api/usuarios.service";
 import type { Usuario } from "../../types/usuario";
+
+// Importamos los dos componentes nuevos
+import FiltrosAdminDesktop from "./FiltrosAdminDesktop";
+import FiltrosAdminMobile from "./FiltrosAdminMobile";
 
 interface FiltrosProps {
   onResponsableChange: (usuarioId: string) => void;
   onBuscarChange?: (query: string) => void;
   user: Usuario | null;
-  // onKaizenChange?: (isKaizen: boolean) => void; // 🙈 KAIZEN COMENTADO
+  // ✅ CORRECCIÓN: Agregadas las props faltantes aquí
+  verCanceladas: boolean;
+  onToggleCanceladas: () => void;
 }
 
 const FiltrosAdmin: React.FC<FiltrosProps> = ({
   onResponsableChange,
   onBuscarChange,
-  // onKaizenChange, // 🙈 KAIZEN COMENTADO
   user,
+  // ✅ CORRECCIÓN: Recibimos las props aquí
+  verCanceladas,
+  onToggleCanceladas,
 }) => {
   // --- Estados ---
   const [selectedUsuarioId, setSelectedUsuarioId] = useState("Todos"); // ID seleccionado
   const [usuarios, setUsuarios] = useState<Usuario[]>([]); // Objetos Usuario completos
   const [searchText, setSearchText] = useState(""); // ✅ Estado para el texto del buscador
-
-  // const [isKaizenActive, setIsKaizenActive] = useState(false); // 🙈 KAIZEN COMENTADO
-
   const [loading, setLoading] = useState(true);
 
-  // --- UI ---
-  const [responsableOpen, setResponsableOpen] = useState(false);
-  const responsableRef = useRef<HTMLDivElement>(null);
-  const [mostrarFiltrosMovil, setMostrarFiltrosMovil] = useState(false);
-
-  /* 🙈 KAIZEN COMENTADO - Lógica de Permisos
-  const canShowKaizen =
-    user?.rol === "SUPER_ADMIN" ||
-    ((user?.rol === "ADMIN" || user?.rol === "ENCARGADO") &&
-      user?.departamento?.nombre?.toUpperCase().includes("CALIDAD"));
-  */
-
-  // 1. Cargar Usuarios (Dinámico: Todos vs Invitados)
+  // 1. Cargar Usuarios
   useEffect(() => {
     const fetchUsuarios = async () => {
       if (!user) return;
       try {
         setLoading(true);
-
-        /* 🙈 KAIZEN COMENTADO - Lógica de carga condicional
-        const data = isKaizenActive
-          ? await usuariosService.getInvitados()
-          : await usuariosService.getAll();
-        */
-
-        // 🚀 CAMBIO: Manejo de la nueva respuesta paginada del servicio
         // Pedimos un límite alto (1000) para llenar el Select con todos los usuarios
-        // y asegurar que el filtro de Responsable muestre a todos.
         const response = await usuariosService.getAll({ limit: 1000 });
 
         let todosLosUsuarios: Usuario[] = [];
-        // Verificación defensiva por si getAll devuelve array o { data: [] }
         if (Array.isArray(response)) {
           todosLosUsuarios = response;
         } else if (response && response.data && Array.isArray(response.data)) {
           todosLosUsuarios = response.data;
         }
 
-        // Filtramos para que SOLO aparezcan usuarios internos (No Invitados) para la vista normal
+        // Filtramos para que SOLO aparezcan usuarios internos (No Invitados)
         const data = todosLosUsuarios.filter(u => u.rol !== "INVITADO");
 
         const listaOrdenada = data.sort((a, b) =>
@@ -80,34 +63,20 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
     };
 
     fetchUsuarios();
-  }, [user /*, isKaizenActive */]); // 🙈 Quitamos isKaizenActive de dependencias
+  }, [user]);
 
-  // 2. Click Outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        responsableRef.current &&
-        !responsableRef.current.contains(event.target as Node)
-      ) {
-        setResponsableOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  // --- HANDLERS (Compartidos para Movil y Desktop) ---
 
-  // --- HANDLERS ---
-
-  // Helper para mostrar el nombre aunque tengamos el ID seleccionado
-  const getSelectedUsuarioNombre = () => {
+  // Helper para mostrar el nombre resumido (Primer Nombre)
+  const getSelectedUsuarioNombreResumido = () => {
     if (selectedUsuarioId === "Todos") return "Todos";
     const usuario = usuarios.find((u) => u.id.toString() === selectedUsuarioId);
-    return usuario ? usuario.nombre : "Desconocido";
+    if (!usuario) return "Desconocido";
+    return usuario.nombre.split(" ")[0];
   };
 
   const handleUsuarioSelect = (id: string) => {
     setSelectedUsuarioId(id);
-    setResponsableOpen(false);
     onResponsableChange(id);
   };
 
@@ -117,375 +86,49 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
     onResponsableChange("Todos");
   };
 
-  // ✅ NUEVO: Handler para cambio de texto en buscador
   const handleSearchChange = (val: string) => {
     setSearchText(val);
-    // Debounce manual o actualización directa. Directa por ahora para coincidir con Admin.tsx
     if (onBuscarChange) onBuscarChange(val);
   };
 
-  // ✅ NUEVO: Handler para limpiar el buscador
   const handleLimpiarBusqueda = () => {
     setSearchText("");
     if (onBuscarChange) onBuscarChange("");
   };
 
-
-  /* 🙈 KAIZEN COMENTADO - Toggle
-  const toggleKaizen = () => {
-    const newState = !isKaizenActive;
-    setIsKaizenActive(newState);
-    if (onKaizenChange) onKaizenChange(newState);
-
-    if (newState) {
-      setSelectedUsuarioId("Todos");
-      onResponsableChange("Todos");
-      setResponsableOpen(false);
-    }
-  };
-  */
-
-  const handleLimpiarTodo = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setSelectedUsuarioId("Todos");
-    onResponsableChange("Todos");
-    // setIsKaizenActive(false); // 🙈 KAIZEN COMENTADO
-    // if (onKaizenChange) onKaizenChange(false); // 🙈 KAIZEN COMENTADO
-  };
-
   return (
     <div className="w-full bg-white font-sans border-b border-gray-200">
-      {/* ============================================================
-          💻 VISTA ESCRITORIO (>= 1024px) - ADMIN
-          ============================================================ */}
-      <div className="hidden lg:flex lg:items-center lg:justify-between gap-4 p-4 bg-white">
-        {/* 🔹 SECCIÓN IZQUIERDA: FILTROS */}
-        <div className="flex items-center gap-3" ref={responsableRef}>
-          {/* 1. Dropdown Responsable */}
-          <div className="relative">
-            <button
-              // 🔒 BLOQUEADO SI KAIZEN ESTÁ ACTIVO
-              // disabled={isKaizenActive || loading} // 🙈 ORIGINAL
-              disabled={loading} // ✅ MODIFICADO (Solo carga)
-              onClick={() => setResponsableOpen(!responsableOpen)}
-              className={`
-                flex items-center justify-between gap-2 px-4 py-2.5 
-                text-sm font-medium rounded-lg border shadow-sm transition-all
-                ${
-                  /* isKaizenActive || */ loading // 🙈 Condición simplificada
-                  ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed" // Estilo Deshabilitado
-                  : selectedUsuarioId !== "Todos"
-                    ? "bg-amber-50 border-amber-200 text-amber-900"
-                    : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
-                }
-              `}
-              type="button"
-            >
-              <span>
-                Responsable:{" "}
-                <strong
-                  className={
-                    /* !isKaizenActive && */ selectedUsuarioId !== "Todos" // 🙈 Condición simplificada
-                      ? "text-amber-700"
-                      : "font-normal"
-                  }
-                >
-                  {/* Helper para mostrar nombre basado en el ID seleccionado */}
-                  {loading ? "Cargando..." : getSelectedUsuarioNombre()}
-                </strong>
-              </span>
-              <svg
-                className={`w-4 h-4 transition-transform ${responsableOpen ? "rotate-180" : ""
-                  } text-gray-400`} // 🙈 Quitamos la condición de color isKaizenActive
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M19 9l-7 7-7-7"
-                ></path>
-              </svg>
-            </button>
 
-            {/* Menú Desplegable (Solo si NO está bloqueado) */}
-            {responsableOpen /* && !isKaizenActive */ && !loading && ( // 🙈 Condición simplificada
-              <div className="absolute top-full left-0 mt-2 w-60 bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden animate-fade-in">
-                <div className="max-h-72 overflow-y-auto py-1">
-                  <button
-                    onClick={() => handleUsuarioSelect("Todos")}
-                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors cur${selectedUsuarioId === "Todos"
-                      ? "bg-gray-50 font-semibold text-gray-900"
-                      : "text-gray-600"
-                      }`}
-                  >
-                    Todos
-                  </button>
-                  {/* Mapeamos objetos 'usuario' y usamos su ID */}
-                  {usuarios.map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => handleUsuarioSelect(u.id.toString())}
-                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition-colors border-t border-gray-50 ${selectedUsuarioId === u.id.toString()
-                        ? "bg-amber-50 font-semibold text-amber-900"
-                        : "text-gray-600"
-                        }`}
-                    >
-                      {u.nombre}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+      {/* VISTA ESCRITORIO */}
+      <FiltrosAdminDesktop
+        usuarios={usuarios}
+        loading={loading}
+        selectedUsuarioId={selectedUsuarioId}
+        nombreResumido={getSelectedUsuarioNombreResumido()}
+        searchText={searchText}
+        onUsuarioSelect={handleUsuarioSelect}
+        onLimpiarResponsable={handleLimpiarResponsable}
+        onSearchChange={handleSearchChange}
+        onLimpiarBusqueda={handleLimpiarBusqueda}
+        verCanceladas={verCanceladas}
+        onToggleCanceladas={onToggleCanceladas}
+      />
 
-          {/* 2. Botón Toggle KAIZEN (SOLO VISIBLE SI TIENE PERMISOS) */}
-          {/* 🙈 KAIZEN COMENTADO - Botón Desktop */}
+      {/* VISTA MOVIL */}
+      <FiltrosAdminMobile
+        usuarios={usuarios}
+        loading={loading}
+        selectedUsuarioId={selectedUsuarioId}
+        nombreResumido={getSelectedUsuarioNombreResumido()}
+        searchText={searchText}
+        onUsuarioSelect={handleUsuarioSelect}
+        onLimpiarResponsable={handleLimpiarResponsable}
+        onSearchChange={handleSearchChange}
+        onLimpiarBusqueda={handleLimpiarBusqueda}
+        verCanceladas={verCanceladas}
+        onToggleCanceladas={onToggleCanceladas}
+      />
 
-          {/* 3. Botón Limpiar TODO (Solo si hay responsable seleccionado) */}
-          {selectedUsuarioId !== "Todos" && (
-            <button
-              onClick={handleLimpiarTodo}
-              className="
-                group flex items-center gap-1.5 px-3 py-2 
-                text-sm font-medium text-gray-500 
-                hover:text-red-600 hover:bg-red-50 
-                rounded-lg transition-colors
-                cursor-pointer
-              "
-              title="Limpiar filtros"
-            >
-              <svg
-                className="w-4 h-4 transition-transform group-hover:rotate-90"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M6 18L18 6M6 6l12 12"
-                ></path>
-              </svg>
-              <span className="hidden xl:inline">Limpiar</span>
-            </button>
-          )}
-        </div>
-
-        {/* 🔹 SECCIÓN DERECHA: BUSCADOR */}
-        <div className="relative w-72">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg
-              className="w-5 h-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              ></path>
-            </svg>
-          </div>
-          <input
-            type="text"
-            placeholder="Buscar tarea..."
-            // ✅ NUEVO: Value controlado para la "tachita"
-            value={searchText}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="
-              block w-full pl-10 pr-10 py-2.5 
-              text-sm text-gray-900 
-              bg-gray-50 border border-gray-300 
-              rounded-lg 
-              focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:bg-white
-              transition-all outline-none
-            "
-          />
-          {/* ✅ NUEVO: Botón 'X' para limpiar búsqueda (solo si hay texto) */}
-          {searchText && (
-            <button
-              onClick={handleLimpiarBusqueda}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ============================================================
-          📱 VISTA MÓVIL (< 1024px) - ADMIN
-          ============================================================ */}
-      <div className="block lg:hidden p-3">
-        {/* Barra Superior: Buscador + Toggle */}
-        <div className="flex gap-2 items-center mb-3">
-          <div className="relative flex-grow">
-            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-              <svg
-                className="w-4 h-4 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Buscar..."
-              // ✅ NUEVO: Value controlado para la "tachita" en móvil
-              value={searchText}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full pl-9 pr-9 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
-            />
-            {/* ✅ NUEVO: Botón 'X' para limpiar búsqueda en móvil (solo si hay texto) */}
-            {searchText && (
-              <button
-                onClick={handleLimpiarBusqueda}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            )}
-          </div>
-          <button
-            onClick={() => setMostrarFiltrosMovil(!mostrarFiltrosMovil)}
-            // ✅ PINTAMOS el botón si hay filtros o texto de búsqueda
-            className={`p-2 rounded-lg border transition-colors ${mostrarFiltrosMovil || searchText !== ""
-              ? "bg-amber-100 border-amber-300 text-amber-800"
-              : "bg-white border-gray-300 text-gray-600"
-              }`}
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-              />
-            </svg>
-          </button>
-        </div>
-
-        {/* 🔽 PANEL DE FILTROS (Botones Chips) */}
-        {mostrarFiltrosMovil && (
-          <div className="flex gap-2 items-center animate-fade-in-down">
-            {/* 1. Filtro Responsable (Chip con Select Nativo) */}
-            <div
-              className={`
-                relative flex-1 flex items-center justify-between 
-                rounded-full border px-4 py-2 transition-colors
-                ${
-                  /* isKaizenActive || */ loading // 🙈 Condición simplificada
-                  ? "bg-gray-100 border-gray-200 text-gray-400" // 🔒 Estilo Deshabilitado
-                  : selectedUsuarioId !== "Todos"
-                    ? "bg-amber-100 border-amber-300 text-amber-900"
-                    : "bg-white border-gray-300 text-gray-700"
-                }
-              `}
-            >
-              {/* Texto visible (Usamos el helper para mostrar el nombre real) */}
-              {/* ✅ CAMBIO: Reducimos el tamaño de la fuente a text-sm para que no se vea tan grande */}
-              <span className="text-sm font-bold text-blue-900 truncate max-w-[150px]">
-                {loading ? "..." : getSelectedUsuarioNombre()}
-              </span>
-
-              {/* Icono */}
-              {selectedUsuarioId === "Todos" /* || isKaizenActive */ ? ( // 🙈 Condición simplificada
-                <svg
-                  className="w-4 h-4 flex-shrink-0 text-gray-400 ml-2" // 🙈 Quitamos condición de color Kaizen
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              ) : (
-                // Botón 'X' para borrar selección
-                <button
-                  onClick={handleLimpiarResponsable}
-                  className="z-20 bg-amber-200/50 hover:bg-amber-200 rounded-full p-0.5 text-amber-800 flex-shrink-0 ml-2"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              )}
-
-              {/* SELECT NATIVO INVISIBLE (ADMIN usa selectedUsuarioId y handleUsuarioSelect) */}
-              <select
-                disabled={/* isKaizenActive || */ loading} // 🔒 Bloqueo Lógico
-                value={selectedUsuarioId}
-                onChange={(e) => handleUsuarioSelect(e.target.value)}
-                className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
-              >
-                <option value="Todos">Todos</option>
-                {usuarios.map((u) => (
-                  <option key={u.id} value={u.id.toString()}>
-                    {u.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-          </div>
-        )}
-      </div>
     </div>
   );
 };
