@@ -30,7 +30,7 @@ interface TablaProps {
   user: Usuario | null; // 👈 2. Recibir 'user' como prop
 }
 
-// ✅ TIPOS PARA EL ORDENAMIENTO (Eliminada "observaciones")
+// ✅ TIPOS PARA EL ORDENAMIENTO
 type SortKey = "asignador" | "responsables" | "urgencia" | "fechaRegistro" | "fechaLimite" | "estatus";
 
 interface SortConfig {
@@ -54,15 +54,125 @@ const formatTimeAMPM = (date: Date): string => {
 }
 
 /**
- * 🛠️ Utilidad de fecha robusta para Visualización en Tabla (Desktop).
- * - Si es 23:59:59 -> Solo Fecha.
- * - Si tiene hora -> Fecha (arriba) + Hora (abajo).
+ * 🛠️ Componente Helper para Renderizar Fecha Límite con Iconos (EXISTENTE)
  */
-const formateaFechaDesktop = (fechaInput?: Date | string | null) => {
-  if (!fechaInput) return "";
+const RenderFechaLimite = ({ fecha, vencida }: { fecha?: Date | string | null, vencida: boolean }) => {
+  if (!fecha) return <span className="text-gray-400">—</span>;
 
+  const dateObj = typeof fecha === "string" ? new Date(fecha) : fecha;
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return <span className="text-gray-400">—</span>;
+
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const y = dateObj.getFullYear();
+  const fechaStr = `${d}/${m}/${y}`;
+
+  // Verificar hora para ver si mostramos el reloj
+  const h = dateObj.getHours();
+  const min = dateObj.getMinutes();
+  const sec = dateObj.getSeconds();
+
+  // Si es "Fin del día" (23:59:59), no mostramos la hora
+  const hasTime = !(h === 23 && min === 59 && sec >= 58);
+  const horaStr = hasTime ? formatTimeAMPM(dateObj) : null;
+
+  // Clases de color dinámicas
+  const textClass = vencida ? "text-red-600" : "text-gray-700";
+  const iconClass = vencida ? "text-red-600" : "text-gray-500";
+
+  return (
+    <div className={`flex flex-col items-center justify-center leading-tight ${vencida ? "font-bold" : ""}`}>
+      {/* Fila: Fecha */}
+      <div className={`flex items-center gap-1.5 ${textClass}`}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-4 h-4 ${iconClass}`} fill="currentColor">
+          <path d="M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Zm280 240q-17 0-28.5-11.5T440-440q0-17 11.5-28.5T480-480q17 0 28.5 11.5T520-440q0 17-11.5 28.5T480-400Zm-188.5-11.5Q280-423 280-440t11.5-28.5Q303-480 320-480t28.5 11.5Q360-457 360-440t-11.5 28.5Q337-400 320-400t-28.5-11.5ZM640-400q-17 0-28.5-11.5T600-440q0-17 11.5-28.5T640-480q17 0 28.5 11.5T680-440q0 17-11.5 28.5T640-400ZM480-240q-17 0-28.5-11.5T440-280q0-17 11.5-28.5T480-320q17 0 28.5 11.5T520-280q0 17-11.5 28.5T480-240Zm-188.5-11.5Q280-263 280-280t11.5-28.5Q303-320 320-320t28.5 11.5Q360-297 360-280t-11.5 28.5Q337-240 320-240t-28.5-11.5ZM640-240q-17 0-28.5-11.5T600-280q0-17 11.5-28.5T640-320q17 0 28.5 11.5T680-280q0 17-11.5 28.5T640-240Z" />
+        </svg>
+        <span>{fechaStr}</span>
+      </div>
+      {/* Fila: Hora (Opcional) */}
+      {horaStr && (
+        <div className={`flex items-center gap-1.5 mt-0.5 text-xs opacity-90 ${textClass}`}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-3.5 h-3.5 ${iconClass}`} fill="currentColor">
+            <path d="M582-298 440-440v-200h80v167l118 118-56 57ZM440-720v-80h80v80h-80Zm280 280v-80h80v80h-80ZM440-160v-80h80v80h-80ZM160-440v-80h80v80h-80ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
+          </svg>
+          <span>{horaStr}</span>
+        </div>
+      )}
+      {/* Fila: Etiqueta ATRASADA */}
+      {vencida && (
+        <span className="text-[10px] font-extrabold text-red-600 tracking-wide mt-1">
+          ATRASADA
+        </span>
+      )}
+    </div>
+  );
+};
+
+/**
+ * 🆕 RenderFechaEntrega: Renderiza Fecha Entrega o Conclusión con Iconos
+ */
+const RenderFechaEntrega = ({ fecha, estatus, entregadaTarde }: { fecha?: Date | string | null, estatus: string, entregadaTarde?: boolean }) => {
+  if (!fecha) return <span className="text-gray-400">—</span>;
+
+  const dateObj = typeof fecha === "string" ? new Date(fecha) : fecha;
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return <span className="text-gray-400">—</span>;
+
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const y = dateObj.getFullYear();
+  const fechaStr = `${d}/${m}/${y}`;
+
+  // Verificar hora para ver si mostramos el reloj
+  const h = dateObj.getHours();
+  const min = dateObj.getMinutes();
+  const sec = dateObj.getSeconds();
+
+  // Si es "Fin del día" (23:59:59), no mostramos la hora
+  const hasTime = !(h === 23 && min === 59 && sec >= 58);
+  const horaStr = hasTime ? formatTimeAMPM(dateObj) : null;
+
+  // Clases según Estatus y Retraso
+  // Si está entregada tarde, gana el color naranja
+  const isEnRevision = estatus === "EN_REVISION";
+
+  const textClass = entregadaTarde ? "text-orange-700" : isEnRevision ? "text-indigo-700" : "text-gray-700";
+  const iconClass = entregadaTarde ? "text-orange-600" : isEnRevision ? "text-indigo-500" : "text-gray-500";
+
+  return (
+    <div className="flex flex-col items-center justify-center leading-tight">
+      {/* Fila: Fecha con Calendario */}
+      <div className={`flex items-center gap-1.5 ${textClass}`}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-4 h-4 ${iconClass}`} fill="currentColor">
+          <path d="M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Zm280 240q-17 0-28.5-11.5T440-440q0-17 11.5-28.5T480-480q17 0 28.5 11.5T520-440q0 17-11.5 28.5T480-400Zm-188.5-11.5Q280-423 280-440t11.5-28.5Q303-480 320-480t28.5 11.5Q360-457 360-440t-11.5 28.5Q337-400 320-400t-28.5-11.5ZM640-400q-17 0-28.5-11.5T600-440q0-17 11.5-28.5T640-480q17 0 28.5 11.5T680-440q0 17-11.5 28.5T640-400ZM480-240q-17 0-28.5-11.5T440-280q0-17 11.5-28.5T480-320q17 0 28.5 11.5T520-280q0 17-11.5 28.5T480-240Zm-188.5-11.5Q280-263 280-280t11.5-28.5Q303-320 320-320t28.5 11.5Q360-297 360-280t-11.5 28.5Q337-240 320-240t-28.5-11.5ZM640-240q-17 0-28.5-11.5T600-280q0-17 11.5-28.5T640-320q17 0 28.5 11.5T680-280q0 17-11.5 28.5T640-240Z" />
+        </svg>
+        <span className="font-semibold">{fechaStr}</span>
+      </div>
+
+      {/* Fila: Hora con Reloj */}
+      {horaStr && (
+        <div className={`flex items-center gap-1.5 mt-0.5 text-xs opacity-90 ${textClass}`}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-3.5 h-3.5 ${iconClass}`} fill="currentColor">
+            <path d="M582-298 440-440v-200h80v167l118 118-56 57ZM440-720v-80h80v80h-80Zm280 280v-80h80v80h-80ZM440-160v-80h80v80h-80ZM160-440v-80h80v80h-80ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
+          </svg>
+          <span>{horaStr}</span>
+        </div>
+      )}
+
+      {/* ✅ NUEVO: Etiqueta Entregada con Retraso (Letra chica) */}
+      {entregadaTarde && (
+        <span className="text-[9px] font-extrabold text-orange-600 tracking-wide mt-1 uppercase text-center leading-none">
+          ENTREGADA CON RETRASO
+        </span>
+      )}
+    </div>
+  );
+}
+
+// 🛠️ Helper de visualización simple para celdas donde no aplica el diseño complejo (ej. fecha simple)
+const formateaFechaSimpleRender = (fechaInput?: Date | string | null) => {
+  if (!fechaInput) return <span className="text-gray-400">—</span>;
   const dateObj = typeof fechaInput === "string" ? new Date(fechaInput) : fechaInput;
-  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return "";
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return <span className="text-gray-400">—</span>;
 
   const d = String(dateObj.getDate()).padStart(2, "0");
   const m = String(dateObj.getMonth() + 1).padStart(2, "0");
@@ -74,21 +184,18 @@ const formateaFechaDesktop = (fechaInput?: Date | string | null) => {
   const min = dateObj.getMinutes();
   const sec = dateObj.getSeconds();
 
-  // Si es "Fin del día" (23:59:59), solo retornamos la fecha en un span
   if (h === 23 && min === 59 && sec >= 58) {
     return <span>{fechaStr}</span>;
   }
 
-  // Si tiene hora específica, retornamos estructura vertical
   const horaStr = formatTimeAMPM(dateObj);
-
   return (
     <div className="flex flex-col items-center leading-tight">
       <span>{fechaStr}</span>
       <span className="text-[11px] font-normal opacity-80">{horaStr}</span>
     </div>
   );
-};
+}
 
 // Formateador simple para strings (usado en móvil o celdas simples)
 const formateaFechaString = (fechaInput?: Date | string | null): string => {
@@ -167,10 +274,8 @@ const isRetrasada = (
 const getFechaLimiteEfectiva = (tarea: Tarea): number => {
   if (tarea.historialFechas && tarea.historialFechas.length > 0) {
     const last = tarea.historialFechas[tarea.historialFechas.length - 1];
-    // ✅ FIX: Validamos que nuevaFecha exista antes de usar new Date
     return last.nuevaFecha ? new Date(last.nuevaFecha).getTime() : 0;
   }
-  // ✅ FIX: Validamos que fechaLimite exista antes de usar new Date
   return tarea.fechaLimite ? new Date(tarea.fechaLimite).getTime() : 0;
 };
 
@@ -181,7 +286,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
   tareas,
   loading,
   onRecargarTareas,
-  user, // 👈 5. Recibir 'user'
+  user,
 }) => {
   // (Estados de modales se quedan)
   const [openModalEditar, setOpenModalEditar] = useState(false);
@@ -327,7 +432,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
             // Para números, retornamos directamente la diferencia
             return sortConfig.direction === "asc" ? valA - valB : valB - valA;
           case "fechaRegistro":
-            // ✅ FIX: Validación de null/undefined para fechaRegistro
             valA = a.fechaRegistro ? new Date(a.fechaRegistro).getTime() : 0;
             valB = b.fechaRegistro ? new Date(b.fechaRegistro).getTime() : 0;
             return sortConfig.direction === "asc" ? valA - valB : valB - valA;
@@ -375,7 +479,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
               <thead className="bg-gray-100 text-black text-xs uppercase sticky top-0 z-20 shadow-inner">
                 <tr>
                   {/* TAREA - SIN FILTRO */}
-                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[18%] break-words">
+                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[10%] break-words">
                     Tarea
                   </th>
                   {/* IMG - SIN FILTRO */}
@@ -383,7 +487,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     Img
                   </th>
                   {/* OBSERVACIONES - SIN FILTRO */}
-                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[12%] break-words">
+                  <th className="px-3 py-3 text-left font-bold border-b border-gray-300 w-[20%] break-words">
                     Observaciones
                   </th>
                   {/* ASIGNADO POR - CON FILTRO */}
@@ -421,9 +525,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
                   >
                     Fecha límite / Historial {getSortIcon("fechaLimite")}
                   </th>
-                  {/* CONCLUSION - SIN FILTRO */}
+                  {/* ENTREGA / CONCLUSION - CAMBIO DE TÍTULO */}
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">
-                    Conclusión
+                    Entrega / Conclusión
                   </th>
                   {/* ESTATUS - CON FILTRO */}
                   <th
@@ -465,6 +569,23 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     row.fechaLimite,
                     row.fechaConclusion
                   );
+
+                  // 💡 LÓGICA FECHA A MOSTRAR (Entrega o Conclusión)
+                  let fechaParaColumna: Date | string | null = null;
+                  if (row.estatus === "EN_REVISION") {
+                    fechaParaColumna = row.fechaEntrega || null;
+                  } else if (row.estatus === "CONCLUIDA") {
+                    fechaParaColumna = row.fechaConclusion || null;
+                  }
+
+                  // 🚀 LÓGICA NUEVA: ENTREGADA CON RETRASO
+                  // Si está EN_REVISION, verificamos si la fecha de entrega > fecha límite efectiva
+                  let entregadaTarde = false;
+                  if (row.estatus === "EN_REVISION" && row.fechaEntrega && fechaLimiteObj) {
+                    const dEntrega = new Date(row.fechaEntrega).getTime();
+                    const dLimite = new Date(fechaLimiteObj).getTime();
+                    entregadaTarde = dEntrega > dLimite;
+                  }
 
                   return (
                     <tr
@@ -567,25 +688,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
                               : "text-gray-800"
                               }`}
                           >
-                            {/* 🚀 AQUI USAMOS EL FORMATEADOR CON HORA */}
-                            {formateaFechaDesktop(fechaLimiteObj)}
-
-                            {vencida && (
-                              <div className="flex justify-center mt-1">
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  viewBox="0 0 24 24"
-                                  fill="currentColor"
-                                  className="w-3.5 h-3.5 text-red-500"
-                                >
-                                  <path
-                                    fillRule="evenodd"
-                                    d="M12 2.25a9.75 9.75 0 1 1 0 19.5 9.75 9.75 0 0 1 0-19.5Zm0 1.5a8.25 8.25 0 1 0 0 16.5 8.25 8.25 0 0 0 0-16.5Zm.75 4.5a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h3.75a.75.75 0 0 0 0-1.5h-3V8.25Z"
-                                    clipRule="evenodd"
-                                  />
-                                </svg>
-                              </div>
-                            )}
+                            {/* 🚀 AQUI USAMOS EL NUEVO RENDERIZADOR */}
+                            <RenderFechaLimite fecha={fechaLimiteObj} vencida={vencida} />
                           </div>
 
                           {row.historialFechas &&
@@ -624,7 +728,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                                           className="border-b border-gray-100 pb-1 last:border-none"
                                         >
                                           <div className="text-[10px]">
-                                            <span className="font-bold">Nueva:</span> {formateaFechaDesktop(h.nuevaFecha)}
+                                            <span className="font-bold">Nueva:</span> {formateaFechaSimpleRender(h.nuevaFecha)}
                                           </div>
                                           <div className="text-[10px] text-gray-500">
                                             Por: {h.modificadoPor.nombre}
@@ -645,15 +749,17 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </td>
                       {/* === FIN Celda Historial === */}
 
-                      {/* Columna Conclusión */}
+                      {/* 🚀 Columna Entrega / Conclusión - MODIFICADA */}
                       <td
                         className={`px-3 py-3 text-center w-[7%] ${retrasada ? "text-red-600 font-bold" : "text-gray-800"
                           }`}
                       >
-                        {/* Usamos el formateador con hora también aquí para precisión */}
-                        {row.fechaConclusion
-                          ? formateaFechaDesktop(row.fechaConclusion)
-                          : "—"}
+                        {/* Usamos el NUEVO componente RenderFechaEntrega */}
+                        <RenderFechaEntrega
+                          fecha={fechaParaColumna}
+                          estatus={row.estatus}
+                          entregadaTarde={entregadaTarde}
+                        />
                       </td>
 
                       {/* Columna Estatus */}
@@ -696,14 +802,13 @@ const TablaAdmin: React.FC<TablaProps> = ({
           {/* 📱 VISTA MÓVIL */}
           <div className="grid lg:hidden grid-cols-1 md:grid-cols-2 gap-3 p-2 items-start">
             {tareasOrdenadas.map((row: Tarea) => {
-              // Lógica de fechas (similar a la de escritorio)
+              // Lógica de fechas
               const hoy = new Date();
               hoy.setHours(0, 0, 0, 0);
 
               const fechaLimiteObj =
                 row.historialFechas && row.historialFechas.length > 0
-                  ? row.historialFechas[row.historialFechas.length - 1]
-                    .nuevaFecha
+                  ? row.historialFechas[row.historialFechas.length - 1].nuevaFecha
                   : row.fechaLimite;
 
               const fechaLimiteDate =
@@ -718,16 +823,15 @@ const TablaAdmin: React.FC<TablaProps> = ({
               ) {
                 // Comprobación de vencimiento con hora real
                 vencida =
-                  fechaLimiteDate.getTime() < new Date().getTime() && row.estatus !== "CONCLUIDA" && row.estatus !== "EN_REVISION";
+                  fechaLimiteDate.getTime() < new Date().getTime() &&
+                  row.estatus !== "CONCLUIDA" &&
+                  row.estatus !== "EN_REVISION";
               }
 
               const retrasada = isRetrasada(
                 row.fechaLimite,
                 row.fechaConclusion
               );
-
-              // 🚀 Usamos el helper de string para móvil
-              const fechaLimiteFinalStr = formateaFechaString(fechaLimiteObj);
 
               // Permisos para móvil
               const puedeValidar =
@@ -752,6 +856,25 @@ const TablaAdmin: React.FC<TablaProps> = ({
                   user.rol === Rol.ADMIN ||
                   (user.rol === Rol.ENCARGADO && !asignadorEsAdmin));
 
+              // 💡 LÓGICA FECHA A MOSTRAR (Móvil)
+              let fechaParaColumna: Date | string | null = null;
+              let labelColumna = "Conclusión";
+
+              if (row.estatus === "EN_REVISION") {
+                fechaParaColumna = row.fechaEntrega || null;
+                labelColumna = "Entrega";
+              } else if (row.estatus === "CONCLUIDA") {
+                fechaParaColumna = row.fechaConclusion || null;
+              }
+
+              // 🚀 LÓGICA NUEVA: ENTREGADA CON RETRASO
+              let entregadaTarde = false;
+              if (row.estatus === "EN_REVISION" && row.fechaEntrega && fechaLimiteObj) {
+                const dEntrega = new Date(row.fechaEntrega).getTime();
+                const dLimite = new Date(fechaLimiteObj).getTime();
+                entregadaTarde = dEntrega > dLimite;
+              }
+
               return (
                 <div
                   key={row.id}
@@ -759,8 +882,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     row.estatus
                   )} rounded-md`}
                 >
-                  <div className="flex justify-between items-start mb-1">
-                    <h3 className="font-bold text-gray-800 text-base leading-snug">
+                  {/* CABECERA: Título y Prioridad */}
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-gray-800 text-base leading-snug w-[75%] break-words">
                       {row.tarea}
                     </h3>
                     <span
@@ -771,7 +895,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
                           : "bg-green-100 text-green-700 border border-green-300 rounded-full"
                         }`}
                     >
-                      {/* Mostramos el valor literal */}
                       {row.urgencia === "ALTA"
                         ? "Alta"
                         : row.urgencia === "MEDIA"
@@ -780,7 +903,16 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     </span>
                   </div>
 
-                  <div className="text-xs text-gray-600 space-y-1">
+                  {/* OBSERVACIONES (Nuevo) */}
+                  {row.observaciones && (
+                    <div className="mb-3 bg-white/50 p-2 rounded border border-gray-200 text-xs italic text-gray-700 break-words">
+                      <span className="font-bold not-italic">Obs: </span>
+                      {row.observaciones}
+                    </div>
+                  )}
+
+                  {/* DATOS GENERALES */}
+                  <div className="text-xs text-gray-600 space-y-2">
                     <p>
                       <span className="font-semibold text-gray-700">
                         Asignado por:
@@ -793,7 +925,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       <span className="font-semibold text-gray-700">
                         Responsable:
                       </span>{" "}
-                      <span className="text-blue-700 font-semibold">
+                      <span className="text-blue-700 font-semibold break-words">
                         {row.responsables.map((r) => r.nombre).join(", ")}
                       </span>
                     </p>
@@ -804,34 +936,18 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       {formateaSoloFecha(row.fechaRegistro)}
                     </p>
 
-                    <p className="flex items-center text-xs">
-                      <span className="font-semibold text-gray-700">
+                    {/* FECHA LÍMITE (Con Iconos y Color Rojo) */}
+                    <div className="flex items-start">
+                      <span className="font-semibold text-gray-700 mt-1 mr-2">
                         Límite:
-                      </span>{" "}
-                      <span
-                        className={`ml-1 font-semibold ${vencida ? "text-red-600" : "text-gray-800"
-                          }`}
-                      >
-                        {fechaLimiteFinalStr}
                       </span>
-                      {vencida && (
-                        <span className="ml-1 inline-flex items-center">
-                          {/* SVG Vencida */}
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="w-3.5 h-3.5 text-red-500"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M12 2.25a9.75 9.75 0 1 1 0 19.5 9.75 9.75 0 0 1 0-19.5Zm0 1.5a8.25 8.25 0 1 0 0 16.5 8.25 8.25 0 0 0 0-16.5Zm.75 4.5a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h3.75a.75.75 0 0 0 0-1.5h-3V8.25Z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        </span>
-                      )}
-                    </p>
+                      <div className="bg-white/60 rounded px-2 py-1 border border-gray-100 shadow-sm">
+                        <RenderFechaLimite
+                          fecha={fechaLimiteObj}
+                          vencida={vencida}
+                        />
+                      </div>
+                    </div>
 
                     <p>
                       <span className="font-semibold text-gray-700">
@@ -847,44 +963,36 @@ const TablaAdmin: React.FC<TablaProps> = ({
                               : "text-blue-700"
                           }`}
                       >
-                        {row.estatus === "EN_REVISION" ? "EN REVISIÓN" : row.estatus}
+                        {row.estatus === "EN_REVISION"
+                          ? "EN REVISIÓN"
+                          : row.estatus}
                       </span>
                     </p>
                   </div>
 
-                  {row.fechaConclusion && (
-                    <p
-                      className={`mt-2 text-xs flex items-center ${retrasada
-                        ? "text-red-600 font-semibold"
-                        : "text-gray-700"
-                        }`}
-                    >
-                      <span className="font-semibold text-gray-700">
-                        Conclusión:
-                      </span>{" "}
-                      <span className="ml-1">
-                        {formateaFechaString(row.fechaConclusion)}
+                  {/* CONCLUSIÓN / ENTREGA (Móvil) */}
+                  {fechaParaColumna && (
+                    <div className={`mt-2 text-xs flex items-center ${retrasada ? "text-red-600 font-semibold" : "text-gray-700"}`}>
+                      <span className="font-semibold text-gray-700 mr-2">
+                        {labelColumna}:
                       </span>
-                      {retrasada && (
+                      {/* Reutilizamos el RenderFechaEntrega aunque sea un poco grande para móvil, se adapta bien por flex */}
+                      <RenderFechaEntrega
+                        fecha={fechaParaColumna}
+                        estatus={row.estatus}
+                        entregadaTarde={entregadaTarde}
+                      />
+                      {retrasada && labelColumna === "Conclusión" && (
                         <span className="ml-1 inline-flex items-center">
-                          {/* SVG Retrasada */}
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="w-3.5 h-3.5 text-red-500"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M12 2.25a9.75 9.75 0 1 1 0 19.5 9.75 9.75 0 0 1 0-19.5Zm0 1.5a8.25 8.25 0 1 0 0 16.5 8.25 8.25 0 0 0 0-16.5Zm.75 4.5a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h3.75a.75.75 0 0 0 0-1.5h-3V8.25Z"
-                              clipRule="evenodd"
-                            />
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-red-500">
+                            <path fillRule="evenodd" d="M12 2.25a9.75 9.75 0 1 1 0 19.5 9.75 9.75 0 0 1 0-19.5Zm0 1.5a8.25 8.25 0 1 0 0 16.5 8.25 8.25 0 0 0 0-16.5Zm.75 4.5a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h3.75a.75.75 0 0 0 0-1.5h-3V8.25Z" clipRule="evenodd" />
                           </svg>
                         </span>
                       )}
-                    </p>
+                    </div>
                   )}
 
+                  {/* HISTORIAL (Nuevo Diseño) */}
                   {row.historialFechas && row.historialFechas.length > 0 && (
                     <details className="mt-3 text-xs transition-all duration-300 open:pb-2">
                       <summary className="cursor-pointer select-none font-semibold text-blue-600 hover:underline flex items-center gap-1">
@@ -946,6 +1054,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     </details>
                   )}
 
+                  {/* IMÁGENES */}
                   {row.imagenes && row.imagenes.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-200 flex justify-center">
                       <button
@@ -966,6 +1075,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     </div>
                   )}
 
+                  {/* BOTONES DE ACCIÓN */}
                   <div className="flex justify-around items-center mt-4 pt-2 border-t border-gray-200 h-[46px]">
                     {/* CANCELAR */}
                     {puedeCancelar && (
@@ -1030,7 +1140,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </button>
                     )}
 
-                    {/* REVISAR (MÓVIL) */}
+                    {/* REVISAR */}
                     {row.estatus === "EN_REVISION" && puedeValidar ? (
                       <button
                         onClick={() => handleRevisar(row)}

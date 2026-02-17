@@ -30,7 +30,16 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
 
   if (!tareaExistente) return res.status(404).json({ error: "Tarea no encontrada" });
 
-  // 3. Permisos Generales
+  // 3. --- INMUTABILIDAD (El Candado) ---
+  // Si la tarea ya finalizó o se canceló, NADIE la puede tocar.
+  // TypeScript deduce aquí que si pasa este if, el estatus NO es CONCLUIDA ni CANCELADA.
+  if (tareaExistente.estatus === "CONCLUIDA" || tareaExistente.estatus === "CANCELADA") {
+    return res.status(400).json({ 
+        error: `No se puede modificar una tarea con estatus ${tareaExistente.estatus}.` 
+    });
+  }
+
+  // 4. Permisos Generales
   const esSuperAdmin = user.rol === "SUPER_ADMIN";
   const esAdminDepto = user.rol === "ADMIN" && tareaExistente.departamentoId === user.departamentoId;
   const esEncargadoDepto = user.rol === "ENCARGADO" && tareaExistente.departamentoId === user.departamentoId;
@@ -39,7 +48,7 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
     return res.status(403).json({ error: "No tienes permiso para editar esta tarea." });
   }
 
-  // 4. Restricciones específicas de ENCARGADO
+  // 5. Restricciones específicas de ENCARGADO
   if (user.rol === "ENCARGADO") {
     const rolCreador = tareaExistente.asignador?.rol;
     if (rolCreador === "ADMIN" || rolCreador === "SUPER_ADMIN") {
@@ -47,26 +56,31 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
     }
   }
 
-  // 5. Preparar actualización
-  // Extraemos fechaLimite y responsables para manejarlos aparte
+  // 6. Preparar actualización
   const { fechaLimite, responsables, ...restoDelBody } = validatedBody;
   
   const dataParaActualizar: any = { ...restoDelBody };
-  delete dataParaActualizar.departamentoId; // Por seguridad, aunque el schema lo permita, lo validamos abajo
+  delete dataParaActualizar.departamentoId; // Por seguridad
 
-  // Manejo de Fecha Límite (CORREGIDO: Respetar hora del frontend)
+  // --- MANEJO DE FECHA LÍMITE (11:59:59 PM) ---
   if (fechaLimite) {
-    // 🚀 CAMBIO CLAVE: Ya NO forzamos la hora a 23:59:59 con setHours.
-    // Respetamos la fecha/hora exacta que envía el Frontend.
-    // Si el frontend manda 14:30, se guarda 14:30. Si manda 23:59:59, se guarda eso.
-    dataParaActualizar.fechaLimite = new Date(fechaLimite);
+    const nuevaFecha = new Date(fechaLimite);
+    // Si la hora es 00:00 (usuario seleccionó solo fecha), damos hasta el final del día.
+    if (nuevaFecha.getHours() === 0 && nuevaFecha.getMinutes() === 0) {
+        nuevaFecha.setHours(23, 59, 59, 999);
+    }
+    dataParaActualizar.fechaLimite = nuevaFecha;
   }
+  // ---------------------------------------------
 
   // Cambio de Estatus
   if (validatedBody.estatus) {
-    if (validatedBody.estatus === "CONCLUIDA" && tareaExistente.estatus !== "CONCLUIDA") {
+    // ✅ CORRECCIÓN: Eliminamos la redundancia "&& tareaExistente.estatus !== 'CONCLUIDA'"
+    // TypeScript ya sabe que NO está CONCLUIDA gracias al "Candado" del paso 3.
+    if (validatedBody.estatus === "CONCLUIDA") {
       dataParaActualizar.fechaConclusion = new Date();
-    } else if (validatedBody.estatus !== "CONCLUIDA") {
+    } else {
+      // Si cambia a PENDIENTE, EN_REVISION, etc., nos aseguramos de limpiar la fecha de conclusión.
       dataParaActualizar.fechaConclusion = null;
     }
   }
@@ -81,21 +95,20 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
   let nuevosResponsablesIds: number[] = [];
   if (responsables) {
     nuevosResponsablesIds = responsables; // Guardamos para usar en notificaciones
-    // Validar jerarquía aquí si es necesario (similar a crearTarea)
     dataParaActualizar.responsables = {
       deleteMany: {},
       create: responsables.map((uid) => ({ usuario: { connect: { id: uid } } })),
     };
   }
 
-  // 6. Ejecutar Update (Dentro de una transacción implícita de update)
+  // 7. Ejecutar Update
   const tareaActualizada = await prisma.tarea.update({
     where: { id: tareaId },
     data: dataParaActualizar,
     include: tareaConRelacionesInclude,
   });
 
-  // 7. Notificaciones y Logs (MEJORADA)
+  // 8. Notificaciones y Logs
   
   // A. Si se asignaron NUEVOS responsables
   if (nuevosResponsablesIds.length > 0) {
@@ -106,7 +119,6 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
         `/tarea/${tareaId}`
      );
 
-     // LOG Reasignación (Con Depto)
      await registrarBitacora(
        "ACTUALIZAR_TAREA",
        `${user.nombre} re-asignó responsables en la tarea "${tareaActualizada.tarea}".`,
@@ -119,7 +131,7 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
      );
   }
 
-  // B. Notificar cambio de estatus (Solo si NO es una reasignación masiva)
+  // B. Notificar cambio de estatus
   if (validatedBody.estatus && validatedBody.estatus !== tareaExistente.estatus) {
     const ids = tareaActualizada.responsables.map(r => r.usuario.id);
     
@@ -132,7 +144,6 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
       sendNotificationToUsers(idsAFiltrar, titulo, `La tarea "${tareaActualizada.tarea}" ahora está ${validatedBody.estatus}`, "/mis-tareas");
     }
 
-    // LOG Cambio Estatus (Con Depto)
     await registrarBitacora(
        "CAMBIO_ESTATUS",
        `${user.nombre} cambió el estatus de "${tareaActualizada.tarea}" a ${validatedBody.estatus}.`,
@@ -145,7 +156,7 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
        }
      );
   } else if (!nuevosResponsablesIds.length && !validatedBody.estatus) {
-      // Si no hubo cambio de responsables ni de estatus, pero sí de otros datos (como fecha), registramos log genérico
+      // Log genérico de edición (si solo cambió texto o fechas sin cambiar estatus/responsables)
       await registrarBitacora(
         "ACTUALIZAR_TAREA",
         `${user.nombre} actualizó la tarea "${tareaActualizada.tarea}".`,

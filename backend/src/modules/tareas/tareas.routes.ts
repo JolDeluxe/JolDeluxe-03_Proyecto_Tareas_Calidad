@@ -3,10 +3,12 @@ import { verifyToken } from "../../middleware/verifyToken.js";
 import { uploadImagenesMiddleware, uploadEvidenciasMiddleware } from "../../middleware/upload.js";
 
 // --- Imports de Controladores ---
-import { obtenerTodas } from "./get/obtenerTodas.controller.js";
+import { obtenerTodas } from "./get/obtenerTodas.controller.js"; // 👈 Este es el "Súper Controlador"
 import { obtenerDetalle } from "./get/obtenerDetalle.controller.js";
-import { obtenerMisTareas } from "./get/obtenerMisTareas.controller.js"; 
-import { obtenerAsignadas } from "./get/obtenerAsignadas.controller.js"; 
+
+// ❌ ELIMINADOS (Ya no se necesitan, obtenerTodas hace su trabajo):
+// import { obtenerMisTareas } from "./get/obtenerMisTareas.controller.js"; 
+// import { obtenerAsignadas } from "./get/obtenerAsignadas.controller.js"; 
 
 import { crearTarea } from "./post/crearTarea.controller.js";
 import { subirImagen } from "./post/subirImagen.controller.js";
@@ -27,9 +29,15 @@ const router = Router();
 router.use(verifyToken()); 
 
 // --- RUTAS GET ---
+
+// ✅ RUTA ÚNICA Y PODEROSA
+// El frontend la llamará así:
+// - Mis Tareas: GET /?viewType=MIS_TAREAS
+// - Asignadas:  GET /?viewType=ASIGNADAS
+// - Todas:      GET /?viewType=TODAS
 router.get("/", obtenerTodas);
-router.get("/misTareas", obtenerMisTareas);
-router.get("/asignadas", verifyToken(["SUPER_ADMIN", "ADMIN", "ENCARGADO"]), obtenerAsignadas);
+
+// Ruta de detalle (siempre va después de la raíz o rutas específicas para evitar conflictos)
 router.get("/:id", obtenerDetalle);
 
 // --- RUTAS POST ---

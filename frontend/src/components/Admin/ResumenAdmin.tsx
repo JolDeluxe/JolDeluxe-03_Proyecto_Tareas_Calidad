@@ -1,57 +1,38 @@
 // 📍 src/components/Admin/ResumenAdmin.tsx
 
 import React from "react";
-import type { Tarea } from "../../types/tarea";
-import type { Usuario } from "../../types/usuario";
+
+// Estructura de los contadores que devuelve el Backend (resumen.totales)
+interface TotalesResumen {
+  activas: number;
+  pendientes: number;
+  enRevision: number;
+  concluidas: number;
+  canceladas: number;
+  todas: number;
+}
 
 interface ResumenPrincipalProps {
   filtro: string;
   onFiltroChange: (filtro: string) => void;
-  responsable: string;
-  query: string;
-  tareas: Tarea[];
+  // ✅ Cambio radical: Ya no recibe tareas[], recibe el objeto de conteo pre-calculado
+  conteo: TotalesResumen | null;
   loading: boolean;
-  user: Usuario | null;
 }
 
 const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
   filtro,
   onFiltroChange,
-  responsable,
-  query,
-  tareas,
+  conteo,
   loading,
-  // user,
 }) => {
 
-  // 1. Filtrado base
-  const tareasFiltradas = tareas.filter((t) => {
-    const pasaResponsable =
-      responsable === "Todos" ||
-      t.responsables.some((r) => r.id.toString() === responsable);
+  // Si no hay data aún, ponemos 0
+  const pendientes = conteo?.pendientes || 0;
+  const enRevision = conteo?.enRevision || 0;
+  // const concluidas = conteo?.concluidas || 0;
 
-    const texto = `${t.tarea} ${t.observaciones || ""}`.toLowerCase();
-    const pasaBusqueda =
-      query.trim() === "" || texto.includes(query.toLowerCase());
-
-    return pasaResponsable && pasaBusqueda;
-  });
-
-  // 2. Cálculo de Contadores
-  const pendientes = tareasFiltradas.filter(
-    (t) => t.estatus.toUpperCase() === "PENDIENTE"
-  ).length;
-
-  const enRevision = tareasFiltradas.filter(
-    (t) => t.estatus.toUpperCase() === "EN_REVISION"
-  ).length;
-
-  // const concluidas = tareasFiltradas.filter(
-  //   (t) => t.estatus.toUpperCase() === "CONCLUIDA"
-  // ).length;
-
-  // const totalActivo = pendientes + enRevision + concluidas;
-
+  // Total activo definido como Pendientes + En Revisión (según lógica anterior)
   const totalActivo = pendientes + enRevision;
 
   const botones = [

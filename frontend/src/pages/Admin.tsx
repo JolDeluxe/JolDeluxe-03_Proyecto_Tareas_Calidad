@@ -14,7 +14,7 @@ import ResumenPrincipalDash from "../components/Principal/ResumenDash";
 import DashboardMetricas from "../components/Principal/DashboardMetricas";
 
 // --- API y Tipos ---
-import { tareasService } from "../api/tareas.service";
+import { tareasService, type TareaFilters, type TareasResponse } from "../api/tareas.service";
 import type { Tarea } from "../types/tarea";
 import type { Usuario } from "../types/usuario";
 
@@ -27,13 +27,17 @@ interface AdminProps {
 
 const Admin: React.FC<AdminProps> = ({ user }) => {
   // --- Estados de Filtros de Administración ---
-  const [filtro, setFiltro] = useState("total");
-  const [responsable, setResponsable] = useState<string>("Todos");
-  const [query, setQuery] = useState<string>("");
+  const [filtro, setFiltro] = useState("total"); // Filtro visual (pestañas)
+  const [responsable, setResponsable] = useState<string>("Todos"); // Filtro API
+  const [query, setQuery] = useState<string>(""); // Filtro API
 
   // --- Estados para Modales y Carga ---
   const [openModal, setOpenModal] = useState<boolean>(false);
   const [tareas, setTareas] = useState<Tarea[]>([]);
+
+  // ✅ NUEVO: Estado para el resumen que viene del Backend
+  const [resumenData, setResumenData] = useState<TareasResponse['meta']['resumen']['totales'] | null>(null);
+
   const [loading, setLoading] = useState(true);
 
   // --- Estado para Modo Kaizen ---
@@ -47,9 +51,8 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
   // --- Lógica de Recarga Forzada ---
   const handleRefresh = () => {
     setLoading(true);
-    setTimeout(() => {
-      window.location.reload();
-    }, 1000);
+    // Recarga suave llamando al fetch
+    fetchTareas();
   };
 
   const handleNuevaTarea = () => {
@@ -61,17 +64,28 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     setMonth(newMonth);
   };
 
-  // --- Fetch de Tareas ---
+  // --- Fetch de Tareas (Server-Side Filtering) ---
   const fetchTareas = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await tareasService.getAll();
+      // 1. Construir filtros para la API
+      const apiFilters: TareaFilters = {
+        query: query,
+        // Si es "Todos", no enviamos el ID. Si es un número, lo enviamos.
+        responsableId: responsable !== "Todos" ? Number(responsable) : undefined,
+        // Mantenemos paginación alta por ahora para la tabla
+        limit: 100
+      };
 
-      // Parseo de fechas para que funcionen las métricas
+      // 2. Llamada al servicio actualizado
+      const { data, meta } = await tareasService.getAll(apiFilters);
+
+      // 3. Parseo de fechas para que funcionen las métricas y tablas
       const tareasConFechas = data.map((t: any) => ({
         ...t,
         fechaRegistro: t.fechaRegistro ? new Date(t.fechaRegistro) : null,
         fechaLimite: t.fechaLimite ? new Date(t.fechaLimite) : null,
+        fechaEntrega: t.fechaEntrega ? new Date(t.fechaEntrega) : null, // Importante para lógica de tiempos
         fechaConclusion: t.fechaConclusion ? new Date(t.fechaConclusion) : null,
         historialFechas:
           t.historialFechas?.map((h: any) => ({
@@ -82,27 +96,50 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
           })) || [],
       }));
 
+      // 4. Actualizar estados
       setTareas(tareasConFechas as Tarea[]);
+
+      // ✅ Guardamos el resumen calculado por el backend
+      if (meta && meta.resumen) {
+        setResumenData(meta.resumen.totales);
+      }
+
     } catch (error) {
       console.error("Error al cargar tareas:", error);
       setTareas([]);
+      setResumenData(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [responsable, query]); // ✅ Dependencias: se recarga si cambian los filtros
 
+  // Ejecutar fetch cuando cambien dependencias
   useEffect(() => {
     fetchTareas();
   }, [fetchTareas]);
 
-  // --- Lógica de Filtrado Kaizen ---
-  const tareasFiltradasPorModo = useMemo(() => {
-    return tareas.filter((t) => {
+  // --- Lógica de Filtrado Visual (Pestañas de Estatus) ---
+  // Aunque filtramos en servidor por Responsable/Query, las pestañas (Pendientes/En Revisión)
+  // suelen filtrar visualmente los datos que ya trajimos, o podríamos pedir al backend filtrar también.
+  // Para mantener la agilidad de la UI, filtramos el array `tareas` localmente según la pestaña `filtro`.
+  const tareasParaTabla = useMemo(() => {
+    // 1. Filtro Kaizen (Local)
+    let filtered = tareas.filter((t) => {
       const nombreTarea = t.tarea || "";
       const esKaizen = nombreTarea.trim().toUpperCase().startsWith("KAIZEN");
       return isKaizen ? esKaizen : !esKaizen;
     });
-  }, [tareas, isKaizen]);
+
+    // 2. Filtro por Pestaña (Pendientes, En Revisión, Total)
+    if (filtro === "pendientes") {
+      filtered = filtered.filter(t => t.estatus === "PENDIENTE");
+    } else if (filtro === "en_revision") {
+      filtered = filtered.filter(t => t.estatus === "EN_REVISION");
+    }
+    // "total" muestra todo lo que trajo el backend
+
+    return filtered;
+  }, [tareas, isKaizen, filtro]);
 
   // --- Título Dinámico ---
   const tituloDinamico = useMemo(() => {
@@ -112,60 +149,42 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
   // ✅ SWITCH DE VISTAS (DISEÑO IDÉNTICO A PRINCIPAL)
   const renderSwitch = () => {
-    // 🚧🚧🚧 MANTENIMIENTO 🚧🚧🚧
-    // Para REACTIVAR el módulo de métricas:
-    // 1. Elimina la propiedad 'disabled: true' del objeto INDICADORES.
-    // 2. (Opcional) Quita el tooltip "En mantenimiento".
     const buttons = [
       {
         type: "TAREAS",
         label: "Gestión Tareas",
-        // Icono de lista
         icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>,
-        disabled: false // Activo
+        disabled: false
       },
       {
         type: "INDICADORES",
         label: "Métricas (En mantenimiento 🚧🚧🚧)",
-        // Icono de gráfica
         icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
-        disabled: true // 🔒 DESHABILITADO POR REESTRUCTURACIÓN
+        disabled: true
       },
     ];
 
     return (
       <div className="mb-6 px-2 lg:px-0">
-        <div
-          className="
-                flex w-full max-w-md mx-auto 
-                md:max-w-none lg:w-auto lg:mx-auto 
-                p-1.5 bg-white border border-gray-200 rounded-xl shadow-sm
-            "
-        >
+        <div className="flex w-full max-w-md mx-auto md:max-w-none lg:w-auto lg:mx-auto p-1.5 bg-white border border-gray-200 rounded-xl shadow-sm">
           {buttons.map((btn) => {
             const isActive = viewMode === btn.type;
             return (
               <button
                 key={btn.type}
-                // Si está deshabilitado, no hacemos nada en el onClick
                 onClick={() => !btn.disabled && setViewMode(btn.type as ViewMode)}
                 disabled={btn.disabled}
                 className={`
-                    flex-1 flex items-center justify-center gap-2
-                    px-4 py-2.5 
-                    text-sm md:text-base font-bold rounded-lg transition-all duration-300
-                    ${
-                  // 1. Activo
-                  isActive
+                  flex-1 flex items-center justify-center gap-2
+                  px-4 py-2.5 
+                  text-sm md:text-base font-bold rounded-lg transition-all duration-300
+                  ${isActive
                     ? "bg-blue-600 text-white shadow-md transform scale-[1.02]"
-                    : // 2. Deshabilitado (Gris y cursor not-allowed)
-                    btn.disabled
+                    : btn.disabled
                       ? "bg-gray-100 text-gray-300 cursor-not-allowed border border-transparent"
-                      : // 3. Inactivo (Normal)
-                      "bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-blue-600 border border-transparent hover:border-gray-200"
+                      : "bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-blue-600 border border-transparent hover:border-gray-200"
                   }
                 `}
-                // Tooltip simple nativo si está deshabilitado
                 title={btn.disabled ? "Módulo en mantenimiento / reestructuración" : ""}
               >
                 {btn.icon}
@@ -216,11 +235,9 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
       {/* Renderizado Condicional de la Vista */}
       {viewMode === "TAREAS" ? (
-        // --- VISTA 1: GESTIÓN DE TAREAS ---
         <>
           <div className="flex justify-end sm:justify-between items-center mb-4">
             <div className="hidden sm:block"></div>
-
             <button
               onClick={handleNuevaTarea}
               className="flex items-center justify-center gap-2 
@@ -243,11 +260,9 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
               <ResumenPrincipalAdmin
                 filtro={filtro}
                 onFiltroChange={setFiltro}
-                responsable={responsable}
-                query={query}
-                tareas={tareasFiltradasPorModo}
+                // ✅ Pasamos directamente el objeto de totales calculado por el backend
+                conteo={resumenData}
                 loading={loading}
-                user={user}
               />
               <FiltrosAdmin
                 onResponsableChange={setResponsable}
@@ -262,7 +277,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                 filtro={filtro}
                 responsable={responsable}
                 query={query}
-                tareas={tareasFiltradasPorModo}
+                tareas={tareasParaTabla} // ✅ Usamos la lista filtrada visualmente
                 loading={loading}
                 onRecargarTareas={fetchTareas}
                 user={user}
@@ -271,7 +286,6 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
           </div>
         </>
       ) : (
-        // --- VISTA 2: INDICADORES (MÉTRICAS) ---
         <div className="animate-fade-in-up">
           <div className="mb-4">
             <Fechas onChange={handleFechaChange} />
@@ -282,14 +296,14 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
             month={month}
             responsable={responsable}
             query={query}
-            tareas={tareasFiltradasPorModo}
+            tareas={tareas} // Se pasa el array completo para métricas cliente-side (legacy por ahora)
             loading={loading}
             user={user}
           />
 
           <div className="mt-6">
             <DashboardMetricas
-              tareas={tareasFiltradasPorModo}
+              tareas={tareas}
               year={year}
               month={month}
             />

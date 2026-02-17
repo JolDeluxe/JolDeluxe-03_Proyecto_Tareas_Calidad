@@ -53,10 +53,18 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
 
         // 🚀 CAMBIO: Manejo de la nueva respuesta paginada del servicio
         // Pedimos un límite alto (1000) para llenar el Select con todos los usuarios
+        // y asegurar que el filtro de Responsable muestre a todos.
         const response = await usuariosService.getAll({ limit: 1000 });
-        const todosLosUsuarios = response.data; // ✅ Accedemos al array dentro de .data
 
-        // Filtramos para que SOLO aparezcan usuarios internos (No Invitados)
+        let todosLosUsuarios: Usuario[] = [];
+        // Verificación defensiva por si getAll devuelve array o { data: [] }
+        if (Array.isArray(response)) {
+          todosLosUsuarios = response;
+        } else if (response && response.data && Array.isArray(response.data)) {
+          todosLosUsuarios = response.data;
+        }
+
+        // Filtramos para que SOLO aparezcan usuarios internos (No Invitados) para la vista normal
         const data = todosLosUsuarios.filter(u => u.rol !== "INVITADO");
 
         const listaOrdenada = data.sort((a, b) =>
@@ -112,6 +120,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
   // ✅ NUEVO: Handler para cambio de texto en buscador
   const handleSearchChange = (val: string) => {
     setSearchText(val);
+    // Debounce manual o actualización directa. Directa por ahora para coincidir con Admin.tsx
     if (onBuscarChange) onBuscarChange(val);
   };
 

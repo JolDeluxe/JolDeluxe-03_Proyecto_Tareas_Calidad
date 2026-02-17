@@ -10,12 +10,41 @@ export const paramsSchema = z.object({
     .refine((num) => num > 0, "El ID debe ser positivo"),
 });
 
+// ✅ NUEVO: Enum para filtros de tiempo avanzados
+const TiempoFilterEnum = z.enum([
+  "PENDIENTES_ATRASADAS",
+  "PENDIENTES_A_TIEMPO",
+  "ENTREGADAS_A_TIEMPO", // Nota: Esto requiere comparación de columnas, se aproxima
+  "ENTREGADAS_ATRASADAS"
+]);
+
 // Validación para filtros (Query Params)
 export const getTareasQuerySchema = z.object({
   departamentoId: z.coerce.number().int().positive().optional(),
   asignadorId: z.coerce.number().int().positive().optional(),
   responsableId: z.coerce.number().int().positive().optional(),
+  
+  // ✅ 1. Filtro de Estatus y Urgencia
   estatus: z.nativeEnum(Estatus).optional(),
+  urgencia: z.nativeEnum(Urgencia).optional(), // NUEVO
+
+  // Paginación y Búsqueda
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().optional(),
+  query: z.string().trim().optional(),
+
+  // ✅ NUEVO: Filtro de Tiempo
+  tiempoFilter: TiempoFilterEnum.optional(),
+
+  // ✅ 2. Rango de Fechas (Para filtrar por fecha de registro)
+  fechaInicio: z.coerce.date().optional(), // NUEVO
+  fechaFin: z.coerce.date().optional(),    // NUEVO
+
+  // ✅ 3. Ordenamiento
+  sortBy: z.enum(["fechaRegistro", "fechaLimite", "urgencia"]).default("fechaRegistro"), // Default registro
+  order: z.enum(["asc", "desc"]).default("desc"), // Default más reciente primero
+
+  // ✅ Tipos de Vista
   viewType: z
     .union([
       z.literal("MIS_TAREAS"),
@@ -71,4 +100,3 @@ export const revisionTareaSchema = z.object({
   feedback: z.string().trim().optional(),
   nuevaFechaLimite: z.coerce.date().optional(),
 });
-

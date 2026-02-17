@@ -45,6 +45,70 @@ const formateaSoloFecha = (fecha?: Date | string | null): string => {
   return `${d}/${m}/${y}`;
 };
 
+/**
+ * 🛠️ Componente Helper para Renderizar Fecha Límite con Iconos (Mobile)
+ */
+const RenderFechaLimiteMobile = ({ fecha, vencida, entregadaTarde }: { fecha?: Date | string | null, vencida: boolean, entregadaTarde?: boolean }) => {
+  if (!fecha) return <span className="text-gray-400">—</span>;
+
+  const dateObj = typeof fecha === "string" ? new Date(fecha) : fecha;
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return <span className="text-gray-400">—</span>;
+
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const y = dateObj.getFullYear();
+  const fechaStr = `${d}/${m}/${y}`;
+
+  // Verificar hora para ver si mostramos el reloj
+  const h = dateObj.getHours();
+  const min = dateObj.getMinutes();
+  const sec = dateObj.getSeconds();
+
+  // Si es "Fin del día" (23:59:59), no mostramos la hora
+  const hasTime = !(h === 23 && min === 59 && sec >= 58);
+  const horaStr = hasTime ? formatTimeAMPM(dateObj) : null;
+
+  // Clases de color dinámicas
+  const textClass = vencida ? "text-red-600" : entregadaTarde ? "text-orange-700" : "text-gray-700";
+  const iconClass = vencida ? "text-red-600" : entregadaTarde ? "text-orange-600" : "text-gray-500";
+
+  return (
+    <div className={`flex flex-col items-start leading-tight ${vencida || entregadaTarde ? "font-bold" : ""}`}>
+      {/* Fila: Fecha */}
+      <div className={`flex items-center gap-1.5 ${textClass}`}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-4 h-4 ${iconClass}`} fill="currentColor">
+          <path d="M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Zm280 240q-17 0-28.5-11.5T440-440q0-17 11.5-28.5T480-480q17 0 28.5 11.5T520-440q0 17-11.5 28.5T480-400Zm-188.5-11.5Q280-423 280-440t11.5-28.5Q303-480 320-480t28.5 11.5Q360-457 360-440t-11.5 28.5Q337-400 320-400t-28.5-11.5ZM640-400q-17 0-28.5-11.5T600-440q0-17 11.5-28.5T640-480q17 0 28.5 11.5T680-440q0 17-11.5 28.5T640-400ZM480-240q-17 0-28.5-11.5T440-280q0-17 11.5-28.5T480-320q17 0 28.5 11.5T520-280q0 17-11.5 28.5T480-240Zm-188.5-11.5Q280-263 280-280t11.5-28.5Q303-320 320-320t28.5 11.5Q360-297 360-280t-11.5 28.5Q337-240 320-240t-28.5-11.5ZM640-240q-17 0-28.5-11.5T600-280q0-17 11.5-28.5T640-320q17 0 28.5 11.5T680-280q0 17-11.5 28.5T640-240Z" />
+        </svg>
+        <span>{fechaStr}</span>
+      </div>
+
+      {/* Fila: Hora (Opcional) */}
+      {horaStr && (
+        <div className={`flex items-center gap-1.5 mt-0.5 text-xs opacity-90 ${textClass}`}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-3.5 h-3.5 ${iconClass}`} fill="currentColor">
+            <path d="M582-298 440-440v-200h80v167l118 118-56 57ZM440-720v-80h80v80h-80Zm280 280v-80h80v80h-80ZM440-160v-80h80v80h-80ZM160-440v-80h80v80h-80ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
+          </svg>
+          <span>{horaStr}</span>
+        </div>
+      )}
+
+      {/* Fila: Etiqueta ATRASADA */}
+      {vencida && (
+        <span className="text-[10px] font-extrabold text-red-600 tracking-wide mt-1">
+          ATRASADA
+        </span>
+      )}
+
+      {/* ✅ NUEVO: Etiqueta Entregada con Retraso (Letra chica) */}
+      {!vencida && entregadaTarde && (
+        <span className="text-[9px] font-extrabold text-orange-600 tracking-wide mt-1 uppercase leading-none">
+          ENTREGADA CON RETRASO
+        </span>
+      )}
+    </div>
+  );
+};
+
 const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
   tareas,
   user,
@@ -60,12 +124,23 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
     <div className="grid lg:hidden grid-cols-1 md:grid-cols-2 gap-3 p-2 items-start">
       {tareas.map((row) => {
         const fechaFinalObj = getFechaFinalObj(row);
+
+        // 🚀 LÓGICA DE NEGOCIO CORREGIDA PARA MÓVIL:
+        // Si el estatus es EN_REVISION o CONCLUIDA, NO se considera vencida
         const estado =
           row.estatus === "EN_REVISION" || row.estatus === "CONCLUIDA"
             ? "normal"
             : getEstadoFecha(fechaFinalObj);
+
         const vencida = estado === "vencida";
-        const proxima = estado === "proxima";
+
+        // 🚀 LÓGICA NUEVA: ENTREGADA CON RETRASO
+        let entregadaTarde = false;
+        if (row.estatus === "EN_REVISION" && row.fechaEntrega && fechaFinalObj) {
+          const dEntrega = new Date(row.fechaEntrega).getTime();
+          const dLimite = new Date(fechaFinalObj).getTime();
+          entregadaTarde = dEntrega > dLimite;
+        }
 
         const isResponsable = row.responsables.some((r) => r.id === user?.id);
         const canReview =
@@ -73,7 +148,8 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
           user?.rol === "ADMIN" ||
           user?.rol === "SUPER_ADMIN";
 
-        const hayObservaciones = !!row.observaciones;
+        // Usamos la lógica de RenderFechaLimiteMobile con el objeto calculado
+        const fechaLimiteRender = fechaFinalObj;
 
         return (
           <div
@@ -84,8 +160,8 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
           >
             {/* --- CABECERA --- */}
             <div className="flex justify-between items-start mb-2">
-              <div className="flex flex-col pr-2">
-                <h3 className="font-bold text-gray-800 text-base leading-snug">
+              <div className="flex flex-col pr-2 w-[75%]">
+                <h3 className="font-bold text-gray-800 text-base leading-snug break-words">
                   {row.tarea}
                 </h3>
                 {row.estatus === "EN_REVISION" && (
@@ -116,8 +192,16 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
               </span>
             </div>
 
+            {/* OBSERVACIONES (Nuevo) */}
+            {row.observaciones && (
+              <div className="mb-3 bg-white/50 p-2 rounded border border-gray-200 text-xs italic text-gray-700 break-words">
+                <span className="font-bold not-italic">Obs: </span>
+                {row.observaciones}
+              </div>
+            )}
+
             {/* --- CUERPO --- */}
-            <div className="text-xs text-gray-700 space-y-1 mb-2">
+            <div className="text-xs text-gray-700 space-y-2 mb-2">
               <p>
                 <span className="font-bold">Asignado por:</span>{" "}
                 <span className="text-amber-800 font-semibold">
@@ -138,34 +222,16 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
                 {formateaSoloFecha(row.fechaRegistro)}
               </p>
 
-              <div className="flex items-center">
-                <span className="font-bold">Límite:</span>{" "}
-                <span
-                  className={`ml-1 font-bold ${vencida
-                    ? "text-red-700"
-                    : proxima
-                      ? "text-amber-700"
-                      : "text-gray-800"
-                    }`}
-                >
-                  {/* 🚀 FECHA HORA (EN LÍNEA) */}
-                  {formateaFecha(fechaFinalObj) || "—"}
-                </span>
-                {(vencida || proxima) && (
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className={`w-3.5 h-3.5 ml-1 ${vencida ? "text-red-600" : "text-amber-600"
-                      }`}
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M12 2.25a9.75 9.75 0 1 1 0 19.5 9.75 9.75 0 0 1 0-19.5Zm0 1.5a8.25 8.25 0 1 0 0 16.5 8.25 8.25 0 0 0 0-16.5Zm.75 4.5a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h3.75a.75.75 0 0 0 0-1.5h-3V8.25Z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                )}
+              {/* FECHA LÍMITE (Con Iconos y Color Rojo) */}
+              <div className="flex items-start">
+                <span className="font-bold mt-1 mr-2">Límite:</span>
+                <div className="bg-white/60 rounded px-2 py-1 border border-gray-100 shadow-sm">
+                  <RenderFechaLimiteMobile
+                    fecha={fechaLimiteRender}
+                    vencida={vencida}
+                    entregadaTarde={entregadaTarde}
+                  />
+                </div>
               </div>
 
               <p>
@@ -178,24 +244,15 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
               {row.fechaConclusion && (
                 <p>
                   <span className="font-bold">Conclusión:</span>{" "}
-                  {/* Conclusión también podría llevar hora si gustas, aquí dejé la función general */}
                   {formateaFecha(row.fechaConclusion)}
                 </p>
               )}
             </div>
 
-            {/* Observaciones */}
-            {row.observaciones && (
-              <p className="text-sm text-gray-700 italic mt-2 pt-2 border-t border-gray-300/50">
-                {row.observaciones}
-              </p>
-            )}
-
-            {/* Historial */}
+            {/* Historial (Con detalles desplegables) */}
             {row.historialFechas && row.historialFechas.length > 0 && (
               <details
-                className={`mt-2 pt-2 text-xs transition-all duration-300 open:pb-2 ${hayObservaciones ? "border-t border-gray-300/50" : ""
-                  }`}
+                className="mt-3 text-xs transition-all duration-300 open:pb-2 border-t border-gray-300/50 pt-2"
               >
                 <summary className="cursor-pointer select-none font-bold text-blue-700 hover:underline flex items-center gap-1">
                   <svg

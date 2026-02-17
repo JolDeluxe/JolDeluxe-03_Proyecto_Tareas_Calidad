@@ -41,7 +41,7 @@ enum EstatusUsuario {
 
 model PushSubscription {
   id       Int    @id @default(autoincrement())
-  endpoint String @unique @db.VarChar(767) 
+  endpoint String @unique @db.VarChar(767)
   p256dh   String
   auth     String
 
@@ -50,7 +50,6 @@ model PushSubscription {
 
   @@index([usuarioId])
 }
-
 
 // --- MODELOS DE DATOS ---
 
@@ -82,33 +81,49 @@ model Usuario {
   tareasDondeEsResponsable ResponsablesEnTarea[]
   historialModificado      HistorialFecha[]
   suscripciones            PushSubscription[]
-  bitacora                 Bitacora[] 
+  bitacora                 Bitacora[]
+
+  // ✅ OPTIMIZACIÓN:
+  @@index([departamentoId])
+  @@index([estatus]) // Para login rápido y filtros de activos
 }
 
 model Tarea {
-  id              Int       @id @default(autoincrement())
-  tarea           String
-  fechaRegistro   DateTime
-  fechaLimite     DateTime
+  id            Int       @id @default(autoincrement())
+  tarea         String
+  fechaRegistro DateTime  @default(now())
+  fechaLimite   DateTime
   fechaConclusion DateTime?
-  estatus         Estatus
-  urgencia        Urgencia
-  observaciones   String?
+  estatus       Estatus   @default(PENDIENTE)
+  urgencia      Urgencia  @default(BAJA)
+  observaciones String?
 
-  fechaEntrega      DateTime? 
-  comentarioEntrega String?   @db.Text 
-  fechaRevision     DateTime? 
-  feedbackRevision  String?   @db.Text 
+  fechaEntrega      DateTime?
+  comentarioEntrega String?   @db.Text
+  fechaRevision     DateTime?
+  feedbackRevision  String?   @db.Text
+  
+  // Campo nuevo para Auto-Validación
+  fueAutoValidada   Boolean   @default(false)
 
   departamentoId Int
   departamento   Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
 
-  asignadorId   Int
-  asignador     Usuario   @relation("Asignador", fields: [asignadorId], references: [id], onDelete: Restrict)
-  
-  responsables    ResponsablesEnTarea[]  
+  asignadorId Int
+  asignador   Usuario @relation("Asignador", fields: [asignadorId], references: [id], onDelete: Restrict)
+
+  responsables    ResponsablesEnTarea[]
   historialFechas HistorialFecha[]
   imagenes        ImagenTarea[]
+
+  // ✅ OPTIMIZACIÓN DE RENDIMIENTO:
+  // Estos índices aceleran drásticamente los filtros del Dashboard
+  @@index([departamentoId]) // Para filtrar por depto
+  @@index([asignadorId])    // Para ver "Asignadas"
+  @@index([estatus])        // Para contar Pendientes/Concluidas rápidamente
+  @@index([fechaLimite])    // Para calcular Atrasadas vs A Tiempo
+  @@index([fechaRegistro])  // Para el filtro de rangos de fecha
+  @@index([urgencia])       // Para el nuevo filtro de urgencia
 }
 
 // --- TABLA PIVOTE ---
@@ -120,6 +135,9 @@ model ResponsablesEnTarea {
   tarea   Tarea   @relation(fields: [tareaId], references: [id], onDelete: Cascade)
 
   @@id([usuarioId, tareaId])
+  // ✅ OPTIMIZACIÓN:
+  @@index([usuarioId]) // Vital para ver "Mis Tareas"
+  @@index([tareaId])
 }
 
 // --- MODELOS DE SOPORTE  ---
@@ -128,31 +146,31 @@ model ImagenTarea {
   id          Int      @id @default(autoincrement())
   url         String
   fechaSubida DateTime @default(now())
-  tareaId Int
-  tarea   Tarea @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  tareaId     Int
+  tarea       Tarea    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
 }
 
 model HistorialFecha {
-  id              Int       @id @default(autoincrement())
+  id              Int      @id @default(autoincrement())
   fechaAnterior   DateTime
   nuevaFecha      DateTime
   motivo          String?
-  fechaCambio     DateTime  @default(now())
+  fechaCambio     DateTime @default(now())
   modificadoPorId Int
-  modificadoPor   Usuario   @relation(fields: [modificadoPorId], references: [id], onDelete: Cascade)
+  modificadoPor   Usuario  @relation(fields: [modificadoPorId], references: [id], onDelete: Cascade)
   tareaId         Int
-  tarea           Tarea     @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  tarea           Tarea    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
 }
 
 model Bitacora {
   id          Int      @id @default(autoincrement())
-  accion      String   
-  descripcion String   @db.Text 
-  detalles    Json?    
+  accion      String
+  descripcion String   @db.Text
+  detalles    Json?
   fecha       DateTime @default(now())
-  
-  usuarioId   Int?
-  usuario     Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
 
   @@index([fecha])
   @@index([usuarioId])

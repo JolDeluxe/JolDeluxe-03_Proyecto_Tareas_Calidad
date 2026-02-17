@@ -1,3 +1,5 @@
+// 📍 src/components/Admin/ModalRevision.tsx
+
 import React, { useState, useMemo } from "react";
 import type { Tarea, ImagenTarea } from "../../types/tarea";
 import { tareasService } from "../../api/tareas.service";
@@ -23,6 +25,14 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
 
   const isFeedbackRequired = decision === "RECHAZAR";
   const tieneImagenes = tarea.imagenes && tarea.imagenes.length > 0;
+
+  // ✅ LÓGICA PARA DETECTAR ENTREGA TARDÍA
+  const esFueraDeTiempo = useMemo(() => {
+    if (!tarea.fechaLimite || !tarea.fechaEntrega) return false;
+    const limite = new Date(tarea.fechaLimite).getTime();
+    const entrega = new Date(tarea.fechaEntrega).getTime();
+    return entrega > limite;
+  }, [tarea.fechaLimite, tarea.fechaEntrega]);
 
   const formateaFechaInput = (date: Date | string | null): string => {
     if (!date) return "";
@@ -107,6 +117,19 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
         <form onSubmit={handleSubmit} className="flex flex-col flex-grow min-h-0">
           <div className="flex-grow overflow-y-auto p-6 text-gray-800">
             <div className="flex flex-col gap-5">
+
+              {/* ⚠️ ALERTA DE TAREA FUERA DE TIEMPO (NUEVO) */}
+              {esFueraDeTiempo && (
+                <div className="bg-red-100 border-l-4 border-red-600 text-red-800 p-3 rounded shadow-sm flex items-center gap-3 animate-pulse">
+                  <span className="text-2xl">⚠️</span>
+                  <div>
+                    <p className="font-extrabold uppercase text-sm">Tarea fuera de tiempo</p>
+                    <p className="text-xs">
+                      Esta tarea se entregó después de la fecha límite establecida.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Info Tarea */}
               <div>
@@ -243,8 +266,8 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
               type="submit"
               disabled={loading}
               className={`font-semibold px-4 py-2 rounded-md text-white transition-all duration-200 disabled:opacity-70 shadow-sm ${decision === "APROBAR"
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-red-600 hover:bg-red-700"
+                ? "bg-green-600 hover:bg-green-700"
+                : "bg-red-600 hover:bg-red-700"
                 }`}
             >
               {loading

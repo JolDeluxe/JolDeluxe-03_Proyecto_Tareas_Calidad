@@ -5,7 +5,7 @@ import TablaPendientes from "../components/Pendientes/TablaPendientes";
 import type { Usuario } from "../types/usuario";
 
 // Nuevo tipo para manejar las 3 vistas posibles
-type ActiveView = "MIS_TAREAS" | "ASIGNADAS" | "TODAS";
+export type ActiveView = "MIS_TAREAS" | "ASIGNADAS" | "TODAS";
 
 interface Props {
   user: Usuario | null;

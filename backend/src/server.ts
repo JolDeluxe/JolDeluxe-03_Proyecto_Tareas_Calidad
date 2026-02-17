@@ -11,12 +11,11 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { iniciarCronJobs } from "./services/cron.service.js";
 
 // 2. IMPORTAR RUTAS
-// (Nota: Seguiremos usando tus rutas actuales hasta que refactoricemos los módulos)
 import tareasRouter from "./modules/tareas/tareas.routes.js";
 import authRouter from "./modules/auth/auth.routes.js";
 import usuariosRouter from "./modules/usuarios/usuarios.routes.js";
 import departamentosRouter from "./modules/departamentos/departamentos.routes.js";
-import logsRouter from "./modules/logs/logs.routes.js"; // <--- 1. NUEVA IMPORTACIÓN
+import logsRouter from "./modules/logs/logs.routes.js";
 
 // --- CONFIGURACIÓN INICIAL ---
 const __filename = fileURLToPath(import.meta.url);
@@ -39,9 +38,9 @@ app.use("/api/auth", authRouter);
 app.use("/api/tareas", tareasRouter);
 app.use("/api/usuarios", usuariosRouter);
 app.use("/api/departamentos", departamentosRouter);
-app.use("/api/logs", logsRouter); // <--- 2. NUEVA RUTA REGISTRADA
+app.use("/api/logs", logsRouter);
 
-// --- FALLBACK PARA SPA (Cualquier otra ruta va al index.html) ---
+// --- FALLBACK PARA SPA ---
 app.get("*", (req, res, next) => {
   if (!req.path.startsWith("/api")) {
       return res.sendFile(path.join(FRONTEND_PATH, "index.html"));
@@ -50,7 +49,7 @@ app.get("*", (req, res, next) => {
 });
 
 // --- SERVICIOS EN 2do PLANO ---
-iniciarCronJobs();
+iniciarCronJobs(); // <--- Aquí arranca el servicio de auto-validación y notificaciones
 
 // --- MANEJO DE ERRORES ---
 app.use(errorHandler);

@@ -34,39 +34,71 @@ const formatTimeAMPM = (date: Date): string => {
 }
 
 /**
- * Formatea la fecha para mostrar.
- * Devuelve un nodo React para permitir saltos de línea en Desktop.
+ * 🛠️ Componente Helper para Renderizar Fecha Límite con Iconos
+ * - Icono Calendario + Fecha
+ * - Icono Reloj + Hora (si no es fin del día)
+ * - Texto "ATRASADA" en rojo si venció (Pendiente)
+ * - Texto "ENTREGADA CON RETRASO" en naranja (En Revisión)
  */
-const formateaFechaDesktop = (fecha?: Date | string | null) => {
-  if (!fecha) return "";
+const RenderFechaLimite = ({ fecha, vencida, entregadaTarde }: { fecha?: Date | string | null, vencida: boolean, entregadaTarde?: boolean }) => {
+  if (!fecha) return <span className="text-gray-400">—</span>;
+
   const dateObj = typeof fecha === "string" ? new Date(fecha) : fecha;
-  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
-    return "";
-  }
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return <span className="text-gray-400">—</span>;
 
   const d = String(dateObj.getDate()).padStart(2, "0");
   const m = String(dateObj.getMonth() + 1).padStart(2, "0");
   const y = dateObj.getFullYear();
-
   const fechaStr = `${d}/${m}/${y}`;
 
-  // Verificar hora
+  // Verificar hora para ver si mostramos el reloj
   const h = dateObj.getHours();
   const min = dateObj.getMinutes();
   const sec = dateObj.getSeconds();
 
-  // Si es 23:59:59, solo fecha
-  if (h === 23 && min === 59 && sec >= 58) {
-    return <span>{fechaStr}</span>;
-  }
+  // Si es "Fin del día" (23:59:59), no mostramos la hora
+  const hasTime = !(h === 23 && min === 59 && sec >= 58);
+  const horaStr = hasTime ? formatTimeAMPM(dateObj) : null;
 
-  // Si tiene hora específica: FECHA (arriba) HORA (abajo)
-  const horaStr = formatTimeAMPM(dateObj);
+  // Clases de color dinámicas
+  // Prioridad visual: Vencida (Rojo) > Entregada Tarde (Naranja Oscuro) > Normal (Gris)
+  const textClass = vencida ? "text-red-600" : entregadaTarde ? "text-orange-700" : "text-gray-700";
+  const iconClass = vencida ? "text-red-600" : entregadaTarde ? "text-orange-600" : "text-gray-500";
 
   return (
-    <div className="flex flex-col items-center leading-tight">
-      <span>{fechaStr}</span>
-      <span className="text-[11px] font-normal opacity-80">{horaStr}</span>
+    <div className={`flex flex-col items-center justify-center leading-tight ${vencida || entregadaTarde ? "font-bold" : ""}`}>
+
+      {/* Fila: Fecha */}
+      <div className={`flex items-center gap-1.5 ${textClass}`}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-4 h-4 ${iconClass}`} fill="currentColor">
+          <path d="M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Zm280 240q-17 0-28.5-11.5T440-440q0-17 11.5-28.5T480-480q17 0 28.5 11.5T520-440q0 17-11.5 28.5T480-400Zm-188.5-11.5Q280-423 280-440t11.5-28.5Q303-480 320-480t28.5 11.5Q360-457 360-440t-11.5 28.5Q337-400 320-400t-28.5-11.5ZM640-400q-17 0-28.5-11.5T600-440q0-17 11.5-28.5T640-480q17 0 28.5 11.5T680-440q0 17-11.5 28.5T640-400ZM480-240q-17 0-28.5-11.5T440-280q0-17 11.5-28.5T480-320q17 0 28.5 11.5T520-280q0 17-11.5 28.5T480-240Zm-188.5-11.5Q280-263 280-280t11.5-28.5Q303-320 320-320t28.5 11.5Q360-297 360-280t-11.5 28.5Q337-240 320-240t-28.5-11.5ZM640-240q-17 0-28.5-11.5T600-280q0-17 11.5-28.5T640-320q17 0 28.5 11.5T680-280q0 17-11.5 28.5T640-240Z" />
+        </svg>
+        <span>{fechaStr}</span>
+      </div>
+
+      {/* Fila: Hora (Opcional) */}
+      {horaStr && (
+        <div className={`flex items-center gap-1.5 mt-0.5 text-xs opacity-90 ${textClass}`}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-3.5 h-3.5 ${iconClass}`} fill="currentColor">
+            <path d="M582-298 440-440v-200h80v167l118 118-56 57ZM440-720v-80h80v80h-80Zm280 280v-80h80v80h-80ZM440-160v-80h80v80h-80ZM160-440v-80h80v80h-80ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z" />
+          </svg>
+          <span>{horaStr}</span>
+        </div>
+      )}
+
+      {/* Fila: Etiquetas de Estado */}
+      {vencida && (
+        <span className="text-[10px] font-extrabold text-red-600 tracking-wide mt-1">
+          ATRASADA
+        </span>
+      )}
+
+      {/* ✅ NUEVO: Etiqueta Entregada con Retraso (Letra chica) */}
+      {!vencida && entregadaTarde && (
+        <span className="text-[9px] font-extrabold text-orange-600 tracking-wide mt-1 uppercase text-center leading-none">
+          ENTREGADA CON RETRASO
+        </span>
+      )}
     </div>
   );
 };
@@ -171,12 +203,24 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
     try {
       let tareasDesdeServicio: Tarea[] = [];
 
+      // 🚀 CAMBIO CRÍTICO: Desestructuramos para obtener { data }
+      // El nuevo servicio devuelve: { status, meta, data: Tarea[] }
       if (viewType === "ASIGNADAS") {
-        tareasDesdeServicio = await tareasService.getAsignadas();
+        const response = await tareasService.getAsignadas();
+        tareasDesdeServicio = response.data;
       } else if (viewType === "MIS_TAREAS") {
-        tareasDesdeServicio = await tareasService.getMisTareas();
+        const response = await tareasService.getMisTareas();
+        tareasDesdeServicio = response.data;
       } else {
-        tareasDesdeServicio = await tareasService.getAll();
+        const response = await tareasService.getAll();
+        tareasDesdeServicio = response.data;
+      }
+
+      // Verificación de seguridad
+      if (!Array.isArray(tareasDesdeServicio)) {
+        console.error("La respuesta de la API no es un array válido", tareasDesdeServicio);
+        setTareasPendientes([]);
+        return;
       }
 
       const tareasConFechas = tareasDesdeServicio.map((t: any) => ({
@@ -184,6 +228,8 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
         fechaRegistro: t.fechaRegistro ? new Date(t.fechaRegistro) : null,
         fechaLimite: t.fechaLimite ? new Date(t.fechaLimite) : null,
         fechaConclusion: t.fechaConclusion ? new Date(t.fechaConclusion) : null,
+        // Agregamos fechaEntrega para la lógica de revisión
+        fechaEntrega: t.fechaEntrega ? new Date(t.fechaEntrega) : null,
         historialFechas:
           t.historialFechas?.map((h: any) => ({
             ...h,
@@ -282,8 +328,19 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
                   {pendientesOrdenados.map((row) => {
                     const fechaFinalObj = getFechaFinalObj(row);
                     const estado = getEstadoFecha(fechaFinalObj);
-                    const vencida = estado === "vencida";
-                    const proxima = estado === "proxima";
+
+                    // 🚀 LÓGICA DE NEGOCIO CORREGIDA:
+                    // Solo es "vencida" si la fecha pasó Y sigue en PENDIENTE.
+                    const vencida = estado === "vencida" && row.estatus === "PENDIENTE";
+
+                    // 🚀 LÓGICA NUEVA: ENTREGADA CON RETRASO
+                    // Si está EN_REVISION, verificamos si la fecha de entrega > fecha límite efectiva
+                    let entregadaTarde = false;
+                    if (row.estatus === "EN_REVISION" && row.fechaEntrega && fechaFinalObj) {
+                      const dEntrega = new Date(row.fechaEntrega).getTime();
+                      const dLimite = new Date(fechaFinalObj).getTime();
+                      entregadaTarde = dEntrega > dLimite;
+                    }
 
                     const isResponsable = row.responsables.some(r => r.id === user?.id);
                     const isAsignador = row.asignadorId === user?.id;
@@ -346,17 +403,10 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
                           )}
                         </td>
                         {/* 🚀 FECHA LÍMITE CON FORMATO DESKTOP */}
-                        <td className={`px-2 py-1 text-center text-lg font-bold ${vencida ? "text-red-600" : proxima ? "text-amber-600" : "text-gray-800"}`}>
+                        <td className={`px-2 py-1 text-center text-lg font-bold`}>
                           <div className="flex flex-col items-center justify-center">
                             {/* Usamos el formateador Desktop para separar líneas */}
-                            {formateaFechaDesktop(fechaFinalObj) || "—"}
-
-                            {/* Icono de advertencia debajo o al lado si se prefiere, aquí lo dejo sutilmente integrado */}
-                            {(vencida || proxima) && (
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-4 h-4 mt-1 ${vencida ? "text-red-500" : "text-amber-500"}`}>
-                                <path fillRule="evenodd" d="M12 2.25a9.75 9.75 0 1 1 0 19.5 9.75 9.75 0 0 1 0-19.5Zm0 1.5a8.25 8.25 0 1 0 0 16.5 8.25 8.25 0 0 0 0-16.5Zm.75 4.5a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h3.75a.75.75 0 0 0 0-1.5h-3V8.25Z" clipRule="evenodd" />
-                              </svg>
-                            )}
+                            <RenderFechaLimite fecha={fechaFinalObj} vencida={vencida} entregadaTarde={entregadaTarde} />
                           </div>
                         </td>
 
@@ -423,7 +473,7 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
           <TablaPendientesMobile
             tareas={pendientesOrdenados}
             user={user}
-            formateaFecha={formateaFechaString} // Pasamos la versión string para móvil
+            formateaFecha={formateaFechaString} // Pasamos la versión string para móvil (por si se necesita en logs)
             getRowClass={getRowClass}
             getFechaFinalObj={getFechaFinalObj}
             getEstadoFecha={getEstadoFecha}

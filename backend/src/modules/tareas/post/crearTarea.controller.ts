@@ -48,15 +48,21 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
     }
   }
 
-  // 🚀 CAMBIO CLAVE: Ya NO forzamos la hora a 23:59:59.
-  // Respetamos la fecha/hora exacta que envía el Frontend.
+  // 3. --- LÓGICA DE TIEMPO (11:59:59 PM) ---
   const fechaLimiteFinal = new Date(data.fechaLimite);
+  
+  // Si la hora es 00:00:00 (o muy cercano), asumimos que el usuario eligió solo fecha
+  // y otorgamos hasta el final del día.
+  if (fechaLimiteFinal.getHours() === 0 && fechaLimiteFinal.getMinutes() === 0) {
+      fechaLimiteFinal.setHours(23, 59, 59, 999);
+  }
+  // ------------------------------------------
 
   // 4. Crear en BD
   const nuevaTarea = await prisma.tarea.create({
     data: {
       ...data,
-      fechaLimite: fechaLimiteFinal, // 👈 Usamos la fecha tal cual viene
+      fechaLimite: fechaLimiteFinal, // Usamos la fecha ajustada
       observaciones: observaciones ?? null,
       fechaRegistro: new Date(),
       asignador: { connect: { id: user.id } },
