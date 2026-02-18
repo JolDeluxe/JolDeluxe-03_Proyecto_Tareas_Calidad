@@ -7,7 +7,7 @@ import TablaAdmin from "../components/Admin/TablaAdmin";
 import ResumenPrincipalAdmin from "../components/Admin/ResumenAdmin";
 import FiltrosAdmin from "../components/Admin/FiltrosAdmin";
 import ModalNueva from "../components/Admin/ModalNueva";
-import FechasAdmin from "../components/Admin/FechasAdmin"; // ✅ IMPORTADO
+import FechasAdmin from "../components/Admin/FechasAdmin";
 
 // --- Componentes de Métricas ---
 import ResumenPrincipalDash from "../components/Principal/ResumenDash";
@@ -18,7 +18,6 @@ import { tareasService, type TareaFilters, type TareasResponse } from "../api/ta
 import type { Tarea } from "../types/tarea";
 import type { Usuario } from "../types/usuario";
 
-// Tipo para el Switch de Vistas
 type ViewMode = "TAREAS" | "INDICADORES";
 
 interface AdminProps {
@@ -26,38 +25,31 @@ interface AdminProps {
 }
 
 const Admin: React.FC<AdminProps> = ({ user }) => {
-  // --- Estados de Filtros de Administración ---
-  const [filtro, setFiltro] = useState("total"); // Pestañas: Pendientes, etc.
-  const [responsable, setResponsable] = useState<string>("Todos"); // Filtro API
-  const [query, setQuery] = useState<string>(""); // Filtro API
+  // --- Estados de Filtros ---
+  const [filtro, setFiltro] = useState("total");
+  const [responsable, setResponsable] = useState<string>("Todos");
+  const [query, setQuery] = useState<string>("");
 
-  // ✅ NUEVO ESTADO: Papelera (Ver Canceladas)
   const [verCanceladas, setVerCanceladas] = useState(false);
 
-  // --- Estados para Modales y Carga ---
+  // ✅ Actualizamos el tipo para incluir los nuevos filtros de revisión
+  const [filtroUrgencia, setFiltroUrgencia] = useState<"TODAS" | "ALTA" | "MEDIA" | "BAJA">("TODAS");
+  const [filtroExtra, setFiltroExtra] = useState<"NINGUNO" | "ATRASADAS" | "CORRECCIONES" | "RETRASO" | "AUTOCOMPLETAR">("NINGUNO");
+
+  // --- Estados varios ---
   const [openModal, setOpenModal] = useState<boolean>(false);
   const [tareas, setTareas] = useState<Tarea[]>([]);
-
-  // Estado para el resumen que viene del Backend
   const [resumenData, setResumenData] = useState<TareasResponse['meta']['resumen']['totales'] | null>(null);
-
   const [loading, setLoading] = useState(true);
-
-  // --- Estado para Modo Kaizen ---
   const [isKaizen, setIsKaizen] = useState(false);
-
-  // --- Estados para Métricas y Fechas ---
   const [viewMode, setViewMode] = useState<ViewMode>("TAREAS");
 
-  // ✅ Estados compartidos para el filtro de Fechas (INICIALIZADOS CON LA FECHA ACTUAL)
   const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [month, setMonth] = useState<number>(new Date().getMonth() + 1); // 1-12 (Mes actual)
+  const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
 
-  // ✅ NUEVOS ESTADOS PARA PAGINACIÓN
   const [page, setPage] = useState(1);
   const itemsPerPage = 30;
 
-  // --- Lógica de Recarga Forzada ---
   const handleRefresh = () => {
     setLoading(true);
     fetchTareas();
@@ -67,38 +59,41 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     setOpenModal(true);
   };
 
-  // ✅ Handler para cuando cambian las fechas en FechasAdmin
   const handleFechaChange = (newYear: number, newMonth: number) => {
     setYear(newYear);
     setMonth(newMonth);
-    setPage(1); // Resetear página al cambiar fecha
+    setPage(1);
   };
 
-  // --- Fetch de Tareas (Server-Side Filtering) ---
+  // ✅ Handler: Reseteamos filtros extra al cambiar de pestaña
+  const handleFiltroChange = (nuevoFiltro: string) => {
+    setFiltro(nuevoFiltro);
+    // Si cambiamos de pestaña, limpiamos cualquier filtro extra activo
+    setFiltroExtra("NINGUNO");
+  };
+
+  // --- Fetch de Tareas ---
   const fetchTareas = useCallback(async () => {
     setLoading(true);
     try {
-      // ✅ 1. Calcular fechas de inicio y fin basadas en la selección
       let fechaInicioStr: string | undefined = undefined;
       let fechaFinStr: string | undefined = undefined;
 
       if (year) {
         const startDate = new Date(year, month === 0 ? 0 : month - 1, 1);
         startDate.setHours(0, 0, 0, 0);
-
         const endDate = month === 0
           ? new Date(year, 11, 31, 23, 59, 59)
-          : new Date(year, month, 0, 23, 59, 59); // Día 0 del siguiente mes es el último de este
+          : new Date(year, month, 0, 23, 59, 59);
 
         fechaInicioStr = startDate.toISOString();
         fechaFinStr = endDate.toISOString();
       }
 
-      // ✅ 2. Incluir fechas en los filtros del API
       const apiFilters: TareaFilters = {
         query: query,
         responsableId: responsable !== "Todos" ? Number(responsable) : undefined,
-        limit: 1000, // Traemos todos los del periodo para paginar en cliente
+        limit: 1000,
         fechaInicio: fechaInicioStr,
         fechaFin: fechaFinStr
       };
@@ -139,7 +134,6 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     fetchTareas();
   }, [fetchTareas]);
 
-  // Resetear página cuando cambian los filtros de búsqueda, responsables o papelera
   useEffect(() => {
     setPage(1);
   }, [filtro, responsable, query, isKaizen, verCanceladas]);
@@ -152,13 +146,12 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
       return isKaizen ? esKaizen : !esKaizen;
     });
 
-    // 🔴 1. SI VER CANCELADAS ESTÁ ACTIVO:
-    // Mostramos SOLO las canceladas, ignorando las pestañas de estado (Pendiente, etc.)
+    // 1. Papelera
     if (verCanceladas) {
       return filtered.filter(t => t.estatus === "CANCELADA");
     }
 
-    // 🟢 2. SI NO: Filtramos normal por pestañas y EXCLUIMOS las canceladas
+    // 2. Pestañas
     if (filtro === "pendientes") {
       filtered = filtered.filter(t => t.estatus === "PENDIENTE");
     } else if (filtro === "en_revision") {
@@ -166,14 +159,84 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     } else if (filtro === "concluidas") {
       filtered = filtered.filter(t => t.estatus === "CONCLUIDA");
     } else {
-      // En la pestaña "Total", mostramos todo MENOS las canceladas (que están en la papelera)
       filtered = filtered.filter(t => t.estatus !== "CANCELADA");
     }
 
-    return filtered;
-  }, [tareas, isKaizen, filtro, verCanceladas]);
+    // 3. Urgencia
+    if (filtroUrgencia !== "TODAS") {
+      filtered = filtered.filter(t => t.urgencia === filtroUrgencia);
+    }
 
-  // ✅ Lógica de Paginación para la Tabla
+    // 4. Filtros Extras (Lógica Específica)
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    // -- PENDIENTES --
+    if (filtroExtra === "ATRASADAS") {
+      filtered = filtered.filter(t => {
+        if (t.estatus !== "PENDIENTE") return false;
+        if (!t.fechaLimite) return false;
+        const fechaLimiteObj = t.historialFechas && t.historialFechas.length > 0
+          ? new Date(t.historialFechas[t.historialFechas.length - 1].nuevaFecha!)
+          : new Date(t.fechaLimite);
+        return fechaLimiteObj < hoy;
+      });
+    }
+
+    if (filtroExtra === "CORRECCIONES") {
+      filtered = filtered.filter(t => t.estatus === "PENDIENTE" && t.feedbackRevision);
+    }
+
+    // -- EN REVISIÓN --
+    if (filtroExtra === "RETRASO") {
+      filtered = filtered.filter(t => {
+        // 1. Calcular Fecha Límite Efectiva (considerando historial)
+        const fechaLimiteObj = t.historialFechas && t.historialFechas.length > 0
+          ? new Date(t.historialFechas[t.historialFechas.length - 1].nuevaFecha!)
+          : (t.fechaLimite ? new Date(t.fechaLimite) : null);
+
+        if (!fechaLimiteObj) return false;
+        const limiteTime = fechaLimiteObj.getTime();
+
+        // Caso A: Está EN_REVISIÓN (Comparamos contra fechaEntrega)
+        if (t.estatus === "EN_REVISION" && t.fechaEntrega) {
+          return new Date(t.fechaEntrega).getTime() > limiteTime;
+        }
+
+        // Caso B: Está CONCLUIDA (Tu regla de negocio)
+        if (t.estatus === "CONCLUIDA") {
+          // Si tiene fechaEntrega (pasó por revisión), la usamos.
+          // Si no (la cerró directo el admin), usamos fechaConclusion.
+          const fechaReferencia = t.fechaEntrega
+            ? new Date(t.fechaEntrega)
+            : (t.fechaConclusion ? new Date(t.fechaConclusion) : null);
+
+          if (!fechaReferencia) return false;
+          return fechaReferencia.getTime() > limiteTime;
+        }
+
+        return false;
+      });
+    }
+
+    if (filtroExtra === "AUTOCOMPLETAR") {
+      // Llevan 4 días o más en revisión
+      filtered = filtered.filter(t => {
+        if (t.estatus !== "EN_REVISION") return false;
+        if (!t.fechaEntrega) return false; // Usamos fechaEntrega como inicio de la revisión
+
+        const fechaEntrega = new Date(t.fechaEntrega);
+        // Calculamos diferencia en días
+        const diferenciaTiempo = hoy.getTime() - fechaEntrega.getTime();
+        const diasEnRevision = diferenciaTiempo / (1000 * 3600 * 24);
+
+        return diasEnRevision >= 4;
+      });
+    }
+
+    return filtered;
+  }, [tareas, isKaizen, filtro, verCanceladas, filtroUrgencia, filtroExtra]);
+
   const totalPages = Math.max(1, Math.ceil(tareasFiltradas.length / itemsPerPage));
 
   const tareasParaTablaPaginadas = useMemo(() => {
@@ -181,14 +244,12 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     return tareasFiltradas.slice(startIndex, startIndex + itemsPerPage);
   }, [tareasFiltradas, page]);
 
-  // --- Título Dinámico ---
   const tituloDinamico = useMemo(() => {
     if (viewMode === "INDICADORES") return "DASHBOARD DE MÉTRICAS";
-    if (verCanceladas) return "PAPELERA DE RECICLAJE"; // Título especial si papelera activa
+    if (verCanceladas) return "PAPELERA DE RECICLAJE";
     return isKaizen ? "ADMINISTRA KAIZEN" : "ADMINISTRA TAREAS";
   }, [viewMode, isKaizen, verCanceladas]);
 
-  // --- Switch de Vistas ---
   const renderSwitch = () => {
     const buttons = [
       {
@@ -257,17 +318,14 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
         </svg>
       </button>
 
-      {/* Título Principal */}
       <h1 className="text-3xl font-bold mb-3 text-center text-black tracking-wide font-sans">
         {tituloDinamico}
       </h1>
 
-      {/* ✅ COMPONENTE DE FECHAS */}
       <div className="mb-4 w-full">
         <FechasAdmin onChange={handleFechaChange} />
       </div>
 
-      {/* Switch de Vistas */}
       {renderSwitch()}
 
       {viewMode === "TAREAS" ? (
@@ -296,7 +354,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
             <div className="lg:static sticky top-[40px] md:top-[70px] z-40 bg-white border-b border-gray-200 m-1 px-1 pt-4 pb-1 lg:pb-4">
               <ResumenPrincipalAdmin
                 filtro={filtro}
-                onFiltroChange={setFiltro}
+                onFiltroChange={handleFiltroChange}
                 conteo={resumenData}
                 loading={loading}
                 verCanceladas={verCanceladas}
@@ -305,16 +363,19 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                 onResponsableChange={setResponsable}
                 onBuscarChange={setQuery}
                 user={user}
-                // ✅ Pasamos las props nuevas para la Papelera
                 verCanceladas={verCanceladas}
                 onToggleCanceladas={() => setVerCanceladas(!verCanceladas)}
+                filtroUrgencia={filtroUrgencia}
+                onUrgenciaChange={setFiltroUrgencia}
+                filtroExtra={filtroExtra}
+                onFiltroExtraChange={setFiltroExtra}
+                filtroActivo={filtro}
+                totalTareas={tareasFiltradas.length}
               />
             </div>
 
             <div className="px-1">
               <TablaAdmin
-                // ✅ TRUCO CLAVE: Si verCanceladas es true, forzamos el prop 'filtro' a "canceladas" 
-                // para que TablaAdmin sepa que debe mostrar filas con estatus CANCELADA
                 filtro={verCanceladas ? "canceladas" : filtro}
                 responsable={responsable}
                 query={query}

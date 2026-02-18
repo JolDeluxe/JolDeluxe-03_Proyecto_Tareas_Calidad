@@ -12,18 +12,29 @@ interface FiltrosProps {
   onResponsableChange: (usuarioId: string) => void;
   onBuscarChange?: (query: string) => void;
   user: Usuario | null;
-  // ✅ CORRECCIÓN: Agregadas las props faltantes aquí
   verCanceladas: boolean;
   onToggleCanceladas: () => void;
+  filtroUrgencia: "TODAS" | "ALTA" | "MEDIA" | "BAJA";
+  onUrgenciaChange: (val: "TODAS" | "ALTA" | "MEDIA" | "BAJA") => void;
+  // ✅ CORRECCIÓN: Definición completa de tipos
+  filtroExtra: "NINGUNO" | "ATRASADAS" | "CORRECCIONES" | "RETRASO" | "AUTOCOMPLETAR";
+  onFiltroExtraChange: (val: "NINGUNO" | "ATRASADAS" | "CORRECCIONES" | "RETRASO" | "AUTOCOMPLETAR") => void;
+  filtroActivo: string;
+  totalTareas: number;
 }
 
 const FiltrosAdmin: React.FC<FiltrosProps> = ({
   onResponsableChange,
   onBuscarChange,
   user,
-  // ✅ CORRECCIÓN: Recibimos las props aquí
   verCanceladas,
   onToggleCanceladas,
+  filtroUrgencia,
+  onUrgenciaChange,
+  filtroExtra,
+  onFiltroExtraChange,
+  filtroActivo,
+  totalTareas
 }) => {
   // --- Estados ---
   const [selectedUsuarioId, setSelectedUsuarioId] = useState("Todos"); // ID seleccionado
@@ -112,6 +123,12 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
         onLimpiarBusqueda={handleLimpiarBusqueda}
         verCanceladas={verCanceladas}
         onToggleCanceladas={onToggleCanceladas}
+        filtroUrgencia={filtroUrgencia}
+        onUrgenciaChange={onUrgenciaChange}
+        filtroExtra={filtroExtra}
+        onFiltroExtraChange={onFiltroExtraChange}
+        filtroActivo={filtroActivo}
+        totalTareas={totalTareas}
       />
 
       {/* VISTA MOVIL */}
@@ -127,6 +144,12 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
         onLimpiarBusqueda={handleLimpiarBusqueda}
         verCanceladas={verCanceladas}
         onToggleCanceladas={onToggleCanceladas}
+        filtroUrgencia={filtroUrgencia}
+        onUrgenciaChange={onUrgenciaChange}
+        filtroExtra={filtroExtra}
+        onFiltroExtraChange={onFiltroExtraChange}
+        filtroActivo={filtroActivo}
+        totalTareas={totalTareas}
       />
 
     </div>
