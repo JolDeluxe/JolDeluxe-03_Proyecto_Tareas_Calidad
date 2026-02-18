@@ -299,6 +299,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                 onFiltroChange={setFiltro}
                 conteo={resumenData}
                 loading={loading}
+                verCanceladas={verCanceladas}
               />
               <FiltrosAdmin
                 onResponsableChange={setResponsable}

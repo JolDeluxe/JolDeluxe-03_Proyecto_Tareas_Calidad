@@ -17,6 +17,8 @@ interface ResumenPrincipalProps {
   onFiltroChange: (filtro: string) => void;
   conteo: TotalesResumen | null;
   loading: boolean;
+  // ✅ NUEVO: Recibimos el estado de la papelera
+  verCanceladas?: boolean;
 }
 
 const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
@@ -24,16 +26,19 @@ const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
   onFiltroChange,
   conteo,
   loading,
+  verCanceladas = false, // Valor por defecto false
 }) => {
   // Valores calculados
   const pendientes = conteo?.pendientes || 0;
   const enRevision = conteo?.enRevision || 0;
   const concluidas = conteo?.concluidas || 0;
+  const canceladas = conteo?.canceladas || 0; // ✅ Obtenemos canceladas
 
   // ✅ Total Operativo: Suma exacta de lo visualizado (sin canceladas)
   const totalOperativo = pendientes + enRevision + concluidas;
 
-  const botones = [
+  // 1. Configuración de botones normales
+  const botonesNormales = [
     {
       id: "total",
       label: "Total",
@@ -80,6 +85,26 @@ const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
     },
   ];
 
+  // 2. Configuración del botón SOLO para canceladas (Rojo)
+  const botonCanceladas = [
+    {
+      id: "canceladas", // Este ID coincide con lo que mandamos desde Admin.tsx
+      label: "Total Canceladas",
+      value: canceladas,
+      // Estilos Rojos
+      baseDesktop: "bg-red-100 border border-red-400 text-red-800",
+      baseMobile: "bg-red-100 border border-red-300 text-red-700",
+      // Como siempre estará activo en este modo, usamos el estilo activo por defecto o el base reforzado
+      activeDesktop: "bg-red-600 border border-red-700 text-white shadow-md scale-[1.03]",
+      activeMobile: "bg-red-600 border border-red-700 text-white shadow-md",
+      titleClassBase: "text-red-900",
+      titleClassActive: "text-white"
+    }
+  ];
+
+  // ✅ 3. Decidir qué botones mostrar
+  const botonesAMostrar = verCanceladas ? botonCanceladas : botonesNormales;
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-32 text-gray-500 italic">
@@ -90,15 +115,18 @@ const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
 
   return (
     <>
-      {/* 💻 VERSIÓN ESCRITORIO (Ajustada a text-md y text-2xl) */}
-      <div className="hidden lg:grid grid-cols-4 gap-4 mb-2 max-w-6xl mx-auto">
-        {botones.map((btn) => {
-          const isActive = filtro === btn.id;
+      {/* 💻 VERSIÓN ESCRITORIO */}
+      {/* Si es canceladas, usamos flex para centrar el único botón, si no, grid de 4 */}
+      <div className={`hidden lg:grid gap-4 mb-2 max-w-6xl mx-auto ${verCanceladas ? 'grid-cols-1 place-items-center' : 'grid-cols-4'}`}>
+        {botonesAMostrar.map((btn) => {
+          // Si estamos en modo canceladas, forzamos que parezca activo o usamos el estilo base pero resaltado
+          const isActive = verCanceladas ? true : filtro === btn.id;
+
           return (
             <div
               key={btn.id}
-              className="flex justify-center cursor-pointer select-none"
-              onClick={() => onFiltroChange(btn.id)}
+              className={`flex justify-center cursor-pointer select-none ${verCanceladas ? 'w-1/3' : 'w-full'}`} // Si es cancelada, limitamos el ancho
+              onClick={() => !verCanceladas && onFiltroChange(btn.id)} // Desactivamos click si es solo visualización de canceladas
             >
               <div className={`
                 rounded-lg p-2 text-center shadow-sm w-full transition-all duration-200
@@ -116,36 +144,16 @@ const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
         })}
       </div>
 
-      {/* 📱 VERSIÓN MÓVIL (Ajustada a text-[14px]/[18px] y [15px]/[19px]) */}
+      {/* 📱 VERSIÓN MÓVIL */}
       <div className="lg:hidden flex flex-col items-center mb-4 px-3">
-        {/* Bloque Superior: Total (Siguiendo estructura de Usuarios) */}
-        <div className="w-full flex justify-center mb-4">
-          <div
-            onClick={() => onFiltroChange(botones[0].id)}
-            className={`
-              flex justify-between items-center 
-              w-60 md:w-80 max-w-xs px-4 py-2 
-              rounded-full border shadow-sm cursor-pointer select-none transition-all duration-200
-              ${filtro === botones[0].id ? botones[0].activeMobile : botones[0].baseMobile}
-            `}
-          >
-            <span className="text-center font-semibold text-[14px] md:text-[18px]">
-              {botones[0].label}
-            </span>
-            <span className={`text-right font-bold text-[15px] md:text-[19px] opacity-90 ${filtro === botones[0].id ? 'text-white' : ''}`}>
-              {botones[0].value}
-            </span>
-          </div>
-        </div>
-
-        {/* Bloque Inferior: Estatus específicos */}
-        <div className="flex flex-col items-center space-y-2 w-full">
-          {botones.slice(1).map((btn) => {
-            const isActive = filtro === btn.id;
+        {/* Renderizamos la lista dinámica */}
+        <div className="w-full flex flex-col items-center space-y-2">
+          {botonesAMostrar.map((btn) => {
+            const isActive = verCanceladas ? true : filtro === btn.id;
             return (
               <div
                 key={btn.id}
-                onClick={() => onFiltroChange(btn.id)}
+                onClick={() => !verCanceladas && onFiltroChange(btn.id)}
                 className={`
                   flex justify-between items-center 
                   w-60 md:w-80 max-w-xs px-4 py-2 
@@ -153,7 +161,7 @@ const ResumenAdmin: React.FC<ResumenPrincipalProps> = ({
                   ${isActive ? btn.activeMobile : btn.baseMobile}
                 `}
               >
-                <span className="text-center font-semibold text-[14px] md:text-[18px] flex items-center gap-1.5">
+                <span className="text-center font-semibold text-[14px] md:text-[18px]">
                   {btn.label}
                 </span>
                 <span className={`text-right font-bold text-[15px] md:text-[19px] opacity-90 ${isActive ? 'text-white' : ''}`}>

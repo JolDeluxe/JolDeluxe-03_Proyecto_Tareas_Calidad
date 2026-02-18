@@ -578,7 +578,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[6%] cursor-pointer hover:bg-gray-200 transition select-none" onClick={() => handleSort("urgencia")}>Prioridad {getSortIcon("urgencia")}</th>
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[6%] cursor-pointer hover:bg-gray-200 transition select-none" onClick={() => handleSort("fechaRegistro")}>Registro {getSortIcon("fechaRegistro")}</th>
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[10%] cursor-pointer hover:bg-gray-200 transition select-none" onClick={() => handleSort("fechaLimite")}>Fecha límite / Historial {getSortIcon("fechaLimite")}</th>
-                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">Entrega / Conclusión</th>
+                  <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">
+                    {filtro === "canceladas" ? "Cancelación" : "Entrega / Conclusión"}
+                  </th>
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%] cursor-pointer hover:bg-gray-200 transition select-none" onClick={() => handleSort("estatus")}>Estatus {getSortIcon("estatus")}</th>
                   <th className="px-3 py-3 text-center font-bold border-b border-gray-300 w-[7%]">Acciones</th>
                 </tr>
@@ -594,7 +596,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
 
                   let vencida = fechaLimiteObj ? (fechaLimiteObj.getTime() < hoy.getTime() && row.estatus === "PENDIENTE") : false;
 
-                  // 💡 LÓGICA FECHA A MOSTRAR (Entrega o Conclusión)
+                  // 💡 LÓGICA FECHA A MOSTRAR (Entrega, Conclusión o Cancelación)
                   let fechaParaColumna: Date | string | null = null;
                   let entregadaTarde = false;
 
@@ -605,11 +607,16 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     }
                   } else if (row.estatus === "CONCLUIDA") {
                     fechaParaColumna = row.fechaConclusion || null;
-                    // ✅ ESCENARIO MEJORADO: Usar fechaEntrega si existe, si no fechaConclusion (cierre directo)
+                    // ✅ ESCENARIO MEJORADO: Usar fechaEntrega si existe, si no fechaConclusion
                     const fechaReferencia = row.fechaEntrega || row.fechaConclusion;
                     if (fechaReferencia && fechaLimiteObj) {
                       entregadaTarde = new Date(fechaReferencia).getTime() > fechaLimiteObj.getTime();
                     }
+                  }
+                  // ✅ AGREGAR ESTE BLOQUE AQUÍ:
+                  else if (row.estatus === "CANCELADA") {
+                    // Usamos updatedAt como fecha de cancelación
+                    fechaParaColumna = row.fechaConclusion || null;
                   }
 
                   return (
@@ -738,11 +745,15 @@ const TablaAdmin: React.FC<TablaProps> = ({
                 if (fechaParaColumna && fechaLimiteDate) entregadaTarde = new Date(fechaParaColumna).getTime() > new Date(fechaLimiteDate).getTime();
               } else if (row.estatus === "CONCLUIDA") {
                 fechaParaColumna = row.fechaConclusion || null;
-                // ✅ ESCENARIO MEJORADO MÓVIL
                 const fechaReferencia = row.fechaEntrega || row.fechaConclusion;
                 if (fechaReferencia && fechaLimiteDate) {
                   entregadaTarde = new Date(fechaReferencia).getTime() > new Date(fechaLimiteDate).getTime();
                 }
+              }
+              // ✅ AGREGAR ESTE BLOQUE AQUÍ:
+              else if (row.estatus === "CANCELADA") {
+                fechaParaColumna = row.fechaConclusion || null;
+                labelColumna = "Cancelación";
               }
 
               return (

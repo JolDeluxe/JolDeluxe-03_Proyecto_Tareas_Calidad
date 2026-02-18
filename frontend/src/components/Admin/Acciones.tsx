@@ -10,7 +10,7 @@ interface AccionesProps {
   onCompletar?: () => void;
   onEditar?: () => void;
   onBorrar?: () => void;
-  // ✅ NUEVO: Prop para manejar la revisión
+  // ✅ Prop para manejar la revisión
   onRevisar?: () => void;
 }
 
@@ -56,12 +56,14 @@ const Acciones: React.FC<AccionesProps> = ({
             <button
               onClick={onCompletar}
               title="Marcar como completada"
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-green-400 text-green-700 hover:bg-green-100 transition-all duration-200"
+              // ✅ CAMBIO: hover:bg-green-600 y hover:text-white para invertir colores + cursor-pointer
+              className="w-7 h-7 flex items-center justify-center rounded-md border border-green-400 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200 cursor-pointer"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 -960 960 960"
-                className="w-5 h-5 text-green-700"
+                // ✅ CAMBIO: Quitamos 'text-green-700' para que herede el color (blanco en hover)
+                className="w-5 h-5"
                 fill="currentColor"
               >
                 <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Z" />
@@ -74,8 +76,9 @@ const Acciones: React.FC<AccionesProps> = ({
             <button
               onClick={onEditar}
               title="Editar tarea"
+              // ✅ Agregado cursor-pointer
               className="w-7 h-7 flex items-center justify-center rounded-md border border-amber-400 text-amber-600 
-                           hover:bg-amber-600 hover:text-white transition-all duration-200"
+                         hover:bg-amber-600 hover:text-white transition-all duration-200 cursor-pointer"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -93,8 +96,9 @@ const Acciones: React.FC<AccionesProps> = ({
             <button
               onClick={onBorrar}
               title="Cancelar tarea"
+              // ✅ Agregado cursor-pointer
               className="w-7 h-7 flex items-center justify-center rounded-md border border-red-400 text-red-600 
-                           hover:bg-red-600 hover:text-white transition-all duration-200"
+                         hover:bg-red-600 hover:text-white transition-all duration-200 cursor-pointer"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -110,16 +114,16 @@ const Acciones: React.FC<AccionesProps> = ({
       )}
 
       {/* --- CASO 1.5: Tarea EN_REVISION --- */}
-      {/* 🛡️ CORRECCIÓN: Se eliminaron los botones de editar y cancelar en este estado */}
       {tarea.estatus === "EN_REVISION" && (
         <>
-          {/* 🔍 Revisar (Lupita) - Única acción permitida */}
+          {/* 🔍 Revisar (Lupita) */}
           {puedeGestionarEstado && onRevisar && (
             <button
               onClick={onRevisar}
               title="Revisar evidencia"
+              // ✅ CAMBIO: Estilo invertido consistente + cursor-pointer
               className="w-7 h-7 flex items-center justify-center rounded-md border border-indigo-400 text-indigo-700 
-                           hover:bg-indigo-100 transition-all duration-200"
+                         hover:bg-indigo-600 hover:text-white transition-all duration-200 cursor-pointer"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -136,7 +140,7 @@ const Acciones: React.FC<AccionesProps> = ({
       {/* --- CASO 2: Tarea CONCLUIDA --- */}
       {tarea.estatus === "CONCLUIDA" && (
         <div
-          className="flex items-center justify-center"
+          className="flex items-center justify-center select-none"
           title="Tarea completada"
         >
           <svg
@@ -153,7 +157,7 @@ const Acciones: React.FC<AccionesProps> = ({
       {/* --- CASO 3: Tarea CANCELADA --- */}
       {tarea.estatus === "CANCELADA" && (
         <div
-          className="flex items-center justify-center"
+          className="flex items-center justify-center select-none"
           title="Tarea cancelada"
         >
           <svg

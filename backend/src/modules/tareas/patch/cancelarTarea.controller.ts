@@ -29,7 +29,10 @@ export const cancelarTarea = safeAsync(async (req: Request, res: Response) => {
 
   const tareaActualizada = await prisma.tarea.update({
     where: { id: tareaId },
-    data: { estatus: "CANCELADA", fechaConclusion: null },
+    data: { 
+      estatus: "CANCELADA", 
+      fechaConclusion: new Date()
+    },
     include: tareaConRelacionesInclude,
   });
 
@@ -40,12 +43,12 @@ export const cancelarTarea = safeAsync(async (req: Request, res: Response) => {
   await registrarBitacora(
     "CAMBIO_ESTATUS",
     `${user.nombre} CANCELÓ la tarea "${tarea.tarea}" (ID: ${tareaId}).`,
-    user.id,
+    user.id, 
     { 
         tareaId, 
         departamento: tarea.departamento.nombre,
         estatusAnterior: tarea.estatus, 
-        estatusNuevo: "CANCELADA" 
+        estatusNuevo: "CANCELADA",
     }
   );
   // ------------------------------------------
