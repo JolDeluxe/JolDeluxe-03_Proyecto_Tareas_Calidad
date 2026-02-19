@@ -250,6 +250,38 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     return isKaizen ? "ADMINISTRA KAIZEN" : "ADMINISTRA TAREAS";
   }, [viewMode, isKaizen, verCanceladas]);
 
+  // ✅ CONTEO DINÁMICO REPARADO Y FUERA DE RENDER SWITCH (En Nivel Principal)
+  const conteoDinamico = useMemo(() => {
+    // 1. Filtramos las tareas cargadas usando ambos filtros y la validación de Kaizen
+    const tareasParaConteo = tareas.filter((t) => {
+      // Filtro Kaizen (Para que no mezcle métricas de tareas normales con Kaizen)
+      const nombreTarea = t.tarea || "";
+      const esKaizen = nombreTarea.trim().toUpperCase().startsWith("KAIZEN");
+      if (isKaizen ? !esKaizen : esKaizen) return false;
+
+      // Filtro de Responsable
+      const pasaResponsable =
+        responsable === "Todos" ||
+        t.responsables.some((r) => r.id.toString() === responsable);
+
+      // Filtro de Urgencia
+      const pasaUrgencia =
+        filtroUrgencia === "TODAS" || t.urgencia === filtroUrgencia;
+
+      return pasaResponsable && pasaUrgencia;
+    });
+
+    // 2. Retornamos el objeto con la estructura que espera ResumenAdmin
+    return {
+      activas: tareasParaConteo.filter(t => t.estatus !== "CANCELADA").length,
+      pendientes: tareasParaConteo.filter(t => t.estatus === "PENDIENTE").length,
+      enRevision: tareasParaConteo.filter(t => t.estatus === "EN_REVISION").length,
+      concluidas: tareasParaConteo.filter(t => t.estatus === "CONCLUIDA").length,
+      canceladas: tareasParaConteo.filter(t => t.estatus === "CANCELADA").length,
+      todas: tareasParaConteo.length,
+    };
+  }, [tareas, responsable, filtroUrgencia, isKaizen]);
+
   const renderSwitch = () => {
     const buttons = [
       {
@@ -353,9 +385,9 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
             <div className="lg:static sticky top-[40px] md:top-[70px] z-40 bg-white border-b border-gray-200 m-1 px-1 pt-4 pb-1 lg:pb-4">
               <ResumenPrincipalAdmin
+                conteo={conteoDinamico}
                 filtro={filtro}
                 onFiltroChange={handleFiltroChange}
-                conteo={resumenData}
                 loading={loading}
                 verCanceladas={verCanceladas}
               />

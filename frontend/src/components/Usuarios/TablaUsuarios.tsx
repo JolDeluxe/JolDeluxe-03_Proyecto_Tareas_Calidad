@@ -341,9 +341,17 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
 
           {/* ✅ BARRA DE PAGINACIÓN */}
           <div className="flex flex-col sm:flex-row justify-between items-center px-4 py-3 bg-gray-50 border-t border-gray-300 rounded-b-lg gap-3">
-            <span className="text-xs text-gray-600 font-medium">
-              Página <span className="font-bold text-gray-900">{page}</span> de <span className="font-bold text-gray-900">{totalPages}</span>
-            </span>
+
+            {/* Contenedor Izquierdo: Info de Página y Cantidad */}
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
+              <span className="text-xs text-gray-600 font-medium">
+                Página <span className="font-bold text-gray-900">{page}</span> de <span className="font-bold text-gray-900">{totalPages}</span>
+              </span>
+              <span className="hidden sm:block text-gray-300">|</span>
+              <span className="text-[11px] text-gray-500 bg-gray-200/70 px-2 py-0.5 rounded-full font-medium">
+                {dataToShow.length} {dataToShow.length === 1 ? 'usuario en esta página' : 'usuarios en esta página'}
+              </span>
+            </div>
 
             <div className="flex gap-2">
               <button
