@@ -140,7 +140,6 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
         onFiltroExtraChange={onFiltroExtraChange}
         filtroActivo={filtroActivo}
         totalTareas={totalTareas}
-        // ✅ 2. PASAMOS LAS PROPS A DESKTOP
         filtroFechaRegistro={filtroFechaRegistro}
         filtroFechaLimite={filtroFechaLimite}
         onFiltroFechaRegistroChange={onFiltroFechaRegistroChange}
@@ -166,11 +165,10 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
         onFiltroExtraChange={onFiltroExtraChange}
         filtroActivo={filtroActivo}
         totalTareas={totalTareas}
-      // ✅ 3. PASAMOS LAS PROPS A MÓVIL
-      // filtroFechaRegistro={filtroFechaRegistro}
-      // filtroFechaLimite={filtroFechaLimite}
-      // onFiltroFechaRegistroChange={onFiltroFechaRegistroChange}
-      // onFiltroFechaLimiteChange={onFiltroFechaLimiteChange}
+        filtroFechaRegistro={filtroFechaRegistro}
+        filtroFechaLimite={filtroFechaLimite}
+        onFiltroFechaRegistroChange={onFiltroFechaRegistroChange}
+        onFiltroFechaLimiteChange={onFiltroFechaLimiteChange}
       />
 
     </div>
