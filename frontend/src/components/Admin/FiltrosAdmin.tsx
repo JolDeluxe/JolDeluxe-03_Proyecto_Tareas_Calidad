@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { usuariosService } from "../../api/usuarios.service";
 import type { Usuario } from "../../types/usuario";
+import type { RangoFechaEspecial } from "../../pages/Admin";
 
 // Importamos los dos componentes nuevos
 import FiltrosAdminDesktop from "./FiltrosAdminDesktop";
@@ -21,6 +22,11 @@ interface FiltrosProps {
   onFiltroExtraChange: (val: "NINGUNO" | "ATRASADAS" | "CORRECCIONES" | "RETRASO" | "AUTOCOMPLETAR") => void;
   filtroActivo: string;
   totalTareas: number;
+  // ✅ Props de Fechas Específicas
+  filtroFechaRegistro: RangoFechaEspecial;
+  filtroFechaLimite: RangoFechaEspecial;
+  onFiltroFechaRegistroChange: (val: RangoFechaEspecial) => void;
+  onFiltroFechaLimiteChange: (val: RangoFechaEspecial) => void;
 }
 
 const FiltrosAdmin: React.FC<FiltrosProps> = ({
@@ -34,7 +40,12 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
   filtroExtra,
   onFiltroExtraChange,
   filtroActivo,
-  totalTareas
+  totalTareas,
+  // ✅ 1. RECIBIMOS LAS PROPS AQUÍ
+  filtroFechaRegistro,
+  filtroFechaLimite,
+  onFiltroFechaRegistroChange,
+  onFiltroFechaLimiteChange
 }) => {
   // --- Estados ---
   const [selectedUsuarioId, setSelectedUsuarioId] = useState("Todos"); // ID seleccionado
@@ -129,6 +140,11 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
         onFiltroExtraChange={onFiltroExtraChange}
         filtroActivo={filtroActivo}
         totalTareas={totalTareas}
+        // ✅ 2. PASAMOS LAS PROPS A DESKTOP
+        filtroFechaRegistro={filtroFechaRegistro}
+        filtroFechaLimite={filtroFechaLimite}
+        onFiltroFechaRegistroChange={onFiltroFechaRegistroChange}
+        onFiltroFechaLimiteChange={onFiltroFechaLimiteChange}
       />
 
       {/* VISTA MOVIL */}
@@ -150,6 +166,11 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
         onFiltroExtraChange={onFiltroExtraChange}
         filtroActivo={filtroActivo}
         totalTareas={totalTareas}
+      // ✅ 3. PASAMOS LAS PROPS A MÓVIL
+      // filtroFechaRegistro={filtroFechaRegistro}
+      // filtroFechaLimite={filtroFechaLimite}
+      // onFiltroFechaRegistroChange={onFiltroFechaRegistroChange}
+      // onFiltroFechaLimiteChange={onFiltroFechaLimiteChange}
       />
 
     </div>

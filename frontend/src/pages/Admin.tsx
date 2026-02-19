@@ -18,6 +18,48 @@ import { tareasService, type TareaFilters, type TareasResponse } from "../api/ta
 import type { Tarea } from "../types/tarea";
 import type { Usuario } from "../types/usuario";
 
+// ---> AGREGAR DEBAJO DE LOS IMPORTS EN Admin.tsx <---
+export type TipoFiltroFecha = "TODAS" | "HOY" | "MANANA" | "ESTA_SEMANA" | "PERSONALIZADO";
+
+export interface RangoFechaEspecial {
+  tipo: TipoFiltroFecha;
+  inicio: Date | null;
+  fin: Date | null;
+}
+
+const defaultRango: RangoFechaEspecial = { tipo: "TODAS", inicio: null, fin: null };
+
+// Helper: Obtener Lunes y Domingo de la semana actual
+const getEstaSemana = () => {
+  const hoy = new Date();
+  const diaSemana = hoy.getDay(); // 0 es Domingo, 1 es Lunes
+  // Ajuste para que la semana empiece el Lunes
+  const diffLunes = diaSemana === 0 ? -6 : 1 - diaSemana;
+
+  const lunes = new Date(hoy);
+  lunes.setDate(hoy.getDate() + diffLunes);
+  lunes.setHours(0, 0, 0, 0);
+
+  const domingo = new Date(lunes);
+  domingo.setDate(lunes.getDate() + 6);
+  domingo.setHours(23, 59, 59, 999);
+
+  return { inicio: lunes, fin: domingo };
+};
+
+// Helper: Formatear a media noche o fin de día
+const getHoy = () => {
+  const i = new Date(); i.setHours(0, 0, 0, 0);
+  const f = new Date(); f.setHours(23, 59, 59, 999);
+  return { inicio: i, fin: f };
+};
+
+const getManana = () => {
+  const i = new Date(); i.setDate(i.getDate() + 1); i.setHours(0, 0, 0, 0);
+  const f = new Date(); f.setDate(f.getDate() + 1); f.setHours(23, 59, 59, 999);
+  return { inicio: i, fin: f };
+};
+
 type ViewMode = "TAREAS" | "INDICADORES";
 
 interface AdminProps {
@@ -35,6 +77,10 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
   // ✅ Actualizamos el tipo para incluir los nuevos filtros de revisión
   const [filtroUrgencia, setFiltroUrgencia] = useState<"TODAS" | "ALTA" | "MEDIA" | "BAJA">("TODAS");
   const [filtroExtra, setFiltroExtra] = useState<"NINGUNO" | "ATRASADAS" | "CORRECCIONES" | "RETRASO" | "AUTOCOMPLETAR">("NINGUNO");
+
+  // ---> NUEVOS ESTADOS DE FECHAS <---
+  const [filtroFechaRegistro, setFiltroFechaRegistro] = useState<RangoFechaEspecial>(defaultRango);
+  const [filtroFechaLimite, setFiltroFechaLimite] = useState<RangoFechaEspecial>(defaultRango);
 
   // --- Estados varios ---
   const [openModal, setOpenModal] = useState<boolean>(false);
@@ -70,6 +116,36 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     setFiltro(nuevoFiltro);
     // Si cambiamos de pestaña, limpiamos cualquier filtro extra activo
     setFiltroExtra("NINGUNO");
+  };
+
+  // ---> NUEVO HANDLER PARA FILTROS ESPECIALES DE FECHAS <---
+  // Esta función aplica el filtro y sincroniza inteligentemente FechasAdmin
+  const handleFiltroEspecialChange = (
+    tipoDato: "REGISTRO" | "LIMITE",
+    nuevoValor: RangoFechaEspecial
+  ) => {
+    if (tipoDato === "REGISTRO") setFiltroFechaRegistro(nuevoValor);
+    else setFiltroFechaLimite(nuevoValor);
+
+    // LÓGICA DE SINCRONIZACIÓN CON FechasAdmin
+    if (nuevoValor.tipo !== "TODAS" && nuevoValor.inicio) {
+      const añoInicio = nuevoValor.inicio.getFullYear();
+      const mesInicio = nuevoValor.inicio.getMonth() + 1;
+
+      if (nuevoValor.fin) {
+        const mesFin = nuevoValor.fin.getMonth() + 1;
+        // Si el rango abarca meses diferentes, ponemos el mes en 0 (Todos)
+        if (mesInicio !== mesFin) {
+          setYear(añoInicio);
+          setMonth(0);
+        } else {
+          // Si es el mismo mes (ej. Hoy, Personalizado de 1 día), vamos a ese mes
+          setYear(añoInicio);
+          setMonth(mesInicio);
+        }
+      }
+    }
+    setPage(1);
   };
 
   // --- Fetch de Tareas ---
@@ -234,8 +310,38 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
       });
     }
 
+    // 5. Filtro de Fecha de Registro / Asignación
+    if (filtroFechaRegistro.tipo !== "TODAS" && filtroFechaRegistro.inicio) {
+      filtered = filtered.filter(t => {
+        if (!t.fechaRegistro) return false;
+
+        // ✅ Envolvemos t.fechaRegistro en new Date() para evitar el error de TypeScript
+        const fr = new Date(t.fechaRegistro).getTime();
+
+        const finEfectivo = filtroFechaRegistro.fin ? filtroFechaRegistro.fin.getTime() : filtroFechaRegistro.inicio!.getTime();
+        return fr >= filtroFechaRegistro.inicio!.getTime() && fr <= finEfectivo;
+      });
+    }
+
+    // 6. Filtro de Fecha Límite
+    if (filtroFechaLimite.tipo !== "TODAS" && filtroFechaLimite.inicio) {
+      filtered = filtered.filter(t => {
+        // Obtenemos la fecha límite actual considerando el historial
+        const fechaLimiteObj = t.historialFechas && t.historialFechas.length > 0
+          ? new Date(t.historialFechas[t.historialFechas.length - 1].nuevaFecha!)
+          : (t.fechaLimite ? new Date(t.fechaLimite) : null);
+
+        if (!fechaLimiteObj) return false;
+
+        const fl = fechaLimiteObj.getTime();
+        const finEfectivo = filtroFechaLimite.fin ? filtroFechaLimite.fin.getTime() : filtroFechaLimite.inicio!.getTime();
+
+        return fl >= filtroFechaLimite.inicio!.getTime() && fl <= finEfectivo;
+      });
+    }
+
     return filtered;
-  }, [tareas, isKaizen, filtro, verCanceladas, filtroUrgencia, filtroExtra]);
+  }, [tareas, isKaizen, filtro, verCanceladas, filtroUrgencia, filtroExtra, filtroFechaRegistro, filtroFechaLimite]);
 
   const totalPages = Math.max(1, Math.ceil(tareasFiltradas.length / itemsPerPage));
 
@@ -355,7 +461,8 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
       </h1>
 
       <div className="mb-4 w-full">
-        <FechasAdmin onChange={handleFechaChange} />
+        {/* ✅ Pasamos año y mes directamente a FechasAdmin */}
+        <FechasAdmin year={year} month={month} onChange={handleFechaChange} />
       </div>
 
       {renderSwitch()}
@@ -403,6 +510,10 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                 onFiltroExtraChange={setFiltroExtra}
                 filtroActivo={filtro}
                 totalTareas={tareasFiltradas.length}
+                filtroFechaRegistro={filtroFechaRegistro}
+                filtroFechaLimite={filtroFechaLimite}
+                onFiltroFechaRegistroChange={(val) => handleFiltroEspecialChange("REGISTRO", val)}
+                onFiltroFechaLimiteChange={(val) => handleFiltroEspecialChange("LIMITE", val)}
               />
             </div>
 

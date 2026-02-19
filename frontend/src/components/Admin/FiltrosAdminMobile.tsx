@@ -190,7 +190,7 @@ const FiltrosAdminMobile: React.FC<MobileProps> = ({
               `}
               >
                 <span className="text-xs font-bold truncate">
-                  {filtroUrgencia === "TODAS" ? "Urgencia" : filtroUrgencia}
+                  {filtroUrgencia === "TODAS" ? "Prioridad" : filtroUrgencia}
                 </span>
 
                 {/* Icono o Tachita */}

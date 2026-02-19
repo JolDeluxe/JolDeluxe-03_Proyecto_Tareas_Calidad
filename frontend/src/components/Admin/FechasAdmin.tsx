@@ -3,17 +3,15 @@
 import React, { useState, useEffect } from "react";
 import { tareasService } from "../../api/tareas.service"; // ✅ Usamos el servicio centralizado
 
+// 1. ACTUALIZA LA INTERFAZ (Agrega year y month)
 interface FechasProps {
+  year: number;
+  month: number;
   onChange?: (year: number, month: number) => void;
 }
 
-const FechasAdmin: React.FC<FechasProps> = ({ onChange }) => {
-  const currentDate = new Date();
-
-  // ✅ Inicializamos con Año y Mes actuales
-  const [year, setYear] = useState<number>(currentDate.getFullYear());
-  const [month, setMonth] = useState<number>(currentDate.getMonth() + 1); // +1 porque getMonth() es 0-11
-
+// 2. MODIFICA EL COMPONENTE (Elimina la inicialización local basada en currentDate)
+const FechasAdmin: React.FC<FechasProps> = ({ year, month, onChange }) => {
   const [years, setYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -49,20 +47,6 @@ const FechasAdmin: React.FC<FechasProps> = ({ onChange }) => {
         const yearsArray = Array.from(uniqueYears).sort((a, b) => a - b);
         setYears(yearsArray);
 
-        // Lógica inteligente: Si el año actual no está en la BD, selecciona el más cercano
-        const actualYear = new Date().getFullYear();
-
-        if (yearsArray.length > 0 && !yearsArray.includes(actualYear)) {
-          const closest = yearsArray.reduce((prev, curr) =>
-            Math.abs(curr - actualYear) < Math.abs(prev - actualYear)
-              ? curr
-              : prev
-          );
-          setYear(closest);
-        } else if (yearsArray.includes(actualYear)) {
-          setYear(actualYear);
-        }
-
       } catch (error) {
         console.error("Error al cargar rango de fechas:", error);
       } finally {
@@ -73,22 +57,14 @@ const FechasAdmin: React.FC<FechasProps> = ({ onChange }) => {
     fetchFechas();
   }, []);
 
-  // 🔸 Dispara el cambio al padre cada vez que cambian año o mes
-  useEffect(() => {
-    if (!loading) {
-      onChange?.(year, month);
-    }
-  }, [year, month, loading]);
-
-  // ✅ CAMBIO CLAVE AQUÍ: Al cambiar año, reseteamos mes a 0 (Todos)
+  // 3. CAMBIA LOS HANDLERS PARA QUE SOLO EMITAN EL EVENTO
   const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newYear = parseInt(e.target.value);
-    setYear(newYear);
-    setMonth(0); // <--- Reseteo automático para evitar confusión
+    onChange?.(newYear, 0); // Emite el nuevo año y mes 0 (Todos)
   };
 
   const handleMonthChange = (m: number) => {
-    setMonth(m);
+    onChange?.(year, m); // Emite el mismo año y el nuevo mes
   };
 
   const meses = [
@@ -145,8 +121,8 @@ const FechasAdmin: React.FC<FechasProps> = ({ onChange }) => {
         <button
           onClick={() => handleMonthChange(0)}
           className={`px-4 py-2 text-lg rounded-full transition-all duration-200 mr-7 ${month === 0
-              ? "bg-amber-950 text-white shadow-md"
-              : "hover:bg-gray-200 hover:text-amber-800 focus:bg-gray-200 focus:text-amber-800 transition"
+            ? "bg-amber-950 text-white shadow-md"
+            : "hover:bg-gray-200 hover:text-amber-800 focus:bg-gray-200 focus:text-amber-800 transition"
             }`}
         >
           Todos
@@ -157,8 +133,8 @@ const FechasAdmin: React.FC<FechasProps> = ({ onChange }) => {
             key={m.num}
             onClick={() => handleMonthChange(m.num)}
             className={`px-4 py-2 text-lg rounded-full transition-all duration-200 ${month === m.num
-                ? "bg-amber-950 text-white shadow-md"
-                : "hover:bg-gray-200 hover:text-amber-800 focus:bg-gray-200 focus:text-amber-800 transition"
+              ? "bg-amber-950 text-white shadow-md"
+              : "hover:bg-gray-200 hover:text-amber-800 focus:bg-gray-200 focus:text-amber-800 transition"
               }`}
           >
             {m.name}
