@@ -38,7 +38,7 @@ type SortKey = "asignador" | "responsables" | "urgencia" | "fechaRegistro" | "fe
 
 interface SortConfig {
   key: SortKey;
-  direction: "asc" | "desc";
+  direction: "asc" | "desc" | "atrasadas";
 }
 
 // --- FUNCIONES HELPER PARA FECHAS Y HORAS ---
@@ -390,15 +390,22 @@ const TablaAdmin: React.FC<TablaProps> = ({
   const handleExitoRevision = () => { setTareaParaRevisar(null); onRecargarTareas(); };
 
   const handleSort = (key: SortKey) => {
-    let direction: "asc" | "desc" = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
+    let direction: "asc" | "desc" | "atrasadas" = "asc";
+    if (sortConfig.key === key) {
+      if (sortConfig.direction === "asc") {
+        direction = "desc";
+      } else if (sortConfig.direction === "desc" && key === "fechaLimite") {
+        direction = "atrasadas"; // ⬅️ Tercer estado: Atrasadas hasta arriba
+      } else {
+        direction = "asc";
+      }
     }
     setSortConfig({ key, direction });
   };
 
   const getSortIcon = (columnKey: SortKey) => {
     if (sortConfig.key !== columnKey) return <span className="text-gray-300 text-[10px] ml-1">⇅</span>;
+    if (sortConfig.direction === "atrasadas") return <span className="text-red-600 ml-1 text-sm">⚠️</span>;
     return sortConfig.direction === "asc" ? <span className="text-blue-600 ml-1">↑</span> : <span className="text-blue-600 ml-1">↓</span>;
   };
 
@@ -439,7 +446,22 @@ const TablaAdmin: React.FC<TablaProps> = ({
             valA = a.fechaRegistro ? new Date(a.fechaRegistro).getTime() : 0; valB = b.fechaRegistro ? new Date(b.fechaRegistro).getTime() : 0;
             return sortConfig.direction === "asc" ? valA - valB : valB - valA;
           case "fechaLimite":
-            valA = getFechaLimiteEfectiva(a); valB = getFechaLimiteEfectiva(b);
+            valA = getFechaLimiteEfectiva(a);
+            valB = getFechaLimiteEfectiva(b);
+
+            // ⬅️ Lógica para agrupar Atrasadas hasta arriba
+            if (sortConfig.direction === "atrasadas") {
+              const hoy = Date.now();
+              const aVencida = a.estatus === "PENDIENTE" && valA > 0 && valA < hoy;
+              const bVencida = b.estatus === "PENDIENTE" && valB > 0 && valB < hoy;
+
+              if (aVencida && !bVencida) return -1; // 'a' (atrasada) va arriba
+              if (!aVencida && bVencida) return 1;  // 'b' (atrasada) va arriba
+
+              // Si ambas están atrasadas o ninguna lo está, se ordenan cronológicamente
+              return valA - valB;
+            }
+
             return sortConfig.direction === "asc" ? valA - valB : valB - valA;
           case "estatus": valA = a.estatus; valB = b.estatus; break;
           default: return 0;
