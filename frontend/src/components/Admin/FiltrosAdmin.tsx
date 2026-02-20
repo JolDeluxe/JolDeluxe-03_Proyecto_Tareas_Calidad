@@ -10,6 +10,9 @@ import FiltrosAdminDesktop from "./FiltrosAdminDesktop";
 import FiltrosAdminMobile from "./FiltrosAdminMobile";
 
 interface FiltrosProps {
+  responsable: string;
+  asignador: string;
+  busqueda: string;
   onResponsableChange: (usuarioId: string) => void;
   onBuscarChange?: (query: string) => void;
   user: Usuario | null;
@@ -17,19 +20,24 @@ interface FiltrosProps {
   onToggleCanceladas: () => void;
   filtroUrgencia: "TODAS" | "ALTA" | "MEDIA" | "BAJA";
   onUrgenciaChange: (val: "TODAS" | "ALTA" | "MEDIA" | "BAJA") => void;
-  // ✅ CORRECCIÓN: Definición completa de tipos
   filtroExtra: "NINGUNO" | "ATRASADAS" | "CORRECCIONES" | "RETRASO" | "AUTOCOMPLETAR";
   onFiltroExtraChange: (val: "NINGUNO" | "ATRASADAS" | "CORRECCIONES" | "RETRASO" | "AUTOCOMPLETAR") => void;
   filtroActivo: string;
   totalTareas: number;
-  // ✅ Props de Fechas Específicas
   filtroFechaRegistro: RangoFechaEspecial;
   filtroFechaLimite: RangoFechaEspecial;
   onFiltroFechaRegistroChange: (val: RangoFechaEspecial) => void;
   onFiltroFechaLimiteChange: (val: RangoFechaEspecial) => void;
+  onAsignadorChange: (usuarioId: string) => void;
+  filtroMisTareas: { asignadasPorMi: boolean; asignadasAMi: boolean };
+  onFiltroMisTareasChange: (val: { asignadasPorMi: boolean; asignadasAMi: boolean }) => void;
+  conteoMisTareas: { porMi: number; aMi: number };
 }
 
 const FiltrosAdmin: React.FC<FiltrosProps> = ({
+  responsable,
+  asignador,
+  busqueda,
   onResponsableChange,
   onBuscarChange,
   user,
@@ -41,16 +49,17 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
   onFiltroExtraChange,
   filtroActivo,
   totalTareas,
-  // ✅ 1. RECIBIMOS LAS PROPS AQUÍ
   filtroFechaRegistro,
   filtroFechaLimite,
   onFiltroFechaRegistroChange,
-  onFiltroFechaLimiteChange
+  onFiltroFechaLimiteChange,
+  onAsignadorChange,
+  filtroMisTareas,
+  onFiltroMisTareasChange,
+  conteoMisTareas
 }) => {
   // --- Estados ---
-  const [selectedUsuarioId, setSelectedUsuarioId] = useState("Todos"); // ID seleccionado
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]); // Objetos Usuario completos
-  const [searchText, setSearchText] = useState(""); // ✅ Estado para el texto del buscador
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
 
   // 1. Cargar Usuarios
@@ -87,34 +96,39 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
     fetchUsuarios();
   }, [user]);
 
-  // --- HANDLERS (Compartidos para Movil y Desktop) ---
-
-  // Helper para mostrar el nombre resumido (Primer Nombre)
+  // --- HANDLERS RESPONSABLE ---
   const getSelectedUsuarioNombreResumido = () => {
-    if (selectedUsuarioId === "Todos") return "Todos";
-    const usuario = usuarios.find((u) => u.id.toString() === selectedUsuarioId);
+    if (responsable === "Todos") return "Todos";
+    const usuario = usuarios.find((u) => u.id.toString() === responsable);
     if (!usuario) return "Desconocido";
     return usuario.nombre.split(" ")[0];
   };
 
   const handleUsuarioSelect = (id: string) => {
-    setSelectedUsuarioId(id);
     onResponsableChange(id);
   };
 
   const handleLimpiarResponsable = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setSelectedUsuarioId("Todos");
     onResponsableChange("Todos");
   };
 
+  // --- HANDLERS ASIGNADOR ---
+  const handleAsignadorSelect = (id: string) => {
+    onAsignadorChange(id);
+  };
+
+  const handleLimpiarAsignador = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    onAsignadorChange("Todos");
+  };
+
+  // --- HANDLERS BÚSQUEDA ---
   const handleSearchChange = (val: string) => {
-    setSearchText(val);
     if (onBuscarChange) onBuscarChange(val);
   };
 
   const handleLimpiarBusqueda = () => {
-    setSearchText("");
     if (onBuscarChange) onBuscarChange("");
   };
 
@@ -123,11 +137,12 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
 
       {/* VISTA ESCRITORIO */}
       <FiltrosAdminDesktop
+        user={user}
         usuarios={usuarios}
         loading={loading}
-        selectedUsuarioId={selectedUsuarioId}
+        selectedUsuarioId={responsable}
         nombreResumido={getSelectedUsuarioNombreResumido()}
-        searchText={searchText}
+        searchText={busqueda}
         onUsuarioSelect={handleUsuarioSelect}
         onLimpiarResponsable={handleLimpiarResponsable}
         onSearchChange={handleSearchChange}
@@ -144,15 +159,21 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
         filtroFechaLimite={filtroFechaLimite}
         onFiltroFechaRegistroChange={onFiltroFechaRegistroChange}
         onFiltroFechaLimiteChange={onFiltroFechaLimiteChange}
+        selectedAsignadorId={asignador}
+        onAsignadorSelect={handleAsignadorSelect}
+        onLimpiarAsignador={handleLimpiarAsignador}
+        filtroMisTareas={filtroMisTareas}
+        onFiltroMisTareasChange={onFiltroMisTareasChange}
+        conteoMisTareas={conteoMisTareas}
       />
 
       {/* VISTA MOVIL */}
       <FiltrosAdminMobile
         usuarios={usuarios}
         loading={loading}
-        selectedUsuarioId={selectedUsuarioId}
+        selectedUsuarioId={responsable}
         nombreResumido={getSelectedUsuarioNombreResumido()}
-        searchText={searchText}
+        searchText={busqueda}
         onUsuarioSelect={handleUsuarioSelect}
         onLimpiarResponsable={handleLimpiarResponsable}
         onSearchChange={handleSearchChange}
@@ -169,6 +190,13 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
         filtroFechaLimite={filtroFechaLimite}
         onFiltroFechaRegistroChange={onFiltroFechaRegistroChange}
         onFiltroFechaLimiteChange={onFiltroFechaLimiteChange}
+        selectedAsignadorId={asignador}
+        onAsignadorSelect={handleAsignadorSelect}
+        onLimpiarAsignador={handleLimpiarAsignador}
+        user={user}
+        filtroMisTareas={filtroMisTareas}
+        onFiltroMisTareasChange={onFiltroMisTareasChange}
+        conteoMisTareas={conteoMisTareas}
       />
 
     </div>

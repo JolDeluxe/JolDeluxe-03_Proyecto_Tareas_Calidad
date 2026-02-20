@@ -1,8 +1,7 @@
 // 📍 src/components/Pendientes/TablaPendientes.tsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 // import { useNavigate } from "react-router-dom"; // No se usa
-import { tareasService } from "../../api/tareas.service";
 import type {
   Tarea,
   ImagenTarea,
@@ -16,7 +15,13 @@ import ModalGaleria from "../Principal/ModalGaleria";
 import ModalEntrega from "../Admin/ModalEntregar";
 import ModalRevision from "../Admin/ModalRevision";
 
-type ActiveView = "MIS_TAREAS" | "ASIGNADAS" | "TODAS";
+// ✅ 1. TIPOS PARA EL ORDENAMIENTO
+type SortKey = "default" | "responsables" | "urgencia" | "fechaLimite";
+
+interface SortConfig {
+  key: SortKey;
+  direction: "asc" | "desc";
+}
 
 // --- Funciones Helper ---
 
@@ -163,27 +168,16 @@ const getEstadoFecha = (
   return "normal";
 };
 
-// --- Hook useMediaQuery ---
-const useMediaQuery = (query: string) => {
-  const [matches, setMatches] = useState(window.matchMedia(query).matches);
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    const listener = () => setMatches(media.matches);
-    media.addEventListener("change", listener);
-    return () => media.removeEventListener("change", listener);
-  }, [query]);
-  return matches;
-};
-
+// ✅ PROPS ACTUALIZADOS PARA COINCIDIR CON Pendientes.tsx
 interface Props {
   user: Usuario | null;
-  viewType?: ActiveView;
+  tareas: Tarea[];
+  filtro: string;
+  loading: boolean;
+  onRecargar: () => void;
 }
 
-const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
-  const [tareasPendientes, setTareasPendientes] = useState<Tarea[]>([]);
-  const [loading, setLoading] = useState(true);
-
+const TablaPendientes: React.FC<Props> = ({ user, tareas, filtro, loading, onRecargar }) => {
   // --- Estados para Modales ---
   const [modalImagenes, setModalImagenes] = useState<ImagenTarea[] | null>(null);
   const [tipoGaleria, setTipoGaleria] = useState<"REFERENCIA" | "EVIDENCIA">("REFERENCIA");
@@ -191,104 +185,126 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
   const [tareaParaEntregar, setTareaParaEntregar] = useState<Tarea | null>(null);
   const [tareaParaRevisar, setTareaParaRevisar] = useState<Tarea | null>(null);
 
-  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  // ✅ ESTADOS PARA PAGINACIÓN
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 30;
 
-  const fetchTareas = async () => {
-    if (!user) {
-      setTareasPendientes([]);
-      setLoading(false);
-      return;
-    }
+  // ✅ ESTADO DE ORDENAMIENTO (Por defecto utiliza la lógica compleja)
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "default", direction: "asc" });
 
-    try {
-      let tareasDesdeServicio: Tarea[] = [];
+  // Resetea la página a 1 si el filtro o el orden cambian
+  useEffect(() => {
+    setPage(1);
+  }, [filtro, sortConfig]);
 
-      // 🚀 CAMBIO CRÍTICO: Desestructuramos para obtener { data }
-      // El nuevo servicio devuelve: { status, meta, data: Tarea[] }
-      if (viewType === "ASIGNADAS") {
-        const response = await tareasService.getAsignadas();
-        tareasDesdeServicio = response.data;
-      } else if (viewType === "MIS_TAREAS") {
-        const response = await tareasService.getMisTareas();
-        tareasDesdeServicio = response.data;
+  // ✅ 1. APLICAR EL FILTRO DE LOS BOTONES A LAS TAREAS QUE VIENEN DEL PADRE
+  const tareasFiltradasPorBoton = useMemo(() => {
+    return tareas.filter((t) => {
+      // Si en Pendientes.tsx queremos solo Pendientes y En Revisión
+      // (asumiendo que quieres filtrar Canceladas y Concluidas a menos que se pidan explicitamente)
+      if (t.estatus === "CONCLUIDA" || t.estatus === "CANCELADA") return false;
+
+      if (filtro === "pendientes") return t.estatus === "PENDIENTE";
+      if (filtro === "en_revision") return t.estatus === "EN_REVISION";
+      return true; // para "total"
+    });
+  }, [tareas, filtro]);
+
+  // ✅ LÓGICA DE ORDENAMIENTO (Handler)
+  const handleSort = (key: SortKey) => {
+    // Si ya estamos ordenando por esa columna, alternamos: asc -> desc -> default -> asc
+    if (sortConfig.key === key) {
+      if (sortConfig.direction === "asc") {
+        setSortConfig({ key, direction: "desc" });
       } else {
-        const response = await tareasService.getAll();
-        tareasDesdeServicio = response.data;
+        setSortConfig({ key: "default", direction: "asc" }); // Regresa al default
       }
-
-      // Verificación de seguridad
-      if (!Array.isArray(tareasDesdeServicio)) {
-        console.error("La respuesta de la API no es un array válido", tareasDesdeServicio);
-        setTareasPendientes([]);
-        return;
-      }
-
-      const tareasConFechas = tareasDesdeServicio.map((t: any) => ({
-        ...t,
-        fechaRegistro: t.fechaRegistro ? new Date(t.fechaRegistro) : null,
-        fechaLimite: t.fechaLimite ? new Date(t.fechaLimite) : null,
-        fechaConclusion: t.fechaConclusion ? new Date(t.fechaConclusion) : null,
-        // Agregamos fechaEntrega para la lógica de revisión
-        fechaEntrega: t.fechaEntrega ? new Date(t.fechaEntrega) : null,
-        historialFechas:
-          t.historialFechas?.map((h: any) => ({
-            ...h,
-            fechaCambio: h.fechaCambio ? new Date(h.fechaCambio) : null,
-            fechaAnterior: h.fechaAnterior ? new Date(h.fechaAnterior) : null,
-            nuevaFecha: h.nuevaFecha ? new Date(h.nuevaFecha) : null,
-          })) || [],
-        imagenes: t.imagenes || [],
-        responsables: t.responsables || [],
-      }));
-
-      // Filtro: Mostrar PENDIENTE y EN_REVISION
-      const tareasFiltradas = tareasConFechas.filter(
-        (t: Tarea) => t.estatus === "PENDIENTE" || t.estatus === "EN_REVISION"
-      );
-
-      setTareasPendientes(tareasFiltradas as Tarea[]);
-    } catch (error) {
-      console.error("❌ Error al cargar tareas:", error);
-      setTareasPendientes([]);
+    } else {
+      setSortConfig({ key, direction: "asc" });
     }
   };
 
-  useEffect(() => {
-    setLoading(true);
-    fetchTareas().finally(() => setLoading(false));
+  // Helper para mostrar ícono de ordenamiento
+  const getSortIcon = (columnKey: SortKey) => {
+    if (sortConfig.key !== columnKey) return <span className="text-gray-300 text-[10px] ml-1">⇅</span>;
+    return sortConfig.direction === "asc" ? <span className="text-blue-600 font-extrabold ml-1">↑</span> : <span className="text-blue-600 font-extrabold ml-1">↓</span>;
+  };
 
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    if (isDesktop) {
-      intervalId = setInterval(() => fetchTareas(), 30000);
+  // ✅ 2. APLICAR ORDENAMIENTO
+  const pendientesOrdenados = useMemo(() => {
+    const base = [...tareasFiltradasPorBoton];
+
+    // LÓGICA POR DEFECTO COMPLEJA (Mantenida intacta)
+    if (sortConfig.key === "default") {
+      return base.sort((a, b) => {
+        // 1️⃣ PRIORIDAD SUPREMA: Estatus "EN_REVISION" primero
+        if (a.estatus === "EN_REVISION" && b.estatus !== "EN_REVISION") return -1;
+        if (b.estatus === "EN_REVISION" && a.estatus !== "EN_REVISION") return 1;
+
+        // 2️⃣ ORDENAMIENTO SECUNDARIO: Por fecha límite
+        const fechaA = getFechaFinalObj(a);
+        const fechaB = getFechaFinalObj(b);
+        const timeA = fechaA ? new Date(fechaA as any).getTime() : 0;
+        const timeB = fechaB ? new Date(fechaB as any).getTime() : 0;
+
+        if (!timeA || isNaN(timeA)) return 1;
+        if (!timeB || isNaN(timeB)) return -1;
+
+        return timeA - timeB;
+      });
     }
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isDesktop, user, viewType]);
 
-  const pendientesOrdenados = [...tareasPendientes].sort((a, b) => {
-    // 1️⃣ PRIORIDAD SUPREMA: Estatus "EN_REVISION" primero
-    if (a.estatus === "EN_REVISION" && b.estatus !== "EN_REVISION") return -1;
-    if (b.estatus === "EN_REVISION" && a.estatus !== "EN_REVISION") return 1;
+    // LÓGICAS ACTIVADAS POR CLIC EN LOS HEADERS
+    return base.sort((a, b) => {
+      let valA: any = 0;
+      let valB: any = 0;
 
-    // 2️⃣ ORDENAMIENTO SECUNDARIO: Por fecha límite
-    const fechaA = getFechaFinalObj(a);
-    const fechaB = getFechaFinalObj(b);
-    const timeA = fechaA ? new Date(fechaA as any).getTime() : 0;
-    const timeB = fechaB ? new Date(fechaB as any).getTime() : 0;
+      switch (sortConfig.key) {
+        case "responsables":
+          valA = a.responsables.length;
+          valB = b.responsables.length;
+          // Si tienen la misma cantidad de responsables, ordenar alfabéticamente por los nombres
+          if (valA === valB) {
+            const nameA = a.responsables.map(r => r.nombre).join("").toLowerCase();
+            const nameB = b.responsables.map(r => r.nombre).join("").toLowerCase();
+            if (nameA < nameB) return sortConfig.direction === "asc" ? -1 : 1;
+            if (nameA > nameB) return sortConfig.direction === "asc" ? 1 : -1;
+            return 0;
+          }
+          return sortConfig.direction === "asc" ? valA - valB : valB - valA;
 
-    if (!timeA || isNaN(timeA)) return 1;
-    if (!timeB || isNaN(timeB)) return -1;
+        case "urgencia":
+          const weights: Record<string, number> = { ALTA: 3, MEDIA: 2, BAJA: 1 };
+          valA = weights[a.urgencia] || 0;
+          valB = weights[b.urgencia] || 0;
+          return sortConfig.direction === "asc" ? valA - valB : valB - valA;
 
-    return timeA - timeB;
-  });
+        case "fechaLimite":
+          const fA = getFechaFinalObj(a);
+          const fB = getFechaFinalObj(b);
+          valA = fA ? new Date(fA as any).getTime() : 0;
+          valB = fB ? new Date(fB as any).getTime() : 0;
+          return sortConfig.direction === "asc" ? valA - valB : valB - valA;
+      }
+      return 0;
+    });
+  }, [tareasFiltradasPorBoton, sortConfig]);
+
+  // ✅ 3. LÓGICA DE PAGINACIÓN
+  const totalPages = Math.max(1, Math.ceil(pendientesOrdenados.length / itemsPerPage));
+
+  const tareasPaginadas = useMemo(() => {
+    const startIndex = (page - 1) * itemsPerPage;
+    return pendientesOrdenados.slice(startIndex, startIndex + itemsPerPage);
+  }, [pendientesOrdenados, page]);
+
 
   // --- Handlers de Modales ---
   const handleAbrirEntrega = (tarea: Tarea) => setTareaParaEntregar(tarea);
   const handleCerrarEntrega = () => setTareaParaEntregar(null);
   const handleExitoEntrega = () => {
     setTareaParaEntregar(null);
-    fetchTareas();
+    onRecargar(); // ✅ Usamos la prop del padre
   };
 
   const handleRevisar = (tarea: Tarea) => {
@@ -299,7 +315,7 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
 
   const handleExitoRevision = () => {
     setTareaParaRevisar(null);
-    fetchTareas();
+    onRecargar(); // ✅ Usamos la prop del padre
   };
 
   return (
@@ -313,19 +329,38 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
         <>
           {/* 💻 VISTA ESCRITORIO */}
           <div className="hidden lg:block">
-            <div className="max-h-[80vh] overflow-y-auto border border-gray-200 rounded-lg shadow-md">
+            <div className="max-h-[80vh] overflow-y-auto border border-gray-200 rounded-t-lg shadow-md">
               <table className="w-full text-[13px] leading-tight">
                 <thead className="bg-gray-100 text-gray-700 uppercase sticky top-0 z-10 text-xs">
                   <tr>
-                    <th className="px-2 py-1 text-left font-bold border-b border-gray-300">Responsable</th>
-                    <th className="px-2 py-1 text-left font-bold border-b border-gray-300">Tarea / Descripción</th>
-                    <th className="px-2 py-1 text-center font-bold border-b border-gray-300">Prioridad</th>
-                    <th className="px-2 py-1 text-center font-bold border-b border-gray-300">Fecha Límite</th>
-                    <th className="px-2 py-1 text-center font-bold border-b border-gray-300">Acciones</th>
+                    <th
+                      className="px-2 py-1 text-left font-bold border-b border-gray-300 cursor-pointer hover:bg-gray-200 transition select-none"
+                      onClick={() => handleSort("responsables")}
+                    >
+                      Responsable {getSortIcon("responsables")}
+                    </th>
+                    <th className="px-2 py-1 text-left font-bold border-b border-gray-300">
+                      Tarea / Descripción
+                    </th>
+                    <th
+                      className="px-2 py-1 text-center font-bold border-b border-gray-300 cursor-pointer hover:bg-gray-200 transition select-none"
+                      onClick={() => handleSort("urgencia")}
+                    >
+                      Prioridad {getSortIcon("urgencia")}
+                    </th>
+                    <th
+                      className="px-2 py-1 text-center font-bold border-b border-gray-300 cursor-pointer hover:bg-gray-200 transition select-none"
+                      onClick={() => handleSort("fechaLimite")}
+                    >
+                      Fecha Límite {getSortIcon("fechaLimite")}
+                    </th>
+                    <th className="px-2 py-1 text-center font-bold border-b border-gray-300">
+                      Acciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {pendientesOrdenados.map((row) => {
+                  {tareasPaginadas.map((row) => {
                     const fechaFinalObj = getFechaFinalObj(row);
                     const estado = getEstadoFecha(fechaFinalObj);
 
@@ -467,13 +502,41 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
                 </tbody>
               </table>
             </div>
+            {/* ✅ CONTADOR DE PAGINACIÓN ESCRITORIO */}
+            <div className="flex flex-col sm:flex-row justify-between items-center px-4 py-3 bg-gray-50 border-t border-gray-300 rounded-b-lg gap-3">
+              <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
+                <span className="text-xs text-gray-600 font-medium">
+                  Página <span className="font-bold text-gray-900">{page}</span> de <span className="font-bold text-gray-900">{totalPages}</span>
+                </span>
+                <span className="hidden sm:block text-gray-300">|</span>
+                <span className="text-[11px] text-gray-500 bg-gray-200/70 px-2 py-0.5 rounded-full font-medium">
+                  {pendientesOrdenados.length} {pendientesOrdenados.length === 1 ? 'tarea en esta categoría' : 'tareas en total'}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage(page - 1)}
+                  disabled={page === 1}
+                  className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => setPage(page + 1)}
+                  disabled={page === totalPages}
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* 📱 VISTA MÓVIL */}
           <TablaPendientesMobile
-            tareas={pendientesOrdenados}
+            tareas={tareasPaginadas} // ✅ Le pasamos la lista paginada al movil
             user={user}
-            formateaFecha={formateaFechaString} // Pasamos la versión string para móvil (por si se necesita en logs)
+            formateaFecha={formateaFechaString}
             getRowClass={getRowClass}
             getFechaFinalObj={getFechaFinalObj}
             getEstadoFecha={getEstadoFecha}
@@ -483,6 +546,11 @@ const TablaPendientes: React.FC<Props> = ({ user, viewType }) => {
             }}
             onEntregar={handleAbrirEntrega}
             onRevisar={handleRevisar}
+            // ✅ Pasamos las propiedades de paginación
+            page={page}
+            totalPages={totalPages}
+            totalTareas={pendientesOrdenados.length}
+            onPageChange={setPage}
           />
 
           {/* Modales... */}

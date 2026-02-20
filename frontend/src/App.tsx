@@ -9,7 +9,6 @@ import {
 } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import Pendientes from "./pages/Pendientes";
-import Principal from "./pages/Principal";
 import Admin from "./pages/Admin";
 import Super_Admin from "./pages/Super_Admin";
 import Usuarios from "./pages/Usuarios";

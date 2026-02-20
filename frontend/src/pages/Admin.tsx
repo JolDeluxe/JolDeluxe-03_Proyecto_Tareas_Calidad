@@ -70,6 +70,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
   // --- Estados de Filtros ---
   const [filtro, setFiltro] = useState("total");
   const [responsable, setResponsable] = useState<string>("Todos");
+  const [asignador, setAsignador] = useState<string>("Todos");
   const [query, setQuery] = useState<string>("");
 
   const [verCanceladas, setVerCanceladas] = useState(false);
@@ -81,6 +82,10 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
   // ---> NUEVOS ESTADOS DE FECHAS <---
   const [filtroFechaRegistro, setFiltroFechaRegistro] = useState<RangoFechaEspecial>(defaultRango);
   const [filtroFechaLimite, setFiltroFechaLimite] = useState<RangoFechaEspecial>(defaultRango);
+
+  const [filtroMisTareas, setFiltroMisTareas] = useState({ asignadasPorMi: false, asignadasAMi: false });
+
+
 
   // --- Estados varios ---
   const [openModal, setOpenModal] = useState<boolean>(false);
@@ -95,6 +100,26 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
   const [page, setPage] = useState(1);
   const itemsPerPage = 30;
+
+  const conteoMisTareas = useMemo(() => {
+    let porMi = 0;
+    let aMi = 0;
+    if (!user) return { porMi, aMi };
+
+    tareas.forEach(t => {
+      // Filtro Kaizen base para que los números cuadren con la pestaña actual
+      const nombreTarea = t.tarea || "";
+      const esKaizen = nombreTarea.trim().toUpperCase().startsWith("KAIZEN");
+      if (isKaizen ? !esKaizen : esKaizen) return;
+      if (t.estatus === "CANCELADA" && !verCanceladas) return;
+
+      if (t.asignadorId === user.id) porMi++;
+      if (t.responsables.some(r => r.id === user.id)) aMi++;
+    });
+    return { porMi, aMi };
+  }, [tareas, isKaizen, user, verCanceladas]);
+
+
 
   const handleRefresh = () => {
     setLoading(true);
@@ -340,9 +365,23 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
       });
     }
 
-    return filtered;
-  }, [tareas, isKaizen, filtro, verCanceladas, filtroUrgencia, filtroExtra, filtroFechaRegistro, filtroFechaLimite]);
+    // 7. Filtro "Mis Tareas" (Por Mí / A Mí)
+    if (filtroMisTareas.asignadasPorMi || filtroMisTareas.asignadasAMi) {
+      filtered = filtered.filter(t => {
+        const esPorMi = t.asignadorId === user?.id;
+        const esAMi = t.responsables.some(r => r.id === user?.id);
 
+        if (filtroMisTareas.asignadasPorMi && filtroMisTareas.asignadasAMi) {
+          return esPorMi || esAMi; // Muestra ambas si las dos están seleccionadas
+        }
+        if (filtroMisTareas.asignadasPorMi) return esPorMi;
+        if (filtroMisTareas.asignadasAMi) return esAMi;
+        return true;
+      });
+    }
+
+    return filtered;
+  }, [tareas, isKaizen, filtro, verCanceladas, filtroUrgencia, filtroExtra, filtroFechaRegistro, filtroFechaLimite, filtroMisTareas, user]);
   const totalPages = Math.max(1, Math.ceil(tareasFiltradas.length / itemsPerPage));
 
   const tareasParaTablaPaginadas = useMemo(() => {
@@ -370,11 +409,15 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
         responsable === "Todos" ||
         t.responsables.some((r) => r.id.toString() === responsable);
 
+      // ✅ NUEVO: Filtro de Asignador
+      const pasaAsignador =
+        asignador === "Todos" || t.asignadorId?.toString() === asignador;
+
       // Filtro de Urgencia
       const pasaUrgencia =
         filtroUrgencia === "TODAS" || t.urgencia === filtroUrgencia;
 
-      return pasaResponsable && pasaUrgencia;
+      return pasaResponsable && pasaAsignador && pasaUrgencia;
     });
 
     // 2. Retornamos el objeto con la estructura que espera ResumenAdmin
@@ -499,11 +542,33 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                 verCanceladas={verCanceladas}
               />
               <FiltrosAdmin
+                responsable={responsable}
+                asignador={asignador}
+                busqueda={query}
                 onResponsableChange={setResponsable}
+                onAsignadorChange={setAsignador}
                 onBuscarChange={setQuery}
                 user={user}
                 verCanceladas={verCanceladas}
-                onToggleCanceladas={() => setVerCanceladas(!verCanceladas)}
+                onToggleCanceladas={() => {
+                  if (!verCanceladas) {
+                    setFiltro("total");
+                    setMonth(0);
+                    setResponsable("Todos");
+                    setAsignador("Todos");
+                    setQuery("");
+                    setFiltroUrgencia("TODAS");
+                    setFiltroExtra("NINGUNO");
+                    setFiltroFechaRegistro(defaultRango);
+                    setFiltroFechaLimite(defaultRango);
+                    setFiltroMisTareas({ asignadasPorMi: false, asignadasAMi: false });
+                  } else {
+                    const fechaActual = new Date();
+                    setYear(fechaActual.getFullYear());
+                    setMonth(fechaActual.getMonth() + 1);
+                  }
+                  setVerCanceladas(!verCanceladas);
+                }}
                 filtroUrgencia={filtroUrgencia}
                 onUrgenciaChange={setFiltroUrgencia}
                 filtroExtra={filtroExtra}
@@ -514,6 +579,9 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                 filtroFechaLimite={filtroFechaLimite}
                 onFiltroFechaRegistroChange={(val) => handleFiltroEspecialChange("REGISTRO", val)}
                 onFiltroFechaLimiteChange={(val) => handleFiltroEspecialChange("LIMITE", val)}
+                filtroMisTareas={filtroMisTareas}
+                onFiltroMisTareasChange={setFiltroMisTareas}
+                conteoMisTareas={conteoMisTareas}
               />
             </div>
 

@@ -16,25 +16,24 @@ import Acciones from "./Acciones";
 import ModalEditar from "./ModalEditar";
 import ModalEliminar from "./ModalEliminar";
 import ModalAceptar from "./ModalAceptar";
-// ✅ NUEVO: Importamos el Modal de Revisión
 import ModalRevision from "./ModalRevision";
+// ✅ Importamos el Modal de Entrega
+import ModalEntrega from "./ModalEntregar";
 import { toast } from "react-toastify";
 
 interface TablaProps {
   filtro: string;
-  responsable: string; // Sigue siendo string (ID o "Todos")
+  responsable: string;
   query: string;
   tareas: Tarea[];
   loading: boolean;
   onRecargarTareas: () => void;
-  user: Usuario | null; // 👈 2. Recibir 'user' como prop
-  // ✅ Props de Paginación (Igual a TablaUsuarios)
+  user: Usuario | null;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
 }
 
-// ✅ TIPOS PARA EL ORDENAMIENTO
 type SortKey = "asignador" | "responsables" | "urgencia" | "fechaRegistro" | "fechaLimite" | "estatus";
 
 interface SortConfig {
@@ -44,22 +43,16 @@ interface SortConfig {
 
 // --- FUNCIONES HELPER PARA FECHAS Y HORAS ---
 
-/**
- * Convierte una fecha a formato HH:MM AM/PM
- */
 const formatTimeAMPM = (date: Date): string => {
   let hours = date.getHours();
   const minutes = date.getMinutes();
   const ampm = hours >= 12 ? 'PM' : 'AM';
   hours = hours % 12;
-  hours = hours ? hours : 12; // la hora '0' debe ser '12'
+  hours = hours ? hours : 12;
   const strMinutes = minutes < 10 ? '0' + minutes : minutes;
   return hours + ':' + strMinutes + ' ' + ampm;
 }
 
-/**
- * 🛠️ Componente Helper para Renderizar Fecha Límite con Iconos (EXISTENTE)
- */
 const RenderFechaLimite = ({ fecha, vencida }: { fecha?: Date | string | null, vencida: boolean }) => {
   if (!fecha) return <span className="text-gray-400">—</span>;
 
@@ -71,29 +64,24 @@ const RenderFechaLimite = ({ fecha, vencida }: { fecha?: Date | string | null, v
   const y = dateObj.getFullYear();
   const fechaStr = `${d}/${m}/${y}`;
 
-  // Verificar hora para ver si mostramos el reloj
   const h = dateObj.getHours();
   const min = dateObj.getMinutes();
   const sec = dateObj.getSeconds();
 
-  // Si es "Fin del día" (23:59:59), no mostramos la hora
   const hasTime = !(h === 23 && min === 59 && sec >= 58);
   const horaStr = hasTime ? formatTimeAMPM(dateObj) : null;
 
-  // Clases de color dinámicas
   const textClass = vencida ? "text-red-600" : "text-gray-700";
   const iconClass = vencida ? "text-red-600" : "text-gray-500";
 
   return (
     <div className={`flex flex-col items-center justify-center leading-tight ${vencida ? "font-bold" : ""}`}>
-      {/* Fila: Fecha */}
       <div className={`flex items-center gap-1.5 ${textClass}`}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-4 h-4 ${iconClass}`} fill="currentColor">
           <path d="M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Zm280 240q-17 0-28.5-11.5T440-440q0-17 11.5-28.5T480-480q17 0 28.5 11.5T520-440q0 17-11.5 28.5T480-400Zm-188.5-11.5Q280-423 280-440t11.5-28.5Q303-480 320-480t28.5 11.5Q360-457 360-440t-11.5 28.5Q337-400 320-400t-28.5-11.5ZM640-400q-17 0-28.5-11.5T600-440q0-17 11.5-28.5T640-480q17 0 28.5 11.5T680-440q0 17-11.5 28.5T640-400ZM480-240q-17 0-28.5-11.5T440-280q0-17 11.5-28.5T480-320q17 0 28.5 11.5T520-280q0 17-11.5 28.5T480-240Zm-188.5-11.5Q280-263 280-280t11.5-28.5Q303-320 320-320t28.5 11.5Q360-297 360-280t-11.5 28.5Q337-240 320-240t-28.5-11.5ZM640-240q-17 0-28.5-11.5T600-280q0-17 11.5-28.5T640-320q17 0 28.5 11.5T680-280q0 17-11.5 28.5T640-240Z" />
         </svg>
         <span>{fechaStr}</span>
       </div>
-      {/* Fila: Hora (Opcional) */}
       {horaStr && (
         <div className={`flex items-center gap-1.5 mt-0.5 text-xs opacity-90 ${textClass}`}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-3.5 h-3.5 ${iconClass}`} fill="currentColor">
@@ -102,7 +90,6 @@ const RenderFechaLimite = ({ fecha, vencida }: { fecha?: Date | string | null, v
           <span>{horaStr}</span>
         </div>
       )}
-      {/* Fila: Etiqueta ATRASADA */}
       {vencida && (
         <span className="text-[10px] font-extrabold text-red-600 tracking-wide mt-1">
           ATRASADA
@@ -112,9 +99,6 @@ const RenderFechaLimite = ({ fecha, vencida }: { fecha?: Date | string | null, v
   );
 };
 
-/**
- * 📱 RenderFechaLimiteMovil: Versión en línea recta para dispositivos móviles
- */
 const RenderFechaLimiteMovil = ({ fecha, vencida }: { fecha?: Date | string | null, vencida: boolean }) => {
   if (!fecha) return <span className="text-gray-400">—</span>;
 
@@ -126,7 +110,6 @@ const RenderFechaLimiteMovil = ({ fecha, vencida }: { fecha?: Date | string | nu
   const y = dateObj.getFullYear();
   const fechaStr = `${d}/${m}/${y}`;
 
-  // Verificar hora
   const h = dateObj.getHours();
   const min = dateObj.getMinutes();
   const sec = dateObj.getSeconds();
@@ -134,21 +117,17 @@ const RenderFechaLimiteMovil = ({ fecha, vencida }: { fecha?: Date | string | nu
   const hasTime = !(h === 23 && min === 59 && sec >= 58);
   const horaStr = hasTime ? formatTimeAMPM(dateObj) : null;
 
-  // Clases de color dinámicas
   const textClass = vencida ? "text-red-600 font-bold" : "text-gray-700";
   const iconColor = vencida ? "#DC2626" : "#6B7280";
 
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-xs ${textClass}`}>
-      {/* Grupo Fecha: Icono + Texto */}
       <div className="flex items-center gap-1">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-3.5 h-3.5" fill={iconColor}>
           <path d="M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Z" />
         </svg>
         <span>{fechaStr}</span>
       </div>
-
-      {/* Grupo Hora: Icono + Texto (Solo si aplica) */}
       {horaStr && (
         <div className="flex items-center gap-1">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-3.5 h-3.5" fill={iconColor}>
@@ -157,8 +136,6 @@ const RenderFechaLimiteMovil = ({ fecha, vencida }: { fecha?: Date | string | nu
           <span>{horaStr}</span>
         </div>
       )}
-
-      {/* Etiqueta ATRASADA (Solo si aplica) */}
       {vencida && (
         <span className="text-[9px] bg-red-600 text-white px-1.5 py-0.5 rounded-sm tracking-wider uppercase leading-none font-bold">
           Atrasada
@@ -168,9 +145,6 @@ const RenderFechaLimiteMovil = ({ fecha, vencida }: { fecha?: Date | string | nu
   );
 };
 
-/**
- * 🆕 RenderFechaEntrega: Renderiza Fecha Entrega o Conclusión con Iconos
- */
 const RenderFechaEntrega = ({ fecha, estatus, entregadaTarde }: { fecha?: Date | string | null, estatus: string, entregadaTarde?: boolean }) => {
   if (!fecha) return <span className="text-gray-400">—</span>;
 
@@ -182,32 +156,25 @@ const RenderFechaEntrega = ({ fecha, estatus, entregadaTarde }: { fecha?: Date |
   const y = dateObj.getFullYear();
   const fechaStr = `${d}/${m}/${y}`;
 
-  // Verificar hora para ver si mostramos el reloj
   const h = dateObj.getHours();
   const min = dateObj.getMinutes();
   const sec = dateObj.getSeconds();
 
-  // Si es "Fin del día" (23:59:59), no mostramos la hora
   const hasTime = !(h === 23 && min === 59 && sec >= 58);
   const horaStr = hasTime ? formatTimeAMPM(dateObj) : null;
 
-  // Clases según Estatus y Retraso
   const isEnRevision = estatus === "EN_REVISION";
-
   const textClass = entregadaTarde ? "text-orange-700" : isEnRevision ? "text-indigo-700" : "text-gray-700";
   const iconClass = entregadaTarde ? "text-orange-600" : isEnRevision ? "text-indigo-500" : "text-gray-500";
 
   return (
     <div className="flex flex-col items-center justify-center leading-tight">
-      {/* Fila: Fecha con Calendario */}
       <div className={`flex items-center gap-1.5 ${textClass}`}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-4 h-4 ${iconClass}`} fill="currentColor">
           <path d="M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Zm280 240q-17 0-28.5-11.5T440-440q0-17 11.5-28.5T480-480q17 0 28.5 11.5T520-440q0 17-11.5 28.5T480-400Zm-188.5-11.5Q280-423 280-440t11.5-28.5Q303-480 320-480t28.5 11.5Q360-457 360-440t-11.5 28.5Q337-400 320-400t-28.5-11.5ZM640-400q-17 0-28.5-11.5T600-440q0-17 11.5-28.5T640-480q17 0 28.5 11.5T680-440q0 17-11.5 28.5T640-400ZM480-240q-17 0-28.5-11.5T440-280q0-17 11.5-28.5T480-320q17 0 28.5 11.5T520-280q0 17-11.5 28.5T480-240Zm-188.5-11.5Q280-263 280-280t11.5-28.5Q303-320 320-320t28.5 11.5Q360-297 360-280t-11.5 28.5Q337-240 320-240t-28.5-11.5ZM640-240q-17 0-28.5-11.5T600-280q0-17 11.5-28.5T640-320q17 0 28.5 11.5T680-280q0 17-11.5 28.5T640-240Z" />
         </svg>
         <span className="font-semibold">{fechaStr}</span>
       </div>
-
-      {/* Fila: Hora con Reloj */}
       {horaStr && (
         <div className={`flex items-center gap-1.5 mt-0.5 text-xs opacity-90 ${textClass}`}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={`w-3.5 h-3.5 ${iconClass}`} fill="currentColor">
@@ -216,8 +183,6 @@ const RenderFechaEntrega = ({ fecha, estatus, entregadaTarde }: { fecha?: Date |
           <span>{horaStr}</span>
         </div>
       )}
-
-      {/* ✅ NUEVO: Etiqueta Entregada con Retraso (Letra chica) */}
       {entregadaTarde && (
         <span className="text-[9px] font-extrabold text-orange-600 tracking-wide mt-1 uppercase text-center leading-none">
           ENTREGADA CON RETRASO
@@ -227,9 +192,6 @@ const RenderFechaEntrega = ({ fecha, estatus, entregadaTarde }: { fecha?: Date |
   );
 }
 
-/**
- * 📱 RenderFechaEntregaMovil: Versión en línea recta para dispositivos móviles
- */
 const RenderFechaEntregaMovil = ({ fecha, estatus, entregadaTarde }: { fecha?: Date | string | null, estatus: string, entregadaTarde?: boolean }) => {
   if (!fecha) return <span className="text-gray-400">—</span>;
 
@@ -241,7 +203,6 @@ const RenderFechaEntregaMovil = ({ fecha, estatus, entregadaTarde }: { fecha?: D
   const y = dateObj.getFullYear();
   const fechaStr = `${d}/${m}/${y}`;
 
-  // Verificar hora
   const h = dateObj.getHours();
   const min = dateObj.getMinutes();
   const sec = dateObj.getSeconds();
@@ -249,22 +210,18 @@ const RenderFechaEntregaMovil = ({ fecha, estatus, entregadaTarde }: { fecha?: D
   const hasTime = !(h === 23 && min === 59 && sec >= 58);
   const horaStr = hasTime ? formatTimeAMPM(dateObj) : null;
 
-  // Clases según Estatus y Retraso
   const isEnRevision = estatus === "EN_REVISION";
   const textClass = entregadaTarde ? "text-orange-700" : isEnRevision ? "text-indigo-700" : "text-gray-700";
   const iconColor = entregadaTarde ? "#EA580C" : isEnRevision ? "#6366F1" : "#6B7280";
 
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-xs ${textClass}`}>
-      {/* Grupo Fecha: Icono Calendario + Texto */}
       <div className="flex items-center gap-1">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-3.5 h-3.5" fill={iconColor}>
           <path d="M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Z" />
         </svg>
         <span className="font-semibold">{fechaStr}</span>
       </div>
-
-      {/* Grupo Hora: Icono Reloj + Texto (Solo si aplica) */}
       {horaStr && (
         <div className="flex items-center gap-1 opacity-90">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-3.5 h-3.5" fill={iconColor}>
@@ -273,8 +230,6 @@ const RenderFechaEntregaMovil = ({ fecha, estatus, entregadaTarde }: { fecha?: D
           <span>{horaStr}</span>
         </div>
       )}
-
-      {/* Etiqueta Entregada con Retraso (Solo si aplica) */}
       {entregadaTarde && (
         <span className="text-[9px] bg-orange-600 text-white px-1.5 py-0.5 rounded-sm tracking-wider uppercase font-extrabold leading-none">
           Retraso
@@ -284,7 +239,6 @@ const RenderFechaEntregaMovil = ({ fecha, estatus, entregadaTarde }: { fecha?: D
   );
 }
 
-// 🛠️ Helper de visualización simple para celdas donde no aplica el diseño complejo (ej. fecha simple)
 const formateaFechaSimpleRender = (fechaInput?: Date | string | null) => {
   if (!fechaInput) return <span className="text-gray-400">—</span>;
   const dateObj = typeof fechaInput === "string" ? new Date(fechaInput) : fechaInput;
@@ -295,7 +249,6 @@ const formateaFechaSimpleRender = (fechaInput?: Date | string | null) => {
   const y = dateObj.getFullYear();
   const fechaStr = `${d}/${m}/${y}`;
 
-  // Verificar hora
   const h = dateObj.getHours();
   const min = dateObj.getMinutes();
   const sec = dateObj.getSeconds();
@@ -313,7 +266,6 @@ const formateaFechaSimpleRender = (fechaInput?: Date | string | null) => {
   );
 }
 
-// Formateador simple para strings (usado en móvil o celdas simples)
 const formateaFechaString = (fechaInput?: Date | string | null): string => {
   if (!fechaInput) return "";
   try {
@@ -329,7 +281,6 @@ const formateaFechaString = (fechaInput?: Date | string | null): string => {
     const min = dateObj.getMinutes();
     const sec = dateObj.getSeconds();
 
-    // Si es fin del día, solo fecha
     if (h === 23 && min === 59 && sec >= 58) return fechaStr;
 
     return `${fechaStr} ${formatTimeAMPM(dateObj)}`;
@@ -338,7 +289,6 @@ const formateaFechaString = (fechaInput?: Date | string | null): string => {
   }
 };
 
-// Formateador SOLO FECHA (para registro)
 const formateaSoloFecha = (fechaInput?: Date | string | null): string => {
   if (!fechaInput) return "";
   try {
@@ -353,21 +303,15 @@ const formateaSoloFecha = (fechaInput?: Date | string | null): string => {
   }
 };
 
-// 🎨 Colores por estatus (sin cambios)
 const getRowClass = (status: Estatus): string => {
   switch (status) {
-    case "CONCLUIDA":
-      return "bg-green-100 border-l-4 border-green-500";
-    case "CANCELADA":
-      return "bg-red-50 border-l-4 border-red-500";
-    case "EN_REVISION":
-      return "bg-indigo-100 border-l-4 border-indigo-500";
-    default:
-      return "bg-blue-50 border-l-4 border-blue-500";
+    case "CONCLUIDA": return "bg-green-100 border-l-4 border-green-500";
+    case "CANCELADA": return "bg-red-50 border-l-4 border-red-500";
+    case "EN_REVISION": return "bg-indigo-100 border-l-4 border-indigo-500";
+    default: return "bg-blue-50 border-l-4 border-blue-500";
   }
 };
 
-// Helper para obtener fecha efectiva (considerando historial) para ordenamiento
 const getFechaLimiteEfectiva = (tarea: Tarea): number => {
   if (tarea.historialFechas && tarea.historialFechas.length > 0) {
     const last = tarea.historialFechas[tarea.historialFechas.length - 1];
@@ -388,43 +332,33 @@ const TablaAdmin: React.FC<TablaProps> = ({
   totalPages,
   onPageChange,
 }) => {
-  // (Estados de modales)
+  // Estados de modales
   const [openModalEditar, setOpenModalEditar] = useState(false);
   const [openModalEliminar, setOpenModalEliminar] = useState(false);
   const [openModalAceptar, setOpenModalAceptar] = useState(false);
-  const [tareaSeleccionada, setTareaSeleccionada] = useState<Tarea | null>(
-    null
-  );
-  const [modalImagenes, setModalImagenes] = useState<ImagenTarea[] | null>(
-    null
-  );
-
-  // ✅ Estado para el modal de revisión
+  const [tareaSeleccionada, setTareaSeleccionada] = useState<Tarea | null>(null);
+  const [modalImagenes, setModalImagenes] = useState<ImagenTarea[] | null>(null);
   const [tareaParaRevisar, setTareaParaRevisar] = useState<Tarea | null>(null);
 
-  // ✅ Estado de Ordenamiento (Default: Registro Descendente)
+  // Estado para el Modal de Entregar
+  const [tareaParaEntregar, setTareaParaEntregar] = useState<Tarea | null>(null);
+
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "fechaRegistro", direction: "desc" });
 
-  // 🧩 Modales
-  const abrirModalAceptar = (tarea: Tarea) => {
-    setTareaSeleccionada(tarea);
-    setOpenModalAceptar(true);
+  const abrirModalAceptar = (tarea: Tarea) => { setTareaSeleccionada(tarea); setOpenModalAceptar(true); };
+  const abrirModalEditar = (tarea: Tarea) => { setTareaSeleccionada(tarea); setOpenModalEditar(true); };
+  const abrirModalEliminar = (tarea: Tarea) => { setTareaSeleccionada(tarea); setOpenModalEliminar(true); };
+
+  // Handlers para Modal Entregar
+  const abrirModalEntrega = (tarea: Tarea) => setTareaParaEntregar(tarea);
+  const cerrarModalEntrega = () => setTareaParaEntregar(null);
+  const exitoEntrega = () => {
+    setTareaParaEntregar(null);
+    onRecargarTareas();
   };
 
-  const abrirModalEditar = (tarea: Tarea) => {
-    setTareaSeleccionada(tarea);
-    setOpenModalEditar(true);
-  };
-
-  const abrirModalEliminar = (tarea: Tarea) => {
-    setTareaSeleccionada(tarea);
-    setOpenModalEliminar(true);
-  };
-
-  // Acción de confirmar CON SERVICIO
   const confirmarFinalizacion = async () => {
     if (!tareaSeleccionada) return;
-
     try {
       await tareasService.complete(tareaSeleccionada.id);
       onRecargarTareas();
@@ -437,12 +371,10 @@ const TablaAdmin: React.FC<TablaProps> = ({
     }
   };
 
-  // Acción de eliminar CON SERVICIO
   const confirmarEliminacion = async () => {
     if (!tareaSeleccionada) return;
     try {
       await tareasService.cancel(tareaSeleccionada.id);
-
       onRecargarTareas();
       setOpenModalEliminar(false);
       setTareaSeleccionada(null);
@@ -453,21 +385,10 @@ const TablaAdmin: React.FC<TablaProps> = ({
     }
   };
 
-  // Handlers para Revisión
-  const handleRevisar = (tarea: Tarea) => {
-    setTareaParaRevisar(tarea);
-  };
+  const handleRevisar = (tarea: Tarea) => setTareaParaRevisar(tarea);
+  const handleCerrarRevision = () => setTareaParaRevisar(null);
+  const handleExitoRevision = () => { setTareaParaRevisar(null); onRecargarTareas(); };
 
-  const handleCerrarRevision = () => {
-    setTareaParaRevisar(null);
-  };
-
-  const handleExitoRevision = () => {
-    setTareaParaRevisar(null);
-    onRecargarTareas();
-  };
-
-  // LÓGICA DE ORDENAMIENTO (Handler)
   const handleSort = (key: SortKey) => {
     let direction: "asc" | "desc" = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") {
@@ -476,15 +397,12 @@ const TablaAdmin: React.FC<TablaProps> = ({
     setSortConfig({ key, direction });
   };
 
-  // Helper para mostrar ícono de ordenamiento
   const getSortIcon = (columnKey: SortKey) => {
     if (sortConfig.key !== columnKey) return <span className="text-gray-300 text-[10px] ml-1">⇅</span>;
     return sortConfig.direction === "asc" ? <span className="text-blue-600 ml-1">↑</span> : <span className="text-blue-600 ml-1">↓</span>;
   };
 
-  // 🚀 Lógica de filtro Y ORDENAMIENTO (UseMemo)
   const tareasOrdenadas = useMemo(() => {
-    // 1. Filtrado
     const filtradas = tareas.filter((t) => {
       const estatus = t.estatus;
       if (estatus === "CANCELADA" && filtro.toLowerCase() !== "canceladas") return false;
@@ -501,48 +419,31 @@ const TablaAdmin: React.FC<TablaProps> = ({
         t.responsables.some((r) => r.id.toString() === responsable);
 
       const texto = `${t.tarea} ${t.observaciones || ""}`.toLowerCase();
-      const pasaBusqueda =
-        query.trim() === "" || texto.includes(query.toLowerCase());
+      const pasaBusqueda = query.trim() === "" || texto.includes(query.toLowerCase());
 
       return pasaEstatus && pasaResponsable && pasaBusqueda;
     });
 
-    // 2. Ordenamiento
     if (sortConfig) {
       filtradas.sort((a, b) => {
         let valA: any = "";
         let valB: any = "";
-
         switch (sortConfig.key) {
-          case "asignador":
-            valA = (a.asignador?.nombre || "").toLowerCase();
-            valB = (b.asignador?.nombre || "").toLowerCase();
-            break;
-          case "responsables":
-            valA = a.responsables.map(r => r.nombre).join("").toLowerCase();
-            valB = b.responsables.map(r => r.nombre).join("").toLowerCase();
-            break;
+          case "asignador": valA = (a.asignador?.nombre || "").toLowerCase(); valB = (b.asignador?.nombre || "").toLowerCase(); break;
+          case "responsables": valA = a.responsables.map(r => r.nombre).join("").toLowerCase(); valB = b.responsables.map(r => r.nombre).join("").toLowerCase(); break;
           case "urgencia":
             const weights = { ALTA: 3, MEDIA: 2, BAJA: 1 };
-            valA = weights[a.urgencia] || 0;
-            valB = weights[b.urgencia] || 0;
+            valA = weights[a.urgencia] || 0; valB = weights[b.urgencia] || 0;
             return sortConfig.direction === "asc" ? valA - valB : valB - valA;
           case "fechaRegistro":
-            valA = a.fechaRegistro ? new Date(a.fechaRegistro).getTime() : 0;
-            valB = b.fechaRegistro ? new Date(b.fechaRegistro).getTime() : 0;
+            valA = a.fechaRegistro ? new Date(a.fechaRegistro).getTime() : 0; valB = b.fechaRegistro ? new Date(b.fechaRegistro).getTime() : 0;
             return sortConfig.direction === "asc" ? valA - valB : valB - valA;
           case "fechaLimite":
-            valA = getFechaLimiteEfectiva(a);
-            valB = getFechaLimiteEfectiva(b);
+            valA = getFechaLimiteEfectiva(a); valB = getFechaLimiteEfectiva(b);
             return sortConfig.direction === "asc" ? valA - valB : valB - valA;
-          case "estatus":
-            valA = a.estatus;
-            valB = b.estatus;
-            break;
-          default:
-            return 0;
+          case "estatus": valA = a.estatus; valB = b.estatus; break;
+          default: return 0;
         }
-
         if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
         if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
         return 0;
@@ -596,7 +497,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
 
                   let vencida = fechaLimiteObj ? (fechaLimiteObj.getTime() < hoy.getTime() && row.estatus === "PENDIENTE") : false;
 
-                  // 💡 LÓGICA FECHA A MOSTRAR (Entrega, Conclusión o Cancelación)
                   let fechaParaColumna: Date | string | null = null;
                   let entregadaTarde = false;
 
@@ -607,15 +507,11 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     }
                   } else if (row.estatus === "CONCLUIDA") {
                     fechaParaColumna = row.fechaConclusion || null;
-                    // ✅ ESCENARIO MEJORADO: Usar fechaEntrega si existe, si no fechaConclusion
                     const fechaReferencia = row.fechaEntrega || row.fechaConclusion;
                     if (fechaReferencia && fechaLimiteObj) {
                       entregadaTarde = new Date(fechaReferencia).getTime() > fechaLimiteObj.getTime();
                     }
-                  }
-                  // ✅ AGREGAR ESTE BLOQUE AQUÍ:
-                  else if (row.estatus === "CANCELADA") {
-                    // Usamos updatedAt como fecha de cancelación
+                  } else if (row.estatus === "CANCELADA") {
                     fechaParaColumna = row.fechaConclusion || null;
                   }
 
@@ -695,6 +591,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
                             onEditar={() => abrirModalEditar(row)}
                             onBorrar={() => abrirModalEliminar(row)}
                             onRevisar={() => handleRevisar(row)}
+                            // ✅ MANDAMOS LA FUNCIÓN PARA ENTREGAR
+                            onEntregar={() => abrirModalEntrega(row)}
                           />
                         )}
                       </td>
@@ -724,14 +622,14 @@ const TablaAdmin: React.FC<TablaProps> = ({
                 vencida = limitNorm < hoy && row.estatus === "PENDIENTE";
               }
 
+              // Permisos para Móvil
               const esPropietario = row.asignadorId === user?.id;
+              // ✅ Saber si soy responsable para habilitar botón Entregar en móvil
+              const isResponsable = row.responsables.some((r) => r.id === user?.id);
+
               const puedeValidar = user && (user.rol === Rol.SUPER_ADMIN || user.rol === Rol.ADMIN || (user.rol === Rol.ENCARGADO && esPropietario));
-
-              // 🛑 RESTRICCIÓN: No editar/cancelar si no está Pendiente
               const canEditOrCancelStatus = row.estatus === "PENDIENTE";
-
               const puedeCancelar = puedeValidar && canEditOrCancelStatus;
-
               const asignadorEsAdmin = row.asignador?.rol === Rol.ADMIN || row.asignador?.rol === Rol.SUPER_ADMIN;
               const puedeEditar = user && canEditOrCancelStatus && (user.rol === Rol.SUPER_ADMIN || user.rol === Rol.ADMIN || (user.rol === Rol.ENCARGADO && !asignadorEsAdmin));
 
@@ -749,9 +647,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                 if (fechaReferencia && fechaLimiteDate) {
                   entregadaTarde = new Date(fechaReferencia).getTime() > new Date(fechaLimiteDate).getTime();
                 }
-              }
-              // ✅ AGREGAR ESTE BLOQUE AQUÍ:
-              else if (row.estatus === "CANCELADA") {
+              } else if (row.estatus === "CANCELADA") {
                 fechaParaColumna = row.fechaConclusion || null;
                 labelColumna = "Cancelación";
               }
@@ -765,6 +661,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     </span>
                   </div>
                   {row.observaciones && <div className="mb-3 bg-white/50 p-2 rounded border border-gray-200 text-xs italic text-gray-700 break-words"><span className="font-bold not-italic">Obs: </span>{row.observaciones}</div>}
+
                   <div className="text-xs text-gray-600 space-y-2">
                     <p><span className="font-semibold text-gray-700">Asignado por:</span> <span className="text-amber-700 font-semibold">{row.asignador.nombre}</span></p>
                     <p><span className="font-semibold text-gray-700">Responsable:</span> <span className="text-blue-700 font-semibold">{row.responsables.map((r) => r.nombre).join(", ")}</span></p>
@@ -790,6 +687,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     )}
                     <p><span className="font-semibold text-gray-700">Estatus:</span> <span className={`text-xs font-bold ${row.estatus === "CONCLUIDA" ? "text-green-700" : row.estatus === "CANCELADA" ? "text-red-700" : row.estatus === "EN_REVISION" ? "text-indigo-700" : "text-blue-700"}`}>{row.estatus === "EN_REVISION" ? "EN REVISIÓN" : row.estatus}</span></p>
                   </div>
+
                   {fechaParaColumna && (
                     <div className={`mt-2 text-xs flex items-center`}>
                       <span className="font-semibold text-gray-700 mr-2">{labelColumna}:</span>
@@ -798,6 +696,30 @@ const TablaAdmin: React.FC<TablaProps> = ({
                   )}
 
                   <div className="flex justify-around items-center mt-4 pt-2 border-t border-gray-200 h-[46px]">
+
+                    {/* ✅ ENTREGAR (Aparece si eres responsable y está en Pendiente) */}
+                    {isResponsable && row.estatus === "PENDIENTE" && (
+                      <button
+                        onClick={() => abrirModalEntrega(row)}
+                        className={`flex flex-col items-center transition ${row.feedbackRevision ? "text-orange-700 hover:text-orange-800" : "text-emerald-700 hover:text-emerald-800"}`}
+                        title={row.feedbackRevision ? "Corregir" : "Entregar"}
+                      >
+                        {row.feedbackRevision ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-6 h-6 fill-current">
+                            <path d="M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z" />
+                            <g transform="translate(400, -450) scale(0.5)">
+                              <path d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z" />
+                            </g>
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-6 h-6 fill-current">
+                            <path d="M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z" />
+                          </svg>
+                        )}
+                        <span className="text-[11px] font-semibold mt-0.5">{row.feedbackRevision ? "Corregir" : "Entregar"}</span>
+                      </button>
+                    )}
+
                     {/* CANCELAR */}
                     {puedeCancelar && (
                       <button onClick={() => abrirModalEliminar(row)} className="flex flex-col items-center text-red-700 hover:text-red-800 transition">
@@ -814,9 +736,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
                       </button>
                     )}
 
-                    {/* VALIDAR (Pendiente) */}
+                    {/* VALIDAR DIRECTO (Pendiente) */}
                     {row.estatus === "PENDIENTE" && puedeValidar && (
-                      <button onClick={() => abrirModalAceptar(row)} className="flex flex-col items-center text-green-700 hover:text-green-800 transition">
+                      <button onClick={() => abrirModalAceptar(row)} className="flex flex-col items-center text-green-700 hover:text-green-800 transition" title="Marcar como completada directo">
                         <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor" className="w-6 h-6"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Z" /></svg>
                         <span className="text-[11px] font-semibold">Validar</span>
                       </button>
@@ -828,6 +750,17 @@ const TablaAdmin: React.FC<TablaProps> = ({
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-6 h-6 fill-indigo-700"><path d="M440-240q116 0 198-81.5T720-520q0-116-82-198t-198-82q-117 0-198.5 82T160-520q0 117 81.5 198.5T440-240Zm0-280Zm0 160q-83 0-147.5-44.5T200-520q28-70 92.5-115T440-680q82 0 146.5 45T680-520q-29 71-93.5 115.5T440-360Zm0-60q55 0 101-26.5t72-73.5q-26-46-72-73t-101-27q-56 0-102 27t-72 73q26 47 72 73.5T440-420Zm0-40q25 0 42.5-17t17.5-43q0-25-17.5-42.5T440-580q-26 0-43 17.5T380-520q0 26 17 43t43 17Zm0 300q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T80-520q0-74 28.5-139.5t77-114.5q48.5-49 114-77.5T440-880q74 0 139.5 28.5T694-774q49 49 77.5 114.5T800-520q0 64-21 121t-58 104l159 159-57 56-159-158q-47 37-104 57.5T440-160Z" /></svg>
                         <span className="text-[11px] font-semibold">Revisar</span>
                       </button>
+                    )}
+
+                    {isResponsable && row.estatus === "EN_REVISION" && !puedeValidar && (
+                      <div className="flex flex-col items-center text-indigo-600 opacity-90 animate-pulse">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-6 h-6 fill-current">
+                          <path d="M320-160h320v-120q0-66-47-113t-113-47q-66 0-113 47t-47 113v120Zm160-360q66 0 113-47t47-113v-120H320v120q0 66 47 113t113 47ZM160-80v-80h80v-120q0-61 28.5-114.5T348-480q-51-32-79.5-85.5T240-680v-120h-80v-80h640v80h-80v120q0 61-28.5 114.5T612-480q51 32 79.5 85.5T720-280v120h80v80H160Zm320-80Zm0-640Z" />
+                        </svg>
+                        <span className="text-[11px] font-bold mt-0.5">
+                          Esperando
+                        </span>
+                      </div>
                     )}
 
                     {row.estatus === "CONCLUIDA" && (
@@ -844,8 +777,6 @@ const TablaAdmin: React.FC<TablaProps> = ({
 
           {/* ✅ BARRA DE PAGINACIÓN */}
           <div className="flex flex-col sm:flex-row justify-between items-center px-4 py-3 bg-gray-50 border-t border-gray-300 rounded-b-lg gap-3">
-
-            {/* Contenedor Izquierdo: Info de Página y Cantidad */}
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
               <span className="text-xs text-gray-600 font-medium">
                 Página <span className="font-bold text-gray-900">{page}</span> de <span className="font-bold text-gray-900">{totalPages}</span>
@@ -857,20 +788,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
             </div>
 
             <div className="flex gap-2">
-              <button
-                onClick={() => onPageChange(page - 1)}
-                disabled={page === 1}
-                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              >
-                Anterior
-              </button>
-              <button
-                onClick={() => onPageChange(page + 1)}
-                disabled={page === totalPages}
-                className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
-              >
-                Siguiente
-              </button>
+              <button onClick={() => onPageChange(page - 1)} disabled={page === 1} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer">Anterior</button>
+              <button onClick={() => onPageChange(page + 1)} disabled={page === totalPages} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer">Siguiente</button>
             </div>
           </div>
 
@@ -879,6 +798,9 @@ const TablaAdmin: React.FC<TablaProps> = ({
           {openModalAceptar && tareaSeleccionada && (<ModalAceptar onClose={() => setOpenModalAceptar(false)} onConfirm={confirmarFinalizacion} tareaNombre={tareaSeleccionada.tarea} />)}
           {modalImagenes && (<ModalGaleria imagenes={modalImagenes} onClose={() => setModalImagenes(null)} />)}
           {tareaParaRevisar && (<ModalRevision tarea={tareaParaRevisar} onClose={handleCerrarRevision} onSuccess={handleExitoRevision} onVerImagenes={(imagenes) => setModalImagenes(imagenes)} />)}
+
+          {/* ✅ NUEVO: Componente para Modal de Entrega */}
+          {tareaParaEntregar && (<ModalEntrega tarea={tareaParaEntregar} onClose={cerrarModalEntrega} onSuccess={exitoEntrega} />)}
         </>
       ) : (
         <div className="flex justify-center items-center h-40 text-gray-500 italic text-sm">No hay tareas registradas que coincidan con los filtros.</div>
