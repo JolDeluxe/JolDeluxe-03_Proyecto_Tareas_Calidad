@@ -8,6 +8,7 @@ import FiltrosPendientesDesktop from "./FiltrosPendientesDesktop";
 import FiltrosPendientesMobile from "./FiltrosPendientesMobile";
 
 interface FiltrosProps {
+  onProyectar?: () => void;
   onBuscarChange?: (query: string) => void;
   user: Usuario | null;
   filtroUrgencia: "TODAS" | "ALTA" | "MEDIA" | "BAJA";
@@ -23,6 +24,7 @@ interface FiltrosProps {
 }
 
 const FiltrosPendientes: React.FC<FiltrosProps> = ({
+  onProyectar,
   onBuscarChange,
   user,
   filtroUrgencia,
@@ -52,6 +54,8 @@ const FiltrosPendientes: React.FC<FiltrosProps> = ({
     <div className="w-full bg-white font-sans border-b border-gray-200">
       {/* VISTA ESCRITORIO */}
       <FiltrosPendientesDesktop
+        user={user}
+        onProyectar={onProyectar}
         searchText={searchText}
         onSearchChange={handleSearchChange}
         onLimpiarBusqueda={handleLimpiarBusqueda}

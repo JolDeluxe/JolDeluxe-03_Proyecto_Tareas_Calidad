@@ -269,8 +269,8 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     }
 
     // 4. Filtros Extras (Lógica Específica)
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+    // ✅ Obtenemos la hora EXACTA de este milisegundo. NO TRUNCAR.
+    const ahoraExacto = new Date();
 
     // -- PENDIENTES --
     if (filtroExtra === "ATRASADAS") {
@@ -280,7 +280,9 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
         const fechaLimiteObj = t.historialFechas && t.historialFechas.length > 0
           ? new Date(t.historialFechas[t.historialFechas.length - 1].nuevaFecha!)
           : new Date(t.fechaLimite);
-        return fechaLimiteObj < hoy;
+
+        // ✅ CORRECCIÓN: Comparamos contra la hora exacta
+        return fechaLimiteObj.getTime() < ahoraExacto.getTime();
       });
     }
 
@@ -328,7 +330,8 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
         const fechaEntrega = new Date(t.fechaEntrega);
         // Calculamos diferencia en días
-        const diferenciaTiempo = hoy.getTime() - fechaEntrega.getTime();
+        // ✅ CORRECCIÓN: Usamos ahoraExacto
+        const diferenciaTiempo = ahoraExacto.getTime() - fechaEntrega.getTime();
         const diasEnRevision = diferenciaTiempo / (1000 * 3600 * 24);
 
         return diasEnRevision >= 4;
@@ -443,7 +446,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
         type: "INDICADORES",
         label: "Métricas (En mantenimiento 🚧)",
         icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-5 md:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
-        disabled: true
+        disabled: false
       },
     ];
 
@@ -459,7 +462,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                 disabled={btn.disabled}
                 className={`
                   flex-1 flex items-center justify-center gap-2
-                  px-4 py-2.5 
+                  px-4 py-2.5 cursor-pointer
                   text-sm md:text-base font-bold rounded-lg transition-all duration-300
                   ${isActive
                     ? "bg-blue-600 text-white shadow-md transform scale-[1.02]"
@@ -488,7 +491,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
         className={`
           p-3 bg-blue-600 text-white rounded-full shadow-xl 
           hover:bg-blue-700 transition-all duration-300
-          active:scale-90 
+          active:scale-90 cursor-pointer
           fixed bottom-20 right-6 z-50
           lg:bottom-180 lg:right-10
           ${loading ? "opacity-75 cursor-wait" : ""}

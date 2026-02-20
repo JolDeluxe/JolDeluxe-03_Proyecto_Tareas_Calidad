@@ -246,7 +246,7 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
               {/* OBSERVACIONES */}
               {row.observaciones && (
                 <div className="mb-3 bg-white/50 p-2 rounded border border-gray-200 text-xs italic text-gray-700 break-words">
-                  <span className="font-bold not-italic">Obs: </span>
+                  <span className="font-bold not-italic">Instrucciones: </span>
                   {row.observaciones}
                 </div>
               )}

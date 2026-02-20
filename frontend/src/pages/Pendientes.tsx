@@ -10,6 +10,7 @@ import FiltrosPendientes from "../components/Pendientes/Filtros/FiltrosPendiente
 
 // ✅ Importamos los tipos de fechas
 import type { RangoFechaEspecial } from "./Admin";
+import ModalPendientesHoy from "../components/Pendientes/ModalPendientesHoy";
 
 export type ActiveView = "MIS_TAREAS" | "ASIGNADAS" | "TODAS";
 
@@ -21,6 +22,7 @@ const defaultRango: RangoFechaEspecial = { tipo: "TODAS", inicio: null, fin: nul
 const Pendientes: React.FC<Props> = ({ user }) => {
   const [loading, setLoading] = useState(false);
   const [openModal, setOpenModal] = useState<boolean>(false);
+  const [isProyectarOpen, setIsProyectarOpen] = useState<boolean>(false);
 
   const esEncargado = user?.rol === "ENCARGADO";
   const esAdminOSuperAdmin = user?.rol === "ADMIN" || user?.rol === "SUPER_ADMIN";
@@ -180,7 +182,7 @@ const Pendientes: React.FC<Props> = ({ user }) => {
             <button
               key={btn.type}
               onClick={() => setActiveView(btn.type as ActiveView)}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm md:text-base font-bold rounded-lg transition-all duration-300 ${activeView === btn.type ? "bg-blue-600 text-white shadow-md transform scale-[1.02]" : "bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-blue-600 border border-transparent"}`}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm md:text-base font-bold rounded-lg transition-all duration-300 cursor-pointer ${activeView === btn.type ? "bg-blue-600 text-white shadow-md transform scale-[1.02]" : "bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-blue-600 border border-transparent"}`}
             >
               {btn.icon}
               <span>{btn.label}</span>
@@ -207,6 +209,7 @@ const Pendientes: React.FC<Props> = ({ user }) => {
           />
 
           <FiltrosPendientes
+            onProyectar={() => setIsProyectarOpen(true)}
             onBuscarChange={setQuery}
             user={user}
             filtroUrgencia={filtroUrgencia}
@@ -248,7 +251,7 @@ const Pendientes: React.FC<Props> = ({ user }) => {
           <div className="hidden sm:block"></div>
           <button
             onClick={() => setOpenModal(true)}
-            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-md shadow-md active:scale-[0.97] transition-all duration-200 fixed bottom-40 right-5 sm:static sm:bottom-auto sm:right-auto sm:px-5 sm:py-2 sm:rounded-md sm:shadow z-50 sm:z-auto"
+            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-md shadow-md active:scale-[0.97] transition-all duration-200 fixed bottom-40 right-5 sm:static sm:bottom-auto sm:right-auto sm:px-5 sm:py-2 sm:rounded-md sm:shadow z-50 sm:z-auto cursor-pointer"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7"><path fillRule="evenodd" d="M12 4.5a.75.75 0 01.75.75v6h6a.75.75 0 010 1.5h-6v6a.75.75 0 01-1.5 0v-6h-6a.75.75 0 010-1.5h6v-6A.75.75 0 0112 4.5z" clipRule="evenodd" /></svg>
             <span className="hidden sm:inline">Agregar nueva tarea</span>
@@ -261,7 +264,7 @@ const Pendientes: React.FC<Props> = ({ user }) => {
       <button
         onClick={fetchTareasCentralizadas}
         disabled={loading}
-        className={`p-3 bg-blue-600 text-white rounded-full shadow-xl hover:bg-blue-700 transition-all duration-300 active:scale-90 fixed bottom-20 right-6 z-50 lg:bottom-180 lg:right-10 ${loading ? "opacity-75 cursor-wait" : ""}`}
+        className={`p-3 bg-blue-600 text-white rounded-full shadow-xl hover:bg-blue-700 transition-all duration-300 active:scale-90 fixed bottom-20 right-6 z-50 lg:bottom-180 lg:right-10 cursor-pointer ${loading ? "opacity-75 cursor-wait" : ""}`}
       >
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-8 h-8 ${loading ? "animate-spin" : ""}`}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -273,6 +276,14 @@ const Pendientes: React.FC<Props> = ({ user }) => {
           onClose={() => setOpenModal(false)}
           onTareaAgregada={fetchTareasCentralizadas}
           user={user}
+        />
+      )}
+
+      {isProyectarOpen && (
+        <ModalPendientesHoy
+          tareas={tareas}
+          onClose={() => setIsProyectarOpen(false)}
+          onRecargar={fetchTareasCentralizadas}
         />
       )}
     </div>
