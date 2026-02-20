@@ -1,9 +1,10 @@
 // 📍 src/components/Principal/DashboardMetricas.tsx
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import type { Tarea } from "../../types/tarea";
+import { usuariosService } from "../../api/usuarios.service";
 
-// Definimos los colores de rol
+// Colores ejecutivos para la UI
 const COLOR_ROL = {
   ENCARGADO: "text-blue-600 font-bold",
   USUARIO: "text-red-700 font-bold",
@@ -29,9 +30,7 @@ interface Props {
   month: number;
 }
 
-// --- 1. FUNCIONES HELPER ACTUALIZADAS ---
-
-// 🚀 YA NO USAMOS resetTime. Usamos getTime() directo para precisión de horas/minutos.
+// --- 1. FUNCIONES HELPER DE FECHAS ---
 const getTimestamp = (date: Date | string | null | undefined): number => {
   if (!date) return 0;
   const d = typeof date === "string" ? new Date(date) : new Date(date);
@@ -39,7 +38,6 @@ const getTimestamp = (date: Date | string | null | undefined): number => {
 };
 
 const getFechaEfectiva = (tarea: Tarea): Date | null => {
-  // Si hay historial, tomamos la fecha más reciente del historial (reprogramación)
   if (tarea.historialFechas && tarea.historialFechas.length > 0) {
     const historialOrdenado = [...tarea.historialFechas].sort((a, b) => {
       const fechaA = new Date(a.fechaCambio || "").getTime();
@@ -50,426 +48,250 @@ const getFechaEfectiva = (tarea: Tarea): Date | null => {
       return new Date(historialOrdenado[0].nuevaFecha);
     }
   }
-  // Si no, la fecha original
   return tarea.fechaLimite ? new Date(tarea.fechaLimite) : null;
-};
-
-// 🚀 Lógica de estado actualizada para considerar la HORA actual
-const getEstadoPendiente = (fechaEfectiva: Date | null) => {
-  if (!fechaEfectiva) return "normal";
-
-  const ahora = new Date().getTime(); // Hora exacta actual
-  const limite = new Date(fechaEfectiva).getTime(); // Hora exacta límite (ej: 16:00 o 23:59:59)
-
-  // Diferencia en milisegundos
-  const diffMs = limite - ahora;
-
-  // Si la diferencia es negativa, ya pasó la hora exacta -> VENCIDA
-  if (diffMs < 0) return "vencida";
-
-  // Si faltan menos de 48 horas (48 * 60 * 60 * 1000 ms) -> PROXIMA
-  const msEn48Horas = 48 * 60 * 60 * 1000;
-  if (diffMs <= msEn48Horas) return "proxima";
-
-  return "normal";
-};
-
-const renderResponsables = (responsables: any[]) => {
-  if (!responsables || responsables.length === 0) return "Sin asignar";
-  return responsables.map((r) => r.nombre).join(", ");
 };
 
 const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
 
-  const [openVencidas, setOpenVencidas] = useState(false);
-  const [openProximas, setOpenProximas] = useState(false);
+  // --- ESTADO PARA USUARIOS DEL DEPARTAMENTO ---
+  const [empleadosDepto, setEmpleadosDepto] = useState<any[]>([]);
 
-  // --- 2. CÁLCULO MASIVO DE DATOS ---
+  useEffect(() => {
+    const fetchUsuarios = async () => {
+      try {
+        // Obtenemos todos los usuarios (El backend ya filtra por departamentoId automáticamente si es ADMIN/ENCARGADO)
+        const res = await usuariosService.getAll({ limit: 1000 });
+        if (res.data) {
+          // Filtramos solo a los que ejecutan tareas
+          const filtrados = res.data.filter((u: any) => u.rol === 'ENCARGADO' || u.rol === 'USUARIO');
+          setEmpleadosDepto(filtrados);
+        }
+      } catch (error) {
+        console.error("Error al cargar la plantilla de usuarios:", error);
+      }
+    };
+    fetchUsuarios();
+  }, []);
+
+  // --- 2. CÁLCULO MASIVO (MINERÍA DE DATOS) ---
   const data = useMemo(() => {
-
-    // 🚀 FILTRO INICIAL: Fecha Y Estatus.
-    // AQUÍ ELIMINAMOS LAS CANCELADAS DE LA ECUACIÓN DE MÉTRICAS.
-    const tareasPeriodo = tareas.filter(t => {
-      // 1. Validar fecha
+    const tareasValidas = tareas.filter(t => {
       if (!t.fechaRegistro) return false;
       const d = new Date(t.fechaRegistro);
       const coincideFecha = d.getFullYear() === year && (month === 0 || d.getMonth() + 1 === month);
-
-      // 2. 🚀 EXCLUIR CANCELADAS
-      const noEsCancelada = t.estatus !== "CANCELADA";
-
-      return coincideFecha && noEsCancelada;
+      return coincideFecha && t.estatus.toUpperCase() !== "CANCELADA";
     });
 
-    // Contadores Globales
     let contadores = {
-      total: tareasPeriodo.length, // Ahora el total no incluye canceladas
-      concluidas: 0,
-      pendientes: 0,
-      aTiempoReal: 0,
-      aTiempoAjustado: 0,
-      retrasadas: 0,
+      activasParaUrgencia: 0,
+      universoEvaluable: 0,
+      exitosATiempo: 0,
       sinCambiosTotal: 0,
       sinCambiosOk: 0,
       conCambiosTotal: 0,
       conCambiosOk: 0,
-      pendientesVencidas: 0,
-      pendientesProximas: 0,
-      pendientesNormal: 0,
       motivos: {} as Record<string, number>,
       totalCambios: 0,
       urgencia: { ALTA: 0, MEDIA: 0, BAJA: 0 } as Record<string, number>
     };
 
-    // Mapa de usuarios
+    // 👤 MAPA DE RENDIMIENTO: Inicializamos con TODOS los empleados (Tengan o no tareas)
     const userMap: Record<string, {
       nombre: string;
       rol: string;
-      total: number;
-      pendientes: number;
-      concluidas: number;
+      asignadas: number;
+      pendientesOk: number;
+      pendientesVencidas: number;
+      entregadasTarde: number;
       aTiempo: number;
-      vencidas: number;
+      evaluadas: number;
     }> = {};
 
-    const listaVencidas: Tarea[] = [];
-    const listaProximas: Tarea[] = [];
+    empleadosDepto.forEach(emp => {
+      userMap[emp.id] = {
+        nombre: emp.nombre,
+        rol: emp.rol,
+        asignadas: 0,
+        pendientesOk: 0,
+        pendientesVencidas: 0,
+        entregadasTarde: 0,
+        aTiempo: 0,
+        evaluadas: 0
+      };
+    });
 
-    tareasPeriodo.forEach(t => {
-      // Cálculos de fechas precisas
+    const ahoraMs = new Date().getTime();
+
+    tareasValidas.forEach(t => {
+      const estatus = t.estatus.toUpperCase();
+      const isPendiente = estatus === "PENDIENTE";
+      const isEnRevision = estatus === "EN_REVISION";
+      const isConcluida = estatus === "CONCLUIDA";
+
       const fechaObjFinal = getFechaEfectiva(t);
-      // 🚀 Usamos getTimestamp para obtener precisión exacta
       const fechaLimiteFinal = fechaObjFinal ? getTimestamp(fechaObjFinal) : 0;
 
-      // ------------------------------------------------------------
-      // LÓGICA GLOBAL (KPIs)
-      // ------------------------------------------------------------
-      if (t.estatus === "CONCLUIDA" && t.fechaConclusion) {
-        contadores.concluidas++;
-
-        // 🚀 Comparamos hora exacta de conclusión vs hora exacta límite
-        const fechaFin = getTimestamp(t.fechaConclusion);
-
-        // AJUSTADO: Comparación precisa
-        const cumplioAjustado = fechaLimiteFinal > 0 && fechaFin <= fechaLimiteFinal;
-
-        // REAL: Comparación contra fecha original
-        let fechaLimiteOriginal = t.fechaLimite ? getTimestamp(t.fechaLimite) : 0;
-        let tieneCambios = false;
-
-        if (t.historialFechas && t.historialFechas.length > 0) {
-          tieneCambios = true;
-          // Ordenar historial para encontrar la fecha original más antigua o usar fechaAnterior
-          const historialAntiguo = [...t.historialFechas].sort((a, b) => new Date(a.fechaCambio || "").getTime() - new Date(b.fechaCambio || "").getTime());
-          if (historialAntiguo[0]?.fechaAnterior) fechaLimiteOriginal = getTimestamp(historialAntiguo[0].fechaAnterior);
-        }
-
-        const cumplioReal = fechaLimiteOriginal > 0 && fechaFin <= fechaLimiteOriginal;
-
-        if (cumplioReal) contadores.aTiempoReal++;
-        if (cumplioAjustado) contadores.aTiempoAjustado++; else contadores.retrasadas++;
-
-        if (tieneCambios) {
-          contadores.conCambiosTotal++;
-          if (cumplioAjustado) contadores.conCambiosOk++;
-        } else {
-          contadores.sinCambiosTotal++;
-          if (cumplioReal) contadores.sinCambiosOk++;
-        }
-
-        // 📍 LÓGICA USUARIO: TAREA CONCLUIDA
-        t.responsables.forEach((resp: any) => {
-          const key = resp.id;
-          if (!userMap[key]) userMap[key] = { nombre: resp.nombre, rol: resp.rol || "USUARIO", total: 0, pendientes: 0, concluidas: 0, aTiempo: 0, vencidas: 0 };
-
-          userMap[key].total++;
-          userMap[key].concluidas++;
-
-          if (cumplioAjustado) {
-            userMap[key].aTiempo++;
-          } else {
-            userMap[key].vencidas++; // Concluida Tarde cuenta como "Vencida" para el score
-          }
-        });
-
-      } else if (t.estatus === "PENDIENTE") {
-        contadores.pendientes++;
-        const estado = getEstadoPendiente(fechaObjFinal);
-
-        if (estado === "vencida") {
-          contadores.pendientesVencidas++;
-          listaVencidas.push(t);
-        } else if (estado === "proxima") {
-          contadores.pendientesProximas++;
-          listaProximas.push(t);
-        } else {
-          contadores.pendientesNormal++;
-        }
-
-        // 📍 LÓGICA USUARIO: TAREA PENDIENTE
-        t.responsables.forEach((resp: any) => {
-          const key = resp.id;
-          if (!userMap[key]) userMap[key] = { nombre: resp.nombre, rol: resp.rol || "USUARIO", total: 0, pendientes: 0, concluidas: 0, aTiempo: 0, vencidas: 0 };
-
-          userMap[key].total++;
-          userMap[key].pendientes++;
-
-          if (estado === "vencida") {
-            userMap[key].vencidas++; // Pendiente ya vencida cuenta negativo
-          }
-        });
+      // --- A. CARGA DE TRABAJO ---
+      if (isPendiente || isEnRevision) {
+        contadores.activasParaUrgencia++;
+        const urg = t.urgencia ? t.urgencia.toUpperCase() : "BAJA";
+        if (contadores.urgencia[urg] !== undefined) contadores.urgencia[urg]++;
+        else contadores.urgencia["BAJA"]++;
       }
-      // Nota: Si es CANCELADA, ya fue filtrada al inicio, así que no entra aquí.
 
-      // Lógica Global Extra (Motivos y Urgencia)
-      if (t.historialFechas) {
+      // --- B. MINERÍA DE HISTORIAL ---
+      let tieneCambios = false;
+      let fechaLimiteOriginal = t.fechaLimite ? getTimestamp(t.fechaLimite) : 0;
+
+      if (t.historialFechas && t.historialFechas.length > 0) {
+        tieneCambios = true;
         t.historialFechas.forEach(h => {
-          const motivo = h.motivo || "Sin especificar";
+          const motivo = h.motivo || "No especificado";
           contadores.motivos[motivo] = (contadores.motivos[motivo] || 0) + 1;
           contadores.totalCambios++;
         });
+        const historialAntiguo = [...t.historialFechas].sort((a, b) => new Date(a.fechaCambio || "").getTime() - new Date(b.fechaCambio || "").getTime());
+        if (historialAntiguo[0]?.fechaAnterior) fechaLimiteOriginal = getTimestamp(historialAntiguo[0].fechaAnterior);
       }
-      const urg = t.urgencia ? t.urgencia.toUpperCase() : "BAJA";
-      if (contadores.urgencia[urg] !== undefined) contadores.urgencia[urg]++; else contadores.urgencia["BAJA"]++;
+
+      // --- C. ESTADO EXACTO DE LA TAREA ---
+      const estaVencida = isPendiente && (fechaLimiteFinal > 0 && ahoraMs > fechaLimiteFinal);
+      const debeEvaluarse = isConcluida || isEnRevision || estaVencida;
+
+      let cumplioAjustado = false;
+
+      if (debeEvaluarse) {
+        contadores.universoEvaluable++;
+        if (isConcluida && t.fechaConclusion) {
+          cumplioAjustado = fechaLimiteFinal > 0 && getTimestamp(t.fechaConclusion) <= fechaLimiteFinal;
+        } else if (isEnRevision && t.fechaEntrega) {
+          cumplioAjustado = fechaLimiteFinal > 0 && getTimestamp(t.fechaEntrega) <= fechaLimiteFinal;
+        }
+
+        if (cumplioAjustado) contadores.exitosATiempo++;
+
+        if (isConcluida) {
+          const cumplioReal = t.fechaConclusion && fechaLimiteOriginal > 0 && getTimestamp(t.fechaConclusion) <= fechaLimiteOriginal;
+          if (tieneCambios) {
+            contadores.conCambiosTotal++;
+            if (cumplioAjustado) contadores.conCambiosOk++;
+          } else {
+            contadores.sinCambiosTotal++;
+            if (cumplioReal) contadores.sinCambiosOk++;
+          }
+        }
+      }
+
+      // --- D. REPARTO DE RESPONSABILIDAD EXACTA ---
+      t.responsables.forEach((resp: any) => {
+        const key = resp.id;
+        // Si el usuario no estaba en el mapa (ej. un INVITADO), lo creamos al vuelo
+        if (!userMap[key]) {
+          userMap[key] = { nombre: resp.nombre, rol: resp.rol || "OTROS", asignadas: 0, pendientesOk: 0, pendientesVencidas: 0, entregadasTarde: 0, aTiempo: 0, evaluadas: 0 };
+        }
+
+        userMap[key].asignadas++;
+
+        if (isPendiente && !estaVencida) {
+          userMap[key].pendientesOk++;
+        } else if (isPendiente && estaVencida) {
+          userMap[key].pendientesVencidas++;
+          userMap[key].evaluadas++;
+        } else if (isConcluida || isEnRevision) {
+          userMap[key].evaluadas++;
+          if (cumplioAjustado) {
+            userMap[key].aTiempo++;
+          } else {
+            userMap[key].entregadasTarde++;
+          }
+        }
+      });
     });
 
     const topMotivos = Object.entries(contadores.motivos).sort(([, a], [, b]) => b - a).slice(0, 5);
-    const rankingUsuarios = Object.values(userMap).sort((a, b) => b.total - a.total);
 
-    return { contadores, topMotivos, rankingUsuarios, listaVencidas, listaProximas };
+    // Ordenamos el Leaderboard: Primero los que tienen más tareas asignadas, luego por nombre
+    const rankingUsuarios = Object.values(userMap).sort((a, b) => b.asignadas - a.asignadas || a.nombre.localeCompare(b.nombre));
 
-  }, [tareas, year, month]);
+    return { contadores, topMotivos, rankingUsuarios };
 
-  const { contadores, topMotivos, rankingUsuarios, listaVencidas, listaProximas } = data;
+  }, [tareas, year, month, empleadosDepto]);
 
-  // Porcentajes Globales
-  const pctEficienciaGlobal = contadores.concluidas > 0 ? Math.round((contadores.aTiempoAjustado / contadores.concluidas) * 100) : 0;
+  const { contadores, topMotivos, rankingUsuarios } = data;
+
+  const pctEficienciaGlobal = contadores.universoEvaluable > 0 ? Math.round((contadores.exitosATiempo / contadores.universoEvaluable) * 100) : 0;
   const pctSinCambios = contadores.sinCambiosTotal > 0 ? Math.round((contadores.sinCambiosOk / contadores.sinCambiosTotal) * 100) : 0;
   const pctConCambios = contadores.conCambiosTotal > 0 ? Math.round((contadores.conCambiosOk / contadores.conCambiosTotal) * 100) : 0;
 
   return (
     <div className="space-y-6 pb-10 animate-fade-in">
 
-      {/* --- SECCIÓN 1: KPIs PRINCIPALES --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-
-        {/* 🌟 KPI MAESTRO */}
-        <div className="lg:col-span-4 bg-white p-5 rounded-xl shadow border-l-4 border-blue-600 flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-24 w-24 text-blue-600" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+      {/* --- SECCIÓN 1: KPIs MAESTROS --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+        <div className="bg-white p-6 rounded-xl shadow border-l-4 border-indigo-600 flex flex-col justify-between relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-5">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-32 w-32 text-indigo-900" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
           </div>
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-sm text-gray-500 uppercase font-bold tracking-wider">Cumplimiento Global</p>
-              <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded border border-blue-200">Maestro</span>
+          <div className="relative z-10">
+            <div className="flex justify-between items-center mb-4">
+              <p className="text-sm text-gray-500 uppercase font-extrabold tracking-widest">Eficiencia Real</p>
+              <span className="bg-indigo-50 text-indigo-700 text-[10px] uppercase font-black px-2 py-1 rounded border border-indigo-100">GLOBAL</span>
             </div>
-            <div className="flex items-baseline gap-2 mt-2">
-              <h3 className="text-5xl font-black text-gray-800">{pctEficienciaGlobal}%</h3>
-              <span className="text-sm text-gray-500 font-medium">eficiencia total</span>
+            <div className="flex items-baseline gap-3 mt-2">
+              <h3 className="text-6xl font-black text-gray-800 tracking-tighter">
+                {contadores.universoEvaluable === 0 ? "N/A" : `${pctEficienciaGlobal}%`}
+              </h3>
+              {contadores.universoEvaluable > 0 && <span className="text-sm text-gray-500 font-medium">de éxito</span>}
             </div>
-            <div className="mt-4 w-full bg-gray-100 rounded-full h-2">
-              <div className={`h-2 rounded-full transition-all duration-500 ${pctEficienciaGlobal >= 80 ? 'bg-green-500' : pctEficienciaGlobal >= 60 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${pctEficienciaGlobal}%` }}></div>
+            <div className="mt-6 w-full bg-gray-100 rounded-full h-2.5">
+              <div
+                className={`h-2.5 rounded-full transition-all duration-1000 ease-out ${pctEficienciaGlobal >= 85 ? 'bg-green-500' : pctEficienciaGlobal >= 70 ? 'bg-amber-500' : 'bg-red-500'}`}
+                style={{ width: `${pctEficienciaGlobal}%` }}
+              ></div>
             </div>
-            <p className="text-xs text-gray-400 mt-3 italic">Basado en tareas concluidas (Excluye canceladas).</p>
           </div>
         </div>
 
-        {/* 📊 KPI DIVIDIDO */}
-        <div className="lg:col-span-4 bg-white rounded-xl shadow flex flex-col overflow-hidden border border-gray-100">
-          <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 flex justify-between items-center">
-            <span className="text-xs font-bold text-gray-600 uppercase">Análisis de Planeación</span>
-            <span className="text-[10px] text-gray-400">Base: {contadores.concluidas}</span>
+        <div className="bg-white rounded-xl shadow flex flex-col overflow-hidden border border-gray-100">
+          <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+            <span className="text-sm font-extrabold text-gray-600 uppercase tracking-widest">Análisis de Planeación</span>
+            <span className="text-xs text-gray-400 font-semibold bg-white px-2 py-1 rounded border">Solo Tareas Concluidas</span>
           </div>
           <div className="flex-grow flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-gray-100">
-            <div className="flex-1 p-4 flex flex-col justify-center items-center text-center hover:bg-gray-50 transition">
-              <div className="text-xs font-semibold text-green-600 mb-1 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500"></span> Fecha Original
+            <div className="flex-1 p-6 flex flex-col justify-center items-center text-center hover:bg-gray-50/50 transition">
+              <div className="text-xs font-bold text-emerald-600 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Fecha Original
               </div>
-              <h4 className="text-3xl font-bold text-gray-800">{pctSinCambios}%</h4>
-              <p className="text-[10px] text-gray-400 mt-1 leading-tight">{contadores.sinCambiosOk} de {contadores.sinCambiosTotal} tareas<br />a la primera.</p>
+              <h4 className="text-4xl font-black text-gray-800">{contadores.sinCambiosTotal === 0 ? "N/A" : `${pctSinCambios}%`}</h4>
             </div>
-            <div className="flex-1 p-4 flex flex-col justify-center items-center text-center hover:bg-gray-50 transition">
-              <div className="text-xs font-semibold text-purple-600 mb-1 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-purple-500"></span> Reprogramadas
+            <div className="flex-1 p-6 flex flex-col justify-center items-center text-center hover:bg-gray-50/50 transition">
+              <div className="text-xs font-bold text-violet-600 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
+                <span className="w-2.5 h-2.5 rounded-full bg-violet-500"></span> Reprogramadas
               </div>
-              <h4 className="text-3xl font-bold text-gray-800">{pctConCambios}%</h4>
-              <p className="text-[10px] text-gray-400 mt-1 leading-tight">{contadores.conCambiosOk} de {contadores.conCambiosTotal} tareas<br />cumplieron prórroga.</p>
+              <h4 className="text-4xl font-black text-gray-800">{contadores.conCambiosTotal === 0 ? "N/A" : `${pctConCambios}%`}</h4>
             </div>
-          </div>
-        </div>
-
-        {/* 🔴 KPI: VENCIDAS Y PRÓXIMAS */}
-        <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-          <div className={`bg-white rounded-xl shadow flex flex-col border-t-4 border-red-500 transition-all duration-300 h-full ${openVencidas ? 'ring-2 ring-red-50' : ''}`}>
-            <div className="p-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs text-gray-500 uppercase font-bold">Vencidas (Hoy)</p>
-                  <h3 className="text-3xl font-black text-red-600 mt-1">{contadores.pendientesVencidas}</h3>
-                </div>
-                <div className="p-2 bg-red-100 rounded-full text-red-600">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                </div>
-              </div>
-              <p className="text-[11px] text-gray-400 mt-2">Ya pasaron su hora límite.</p>
-            </div>
-            {listaVencidas.length > 0 && (
-              <div className="mt-auto">
-                <button onClick={() => setOpenVencidas(!openVencidas)} className="w-full py-2 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition-colors flex justify-center items-center gap-1 border-t border-red-100">
-                  {openVencidas ? "Ocultar lista" : "Ver lista"}
-                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 transform transition-transform ${openVencidas ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                </button>
-                <div className={`bg-gray-50 px-4 transition-all duration-300 ease-in-out overflow-y-auto custom-scrollbar ${openVencidas ? "max-h-60 py-3 border-t border-red-200" : "max-h-0 py-0"}`}>
-                  <ul className="space-y-2">
-                    {listaVencidas.map(t => (
-                      <li key={t.id} className="flex flex-col bg-white p-2 rounded border border-gray-200 shadow-sm">
-                        <span className="text-xs font-bold text-gray-800 truncate" title={t.tarea}>{t.tarea}</span>
-                        <div className="text-[10px] text-gray-500 mt-0.5">
-                          <span className="block text-red-500">Venció: {new Date(getFechaEfectiva(t) || "").toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          <span className="font-semibold text-gray-700">{renderResponsables(t.responsables)}</span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className={`bg-white rounded-xl shadow flex flex-col border-t-4 border-amber-500 transition-all duration-300 h-full ${openProximas ? 'ring-2 ring-amber-50' : ''}`}>
-            <div className="p-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs text-gray-500 uppercase font-bold">Próximas</p>
-                  <h3 className="text-3xl font-black text-amber-600">{contadores.pendientesProximas}</h3>
-                </div>
-                <div className="p-2 bg-amber-100 rounded-full text-amber-600">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                </div>
-              </div>
-              <p className="text-[11px] text-gray-400 mt-2">Vencen en menos de 48h.</p>
-            </div>
-            {listaProximas.length > 0 && (
-              <div className="mt-auto">
-                <button onClick={() => setOpenProximas(!openProximas)} className="w-full py-2 text-xs font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 transition-colors flex justify-center items-center gap-1 border-t border-amber-100">
-                  {openProximas ? "Ocultar lista" : "Ver lista"}
-                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 transform transition-transform ${openProximas ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                </button>
-                <div className={`bg-gray-50 px-4 transition-all duration-300 ease-in-out overflow-y-auto custom-scrollbar ${openProximas ? "max-h-60 py-3 border-t border-amber-200" : "max-h-0 py-0"}`}>
-                  <ul className="space-y-2">
-                    {listaProximas.map(t => (
-                      <li key={t.id} className="flex flex-col bg-white p-2 rounded border border-gray-200 shadow-sm">
-                        <span className="text-xs font-bold text-gray-800 truncate" title={t.tarea}>{t.tarea}</span>
-                        <div className="text-[10px] text-gray-500 mt-0.5"><span className="font-semibold text-amber-700">{renderResponsables(t.responsables)}</span></div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
 
-      {/* --- SECCIÓN 2: GRÁFICAS --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow p-5">
-          <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <span className="bg-purple-100 p-1 rounded text-purple-600">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" /></svg>
-            </span>
-            Top Motivos (Reprogramación)
-          </h4>
-          {topMotivos.length > 0 ? (
-            <div className="space-y-4">
-              {topMotivos.map(([motivo, cantidad], idx) => (
-                <div key={idx} className="relative">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-700 font-medium truncate w-3/4">{motivo}</span>
-                    <span className="font-bold text-gray-900">{cantidad}</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2.5">
-                    <div className="bg-purple-500 h-2.5 rounded-full" style={{ width: `${(cantidad / contadores.totalCambios) * 100}%` }}></div>
-                  </div>
-                </div>
-              ))}
-              <div className="text-right text-xs text-gray-400 mt-2">Cambios totales: {contadores.totalCambios}</div>
-            </div>
-          ) : (<div className="h-32 flex items-center justify-center text-gray-400 italic text-sm bg-gray-50 rounded-lg">Sin datos.</div>)}
+      {/* --- SECCIÓN 2: LEADERBOARD DE RENDIMIENTO --- */}
+      <div className="bg-white rounded-xl shadow overflow-hidden border border-gray-100">
+        <div className="p-5 border-b bg-gray-50 flex justify-between items-center">
+          <h4 className="text-md font-extrabold text-gray-800 uppercase tracking-wide">Métricas Detalladas por Usuario</h4>
         </div>
 
-        <div className="bg-white rounded-xl shadow p-5 flex flex-col">
-          <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <span className="bg-amber-100 p-1 rounded text-amber-600">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" /></svg>
-            </span>
-            Salud Tareas (Pendientes)
-          </h4>
-          <div className="flex-grow flex flex-col justify-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-20 text-right text-xs font-bold text-red-600">VENCIDAS</div>
-              <div className="flex-1 bg-gray-100 h-6 rounded-lg overflow-hidden relative">
-                <div className="bg-red-500 h-full flex items-center justify-end pr-2 text-white text-[10px] font-bold transition-all duration-1000" style={{ width: `${contadores.pendientes > 0 ? (contadores.pendientesVencidas / contadores.pendientes) * 100 : 0}%`, minWidth: contadores.pendientesVencidas > 0 ? '1.5rem' : '0' }}>{contadores.pendientesVencidas > 0 && contadores.pendientesVencidas}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-20 text-right text-xs font-bold text-amber-600">PRÓXIMAS</div>
-              <div className="flex-1 bg-gray-100 h-6 rounded-lg overflow-hidden relative">
-                <div className="bg-amber-400 h-full flex items-center justify-end pr-2 text-white text-[10px] font-bold transition-all duration-1000" style={{ width: `${contadores.pendientes > 0 ? (contadores.pendientesProximas / contadores.pendientes) * 100 : 0}%`, minWidth: contadores.pendientesProximas > 0 ? '1.5rem' : '0' }}>{contadores.pendientesProximas > 0 && contadores.pendientesProximas}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-20 text-right text-xs font-bold text-blue-600">NORMAL</div>
-              <div className="flex-1 bg-gray-100 h-6 rounded-lg overflow-hidden relative">
-                <div className="bg-blue-400 h-full flex items-center justify-end pr-2 text-white text-[10px] font-bold transition-all duration-1000" style={{ width: `${contadores.pendientes > 0 ? (contadores.pendientesNormal / contadores.pendientes) * 100 : 0}%`, minWidth: contadores.pendientesNormal > 0 ? '1.5rem' : '0' }}>{contadores.pendientesNormal > 0 && contadores.pendientesNormal}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow p-5 flex flex-col">
-          <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <span className="bg-red-100 p-1 rounded text-red-600">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-            </span>
-            Carga por Urgencia
-          </h4>
-          <div className="flex-grow flex flex-col justify-center space-y-3">
-            {(['ALTA', 'MEDIA', 'BAJA'] as const).map(nivel => (
-              <div key={nivel} className="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-100">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-8 rounded ${COLOR_URGENCIA[nivel]}`}></div>
-                  <span className="text-sm font-bold text-gray-600">{nivel}</span>
-                </div>
-                <span className="text-xl font-black text-gray-800">{contadores.urgencia[nivel]}</span>
-              </div>
-            ))}
-            <div className="text-right text-xs text-gray-400 pt-1">Total (Activas + Concl.): {contadores.total}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* --- SECCIÓN 3: RENDIMIENTO EQUIPO --- */}
-      <div className="bg-white rounded-xl shadow overflow-hidden border border-gray-200">
-        <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
-          <h4 className="text-lg font-bold text-gray-800">🏆 Rendimiento de Responsables</h4>
-          <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">Excluye Canceladas</span>
-        </div>
-
-        {/* ==========================================
-            VISTA ESCRITORIO 
-            ========================================== */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
+        {/* 💻 VISTA ESCRITORIO */}
+        <div className="hidden lg:block overflow-x-auto">
+          <table className="w-full text-sm text-left whitespace-nowrap">
+            <thead className="text-[11px] text-gray-500 uppercase tracking-wider bg-gray-50 border-b">
               <tr>
-                <th className="px-6 py-3">Usuario / Rol</th>
-                <th className="px-6 py-3 text-center">Total</th>
-                <th className="px-6 py-3 text-center text-blue-600 bg-blue-50/30">Pendientes</th>
-                <th className="px-6 py-3 text-center text-gray-600 bg-gray-50/30">Concluidas</th>
-                <th className="px-6 py-3 text-center text-green-600 bg-green-50/30">A Tiempo</th>
-                <th className="px-6 py-3 text-center text-red-600 bg-red-50/30">Vencidas/Tarde</th>
-                <th className="px-6 py-3 text-center">Eficacia</th>
+                <th className="px-6 py-4">Usuario / Rol</th>
+                <th className="px-4 py-4 text-center border-l border-gray-200">Total Asignadas</th>
+                <th className="px-4 py-4 text-center text-blue-700 bg-blue-50/30">Pendientes (En tiempo)</th>
+                <th className="px-4 py-4 text-center text-red-700 bg-red-50/30">Pendientes Vencidas</th>
+                <th className="px-4 py-4 text-center text-amber-700 bg-amber-50/30">Entregadas Tarde</th>
+                <th className="px-4 py-4 text-center text-emerald-700 bg-emerald-50/30">Entregadas A Tiempo</th>
+                <th className="px-6 py-4 text-center border-l border-gray-200">Eficacia Real</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -478,100 +300,107 @@ const DashboardMetricas: React.FC<Props> = ({ tareas, year, month }) => {
                   const colorClass = user.rol === 'ENCARGADO' ? COLOR_ROL.ENCARGADO : user.rol === 'USUARIO' ? COLOR_ROL.USUARIO : COLOR_ROL.OTROS;
                   const rolDisplay = ROLE_LABELS[user.rol] || user.rol;
 
-                  // 📊 CÁLCULO DE EFICACIA
-                  const malasCerradas = user.concluidas - user.aTiempo;
-                  const malasAbiertas = user.vencidas - malasCerradas;
-                  const baseCalculo = user.concluidas + malasAbiertas;
-
-                  const eficacia = baseCalculo > 0
-                    ? Math.round((user.aTiempo / baseCalculo) * 100)
-                    : (user.pendientes > 0 ? 100 : 0);
+                  let eficaciaNode;
+                  if (user.evaluadas === 0) {
+                    eficaciaNode = <span className="px-3 py-1 rounded text-xs font-bold bg-gray-100 text-gray-400">N/A</span>;
+                  } else {
+                    const eficacia = Math.round((user.aTiempo / user.evaluadas) * 100);
+                    eficaciaNode = (
+                      <span className={`px-2.5 py-1 rounded text-xs font-black shadow-sm ${eficacia >= 85 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : eficacia >= 70 ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
+                        {eficacia}%
+                      </span>
+                    );
+                  }
 
                   return (
-                    <tr key={idx} className="hover:bg-gray-50 transition">
+                    <tr key={idx} className={`transition-colors ${user.asignadas === 0 ? 'bg-gray-50/30 opacity-70' : 'hover:bg-gray-50/80'}`}>
                       <td className="px-6 py-4 font-medium">
-                        <div className={colorClass}>{user.nombre}</div>
-                        <div className="text-[10px] text-gray-400 font-normal">{rolDisplay}</div>
+                        <div className={`text-sm ${colorClass}`}>{user.nombre}</div>
+                        <div className="text-[10px] text-gray-400 font-bold uppercase mt-0.5 tracking-wider">{rolDisplay}</div>
                       </td>
-                      <td className="px-6 py-4 text-center font-bold text-gray-800">{user.total}</td>
-                      <td className="px-6 py-4 text-center font-semibold text-blue-700 bg-blue-50/30">{user.pendientes}</td>
-                      <td className="px-6 py-4 text-center font-semibold text-gray-600 bg-gray-50/30">{user.concluidas}</td>
-                      <td className="px-6 py-4 text-center font-bold text-green-600 bg-green-50/30">{user.aTiempo}</td>
-                      <td className="px-6 py-4 text-center font-bold text-red-600 bg-red-50/30">
-                        {user.vencidas > 0 ? user.vencidas : <span className="text-gray-300">-</span>}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`px-2 py-1 rounded text-xs font-bold ${eficacia >= 80 ? 'bg-green-100 text-green-800' : eficacia >= 60 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
-                          {eficacia}%
-                        </span>
-                      </td>
+                      <td className="px-4 py-4 text-center font-black text-gray-800 border-l border-gray-100">{user.asignadas}</td>
+                      <td className="px-4 py-4 text-center font-semibold text-blue-700 bg-blue-50/20">{user.pendientesOk}</td>
+                      <td className="px-4 py-4 text-center font-bold text-red-600 bg-red-50/20">{user.pendientesVencidas}</td>
+                      <td className="px-4 py-4 text-center font-bold text-amber-600 bg-amber-50/20">{user.entregadasTarde}</td>
+                      <td className="px-4 py-4 text-center font-black text-emerald-600 bg-emerald-50/20">{user.aTiempo}</td>
+                      <td className="px-6 py-4 text-center border-l border-gray-100">{eficaciaNode}</td>
                     </tr>
                   );
                 })
               ) : (
-                <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-400 italic">No hay datos disponibles.</td></tr>
+                <tr><td colSpan={7} className="px-6 py-10 text-center text-gray-400 font-semibold italic">No hay usuarios registrados en este departamento.</td></tr>
               )}
             </tbody>
           </table>
         </div>
 
-        {/* ==========================================
-            VISTA MÓVIL 
-            ========================================== */}
-        <div className="md:hidden bg-gray-50 p-2 space-y-2">
+        {/* 📱 VISTA MÓVIL Y TABLET */}
+        <div className="lg:hidden bg-gray-50/50 p-3 space-y-3">
           {rankingUsuarios.length > 0 ? (
             rankingUsuarios.map((user, idx) => {
               const colorClass = user.rol === 'ENCARGADO' ? COLOR_ROL.ENCARGADO : user.rol === 'USUARIO' ? COLOR_ROL.USUARIO : COLOR_ROL.OTROS;
               const rolDisplay = ROLE_LABELS[user.rol] || user.rol;
 
-              const malasCerradas = user.concluidas - user.aTiempo;
-              const malasAbiertas = user.vencidas - malasCerradas;
-              const baseCalculo = user.concluidas + malasAbiertas;
-              const eficacia = baseCalculo > 0 ? Math.round((user.aTiempo / baseCalculo) * 100) : (user.pendientes > 0 ? 100 : 0);
+              let eficaciaNum = -1;
+              let bgPill = 'bg-gray-200';
+              if (user.evaluadas > 0) {
+                eficaciaNum = Math.round((user.aTiempo / user.evaluadas) * 100);
+                bgPill = eficaciaNum >= 85 ? 'bg-emerald-500' : eficaciaNum >= 70 ? 'bg-amber-400' : 'bg-red-500';
+              }
 
               return (
-                <div key={idx} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
-                  <div className="flex justify-between items-center mb-2 border-b border-gray-100 pb-2">
+                <div key={idx} className={`bg-white border border-gray-200 rounded-xl p-4 shadow-sm relative overflow-hidden ${user.asignadas === 0 ? 'opacity-80' : ''}`}>
+                  <div className={`absolute top-0 right-0 h-full w-2 ${bgPill}`}></div>
+
+                  <div className="flex justify-between items-center mb-3 border-b border-gray-100 pb-3 pr-2">
                     <div>
-                      <div className={`text-sm ${colorClass}`}>{user.nombre}</div>
-                      <div className="text-[10px] text-gray-400 uppercase">{rolDisplay}</div>
+                      <div className={`text-[15px] ${colorClass} leading-tight`}>{user.nombre}</div>
+                      <div className="text-[10px] text-gray-400 font-extrabold uppercase mt-0.5 tracking-wider">{rolDisplay}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-[10px] text-gray-400 font-bold uppercase">Eficacia</div>
-                      <span className={`text-sm font-black ${eficacia >= 80 ? 'text-green-600' : eficacia >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
-                        {eficacia}%
-                      </span>
+                      <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">Eficacia</div>
+                      {eficaciaNum === -1 ? (
+                        <span className="text-sm font-black text-gray-400 bg-gray-100 px-2 py-1 rounded">N/A</span>
+                      ) : (
+                        <span className={`text-xl font-black tracking-tighter ${eficaciaNum >= 85 ? 'text-emerald-600' : eficaciaNum >= 70 ? 'text-amber-500' : 'text-red-600'}`}>
+                          {eficaciaNum}%
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {/* Grid de Métricas 3x2 */}
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="bg-gray-50 rounded p-1 border border-gray-100">
-                      <span className="block text-[9px] text-gray-400 uppercase font-bold">Total</span>
-                      <span className="text-xs font-black text-gray-700">{user.total}</span>
+                  {/* Grid Responsivo de 2x3 para alojar los 6 datos clave */}
+                  <div className="grid grid-cols-3 gap-2 text-center pr-2">
+                    <div className="bg-gray-50 rounded-lg py-2 border border-gray-100">
+                      <span className="block text-[8px] text-gray-500 uppercase font-extrabold tracking-wider">Total</span>
+                      <span className="text-sm font-black text-gray-800">{user.asignadas}</span>
                     </div>
-                    <div className="bg-blue-50 rounded p-1 border border-blue-100">
-                      <span className="block text-[9px] text-blue-600 uppercase font-bold">Pend.</span>
-                      <span className="text-xs font-black text-blue-700">{user.pendientes}</span>
+                    <div className="bg-blue-50 rounded-lg py-2 border border-blue-100">
+                      <span className="block text-[8px] text-blue-600 uppercase font-extrabold tracking-wider">Pend. OK</span>
+                      <span className="text-sm font-black text-blue-700">{user.pendientesOk}</span>
                     </div>
-                    <div className="bg-gray-50 rounded p-1 border border-gray-100">
-                      <span className="block text-[9px] text-gray-500 uppercase font-bold">Concl.</span>
-                      <span className="text-xs font-black text-gray-700">{user.concluidas}</span>
+                    <div className="bg-red-50 rounded-lg py-2 border border-red-100">
+                      <span className="block text-[8px] text-red-600 uppercase font-extrabold tracking-wider">Vencidas</span>
+                      <span className="text-sm font-black text-red-700">{user.pendientesVencidas}</span>
                     </div>
-                    <div className="bg-green-50 rounded p-1 border border-green-100 col-span-1">
-                      <span className="block text-[9px] text-green-600 uppercase font-bold">A Tiempo</span>
-                      <span className="text-xs font-black text-green-700">{user.aTiempo}</span>
+                    <div className="bg-gray-100 rounded-lg py-2 border border-gray-200">
+                      <span className="block text-[8px] text-gray-600 uppercase font-extrabold tracking-wider">Eval.</span>
+                      <span className="text-sm font-black text-gray-700">{user.evaluadas}</span>
                     </div>
-                    <div className="bg-red-50 rounded p-1 border border-red-100 col-span-2 flex items-center justify-between px-3">
-                      <span className="block text-[9px] text-red-600 uppercase font-bold">Vencidas (Totales)</span>
-                      <span className="text-sm font-black text-red-700">{user.vencidas}</span>
+                    <div className="bg-amber-50 rounded-lg py-2 border border-amber-100">
+                      <span className="block text-[8px] text-amber-700 uppercase font-extrabold tracking-wider">Tarde</span>
+                      <span className="text-sm font-black text-amber-700">{user.entregadasTarde}</span>
+                    </div>
+                    <div className="bg-emerald-50 rounded-lg py-2 border border-emerald-100">
+                      <span className="block text-[8px] text-emerald-700 uppercase font-extrabold tracking-wider">A Tiempo</span>
+                      <span className="text-sm font-black text-emerald-700">{user.aTiempo}</span>
                     </div>
                   </div>
                 </div>
               );
             })
           ) : (
-            <div className="py-8 text-center text-gray-400 italic text-xs">No hay datos disponibles.</div>
+            <div className="py-10 text-center text-gray-400 font-semibold italic text-sm">No hay usuarios registrados.</div>
           )}
         </div>
 
