@@ -12,6 +12,9 @@ interface Props {
 }
 
 const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Props) => {
+  // Excluimos estrictamente a los invitados de la tabla maestra
+  const usuariosValidos = usuarios.filter(u => u.rol !== 'INVITADO');
+
   // --- Lógica de Paginación ---
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10; // Cantidad de usuarios por página
@@ -19,14 +22,14 @@ const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Pr
   // Si cambia la lista de usuarios (ej. el usuario usó el filtro), regresamos a la página 1
   useEffect(() => {
     setCurrentPage(1);
-  }, [usuarios]);
+  }, [usuariosValidos.length]);
 
-  const totalPages = Math.ceil(usuarios.length / itemsPerPage);
+  const totalPages = Math.ceil(usuariosValidos.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
 
   // Usuarios correspondientes a la página actual
-  const currentUsers = usuarios.slice(startIndex, endIndex);
+  const currentUsers = usuariosValidos.slice(startIndex, endIndex);
   // ----------------------------
 
   const getNombreDepto = (id?: number | null) => {
@@ -64,7 +67,7 @@ const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Pr
           <tbody className="divide-y divide-slate-100 text-sm">
             {loading ? (
               <tr><td colSpan={5} className="p-8 text-center text-slate-500 animate-pulse">Cargando usuarios...</td></tr>
-            ) : usuarios.length === 0 ? (
+            ) : usuariosValidos.length === 0 ? (
               <tr><td colSpan={5} className="p-8 text-center text-slate-500">No se encontraron usuarios.</td></tr>
             ) : (
               currentUsers.map((u) => (
@@ -140,10 +143,10 @@ const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Pr
       </div>
 
       {/* FOOTER DE PAGINACIÓN RESPONSIVO */}
-      {!loading && usuarios.length > 0 && (
+      {!loading && usuariosValidos.length > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-slate-200 bg-slate-50 gap-4">
           <div className="text-xs text-slate-500 text-center sm:text-left">
-            Mostrando <span className="font-bold text-slate-800">{usuarios.length > 0 ? startIndex + 1 : 0}</span> a <span className="font-bold text-slate-800">{Math.min(endIndex, usuarios.length)}</span> de <span className="font-bold text-slate-800">{usuarios.length}</span> resultados
+            Mostrando <span className="font-bold text-slate-800">{usuariosValidos.length > 0 ? startIndex + 1 : 0}</span> a <span className="font-bold text-slate-800">{Math.min(endIndex, usuariosValidos.length)}</span> de <span className="font-bold text-slate-800">{usuariosValidos.length}</span> resultados
           </div>
 
           <div className="flex items-center gap-2">

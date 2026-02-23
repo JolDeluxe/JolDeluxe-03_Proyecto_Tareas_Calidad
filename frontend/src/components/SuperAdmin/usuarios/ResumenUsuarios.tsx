@@ -7,10 +7,13 @@ interface Props {
 }
 
 const ResumenUsuarios = ({ usuarios, onFilterChange, filtroActual }: Props) => {
-  const total = usuarios.length;
-  const adminCount = usuarios.filter(u => u.rol === 'ADMIN').length;
-  const encargadosCount = usuarios.filter(u => u.rol === 'ENCARGADO').length;
-  const usuariosCount = usuarios.filter(u => u.rol === 'USUARIO').length;
+  // Filtramos a los INVITADOS para que el contador global sea preciso
+  const usuariosValidos = usuarios.filter(u => u.rol !== 'INVITADO');
+
+  const total = usuariosValidos.length;
+  const adminCount = usuariosValidos.filter(u => u.rol === 'ADMIN').length;
+  const encargadosCount = usuariosValidos.filter(u => u.rol === 'ENCARGADO').length;
+  const usuariosCount = usuariosValidos.filter(u => u.rol === 'USUARIO').length;
 
   // Botón auxiliar para estilo
   const FilterButton = ({ label, count, value, colorClass }: any) => (

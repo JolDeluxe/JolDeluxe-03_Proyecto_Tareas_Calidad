@@ -29,8 +29,14 @@ const GestionUsuariosGlobal = () => {
       // 1. Pedimos usuarios (Si mostrarInactivos es true, pedimos INACTIVOS, sino ACTIVOS por defecto)
       const estatusRequest = mostrarInactivos ? 'INACTIVO' : 'ACTIVO';
 
+      // ✅ SOLUCIÓN: Añadimos limit: 1000 y page: 1 para traer toda la base de datos de un golpe, 
+      // usando la paginación nativa del backend a nuestro favor para saltar el límite de 10.
       const [usersResponse, deptosData] = await Promise.all([
-        usuariosService.getAll({ estatus: estatusRequest }),
+        usuariosService.getAll({
+          estatus: estatusRequest,
+          limit: 1000,
+          page: 1
+        }),
         departamentosService.getAll()
       ]);
 
@@ -95,6 +101,10 @@ const GestionUsuariosGlobal = () => {
 
   // --- Lógica de Filtrado Frontend (Roles) ---
   const usuariosFiltrados = usuarios.filter(u => {
+    // ✅ REGLA ESTRICTA: Excluimos permanentemente a los INVITADOS de la vista del Super Admin
+    if (u.rol === "INVITADO") return false;
+
+    // Lógica de pestañas
     if (filtroRol === "ALL") return true;
     return u.rol === filtroRol;
   });
@@ -104,7 +114,7 @@ const GestionUsuariosGlobal = () => {
 
       {/* 1. Resumen y Filtros Rápidos */}
       <ResumenUsuarios
-        usuarios={usuarios}
+        usuarios={usuariosFiltrados} // Pasamos la lista ya purgada de INVITADOS
         onFilterChange={setFiltroRol}
         filtroActual={filtroRol}
       />
@@ -138,7 +148,7 @@ const GestionUsuariosGlobal = () => {
 
       {/* 3. Tabla de Resultados */}
       <TablaUsuarios
-        usuarios={usuariosFiltrados}
+        usuarios={usuariosFiltrados} // Pasamos la lista ya purgada de INVITADOS y filtrada por pestaña
         deptos={deptos}
         loading={loading}
         onEdit={abrirModalEditar}
