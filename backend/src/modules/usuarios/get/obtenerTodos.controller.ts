@@ -25,53 +25,63 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
   const limitNum = Math.max(1, limit);
   const offset = (pageNum - 1) * limitNum;
 
-  // 2. Construcción del Filtro Base (WHERE)
-  const where: Prisma.UsuarioWhereInput = {
+  // =====================================================================
+  // 2. CONSTRUCCIÓN DEL FILTRO BASE (Para los contadores globales)
+  // =====================================================================
+  const whereBase: Prisma.UsuarioWhereInput = {
     estatus: estatus ?? "ACTIVO",
   };
 
   // 3. Filtro de Búsqueda (Buscador general)
   if (q) {
-    where.OR = [
+    whereBase.OR = [
       { nombre: { contains: q } }, 
       { username: { contains: q } },
     ];
   }
 
-  // 4. Filtro de Rol específico (si se solicita en la URL)
-  if (rol) {
-    where.rol = rol;
-  }
-
-  // 5. LÓGICA DE SEGURIDAD (Permisos de visualización)
+  // 4. LÓGICA DE SEGURIDAD (Permisos de visualización aplicados a la base)
   switch (user.rol) {
     case "SUPER_ADMIN":
-      if (departamentoId) where.departamentoId = departamentoId;
+      if (departamentoId) whereBase.departamentoId = departamentoId;
       break;
 
     case "ADMIN":
       if (!user.departamentoId) return res.status(403).json({ error: "Usuario ADMIN sin departamento asignado." });
-      where.departamentoId = user.departamentoId;
+      whereBase.departamentoId = user.departamentoId;
       break;
 
     case "ENCARGADO":
       if (!user.departamentoId) return res.status(403).json({ error: "Usuario ENCARGADO sin departamento asignado." });
-      where.departamentoId = user.departamentoId;
+      whereBase.departamentoId = user.departamentoId;
       break;
 
     case "USUARIO":
     case "INVITADO":
-      where.id = user.id;
-      delete where.departamentoId;
-      delete where.rol; 
+      whereBase.id = user.id;
       break;
+  }
+
+  // =====================================================================
+  // 5. CONSTRUCCIÓN DEL FILTRO DE LISTA (Solo para la tabla de resultados)
+  // =====================================================================
+  // Clonamos las reglas base (seguridad, estatus y búsqueda)
+  const whereList: Prisma.UsuarioWhereInput = { ...whereBase };
+
+  // Aplicamos el filtro de Rol específico SOLO a la lista, no a los contadores
+  // (A menos que sea Usuario/Invitado, que solo se ven a sí mismos)
+  if (rol && !["USUARIO", "INVITADO"].includes(user.rol)) {
+    whereList.rol = rol;
   }
 
   // 6. Ejecución Transaccional
   const [total, usuarios, conteoPorRol] = await prisma.$transaction([
-    prisma.usuario.count({ where }),
+    // ✅ Usamos whereBase para mantener el total global estático
+    prisma.usuario.count({ where: whereBase }),
+    
+    // ✅ Usamos whereList para que la tabla sí reaccione a los clicks de los botones
     prisma.usuario.findMany({
-      where,
+      where: whereList,
       take: limitNum,
       skip: offset,
       select: {
@@ -84,11 +94,17 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
         departamentoId: true,
         departamento: { select: { id: true, nombre: true } },
       },
-      orderBy: { id: "asc" }, 
+      // Le decimos a Prisma: "Primero ordénalos por la jerarquía del rol, y luego alfabéticamente por nombre"
+      orderBy: [
+        { rol: "asc" }, 
+        { nombre: "asc" } 
+      ],
     }),
+    
+    // ✅ Usamos whereBase para que los números de las tarjetas no se pongan en 0
     prisma.usuario.groupBy({
       by: ["rol"],
-      where: where,
+      where: whereBase,
       _count: {
         rol: true,
       },

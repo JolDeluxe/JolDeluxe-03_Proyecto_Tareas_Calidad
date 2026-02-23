@@ -112,9 +112,10 @@ const ModalUsuario = ({ isOpen, onClose, onSuccess, usuarioAEditar, currentUser,
   const rolesDisponibles = [
     { value: "USUARIO", label: "Operativo", visible: true },
     { value: "ENCARGADO", label: "Supervisión", visible: true },
-    { value: "ADMIN", label: "Gestión", visible: esSuperAdmin },
-    { value: "SUPER_ADMIN", label: "Super Admin", visible: esSuperAdmin },
-    { value: "INVITADO", label: "Invitado (Externo)", visible: esSuperAdmin },
+    // Si eres Super Admin lo ves. Si estás editando a un ADMIN (o a ti mismo), también lo ves.
+    { value: "ADMIN", label: "Gestión", visible: esSuperAdmin || usuarioAEditar?.rol === "ADMIN" },
+    { value: "SUPER_ADMIN", label: "Super Admin", visible: esSuperAdmin || usuarioAEditar?.rol === "SUPER_ADMIN" },
+    { value: "INVITADO", label: "Invitado (Externo)", visible: esSuperAdmin || usuarioAEditar?.rol === "INVITADO" },
   ].filter(r => r.visible);
 
   // --- LÓGICA DE DEPARTAMENTO ---
@@ -159,13 +160,14 @@ const ModalUsuario = ({ isOpen, onClose, onSuccess, usuarioAEditar, currentUser,
       onClose();
     } catch (error: any) {
       console.error(error);
-      const msg = error.response?.data?.message || "Error al guardar usuario.";
+      // El backend Prisma arroja { error: "mensaje" } o errores de Zod en { detalles: ... }
+      const msg = error.response?.data?.error || error.response?.data?.message || "Error al procesar la solicitud.";
 
-      // ✅ Si es error de duplicado, lo mostramos INLINE (no toast)
-      if (msg.toLowerCase().includes("unique") || msg.toLowerCase().includes("usuario")) {
-        setBackendError(`El usuario "${username}" no está disponible.`);
+      // Filtramos específicamente por conflictos de duplicidad ("unique", "ya existe", "duplicado")
+      if (msg.toLowerCase().includes("unique") || msg.toLowerCase().includes("ya existe")) {
+        setBackendError(`El usuario "${username}" ya está en uso por otra persona.`);
       } else {
-        // Otros errores (servidor, conexión) sí van por toast
+        // Mostramos el mensaje real del backend (Ej. 403 Permisos)
         toast.error(msg);
       }
     } finally {

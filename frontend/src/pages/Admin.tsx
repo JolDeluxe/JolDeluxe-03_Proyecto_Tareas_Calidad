@@ -85,8 +85,9 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
   // ---> NUEVOS ESTADOS DE FECHAS <---
   const [filtroFechaRegistro, setFiltroFechaRegistro] = useState<RangoFechaEspecial>(defaultRango);
   const [filtroFechaLimite, setFiltroFechaLimite] = useState<RangoFechaEspecial>(defaultRango);
-
   const [filtroMisTareas, setFiltroMisTareas] = useState({ asignadasPorMi: false, asignadasAMi: false });
+  type SortKey = "asignador" | "responsables" | "urgencia" | "fechaRegistro" | "fechaLimite" | "estatus";
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: "asc" | "desc" | "atrasadas" }>({ key: "fechaRegistro", direction: "desc" });
 
 
 
@@ -390,12 +391,58 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
     return filtered;
   }, [tareas, isKaizen, filtro, verCanceladas, filtroUrgencia, filtroExtra, filtroFechaRegistro, filtroFechaLimite, filtroMisTareas, user]);
-  const totalPages = Math.max(1, Math.ceil(tareasFiltradas.length / itemsPerPage));
+
+
+  // ✅ NUEVA LÓGICA DE ORDENAMIENTO GLOBAL
+  const getFechaLimiteEfectiva = (tarea: Tarea): number => {
+    return tarea.fechaLimite ? new Date(tarea.fechaLimite).getTime() : 0;
+  };
+
+  const tareasOrdenadasGlobalmente = useMemo(() => {
+    const sorted = [...tareasFiltradas];
+    sorted.sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      switch (sortConfig.key) {
+        case "asignador": valA = (a.asignador?.nombre || "").toLowerCase(); valB = (b.asignador?.nombre || "").toLowerCase(); break;
+        case "responsables": valA = a.responsables.map(r => r.nombre).join("").toLowerCase(); valB = b.responsables.map(r => r.nombre).join("").toLowerCase(); break;
+        case "urgencia":
+          const weights = { ALTA: 3, MEDIA: 2, BAJA: 1 };
+          valA = weights[a.urgencia] || 0; valB = weights[b.urgencia] || 0;
+          return sortConfig.direction === "asc" ? valA - valB : valB - valA;
+        case "fechaRegistro":
+          valA = a.fechaRegistro ? new Date(a.fechaRegistro).getTime() : 0; valB = b.fechaRegistro ? new Date(b.fechaRegistro).getTime() : 0;
+          return sortConfig.direction === "asc" ? valA - valB : valB - valA;
+        case "fechaLimite":
+          valA = getFechaLimiteEfectiva(a);
+          valB = getFechaLimiteEfectiva(b);
+
+          if (sortConfig.direction === "atrasadas") {
+            const hoy = Date.now();
+            const aVencida = a.estatus === "PENDIENTE" && valA > 0 && valA < hoy;
+            const bVencida = b.estatus === "PENDIENTE" && valB > 0 && valB < hoy;
+            if (aVencida && !bVencida) return -1;
+            if (!aVencida && bVencida) return 1;
+            return valA - valB;
+          }
+          return sortConfig.direction === "asc" ? valA - valB : valB - valA;
+        case "estatus": valA = a.estatus; valB = b.estatus; break;
+        default: return 0;
+      }
+      if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [tareasFiltradas, sortConfig]);
+
+  // ✅ Ahora las páginas se calculan sobre la lista ORDENADA
+  const totalPages = Math.max(1, Math.ceil(tareasOrdenadasGlobalmente.length / itemsPerPage));
 
   const tareasParaTablaPaginadas = useMemo(() => {
     const startIndex = (page - 1) * itemsPerPage;
-    return tareasFiltradas.slice(startIndex, startIndex + itemsPerPage);
-  }, [tareasFiltradas, page]);
+    return tareasOrdenadasGlobalmente.slice(startIndex, startIndex + itemsPerPage);
+  }, [tareasOrdenadasGlobalmente, page]);
 
   const tituloDinamico = useMemo(() => {
     if (viewMode === "INDICADORES") return "DASHBOARD DE MÉTRICAS";
@@ -622,6 +669,11 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                 page={page}
                 totalPages={totalPages}
                 onPageChange={setPage}
+                sortConfig={sortConfig}
+                onSortChange={(key, direction) => {
+                  setSortConfig({ key, direction });
+                  setPage(1);
+                }}
               />
             </div>
           </div>

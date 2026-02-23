@@ -142,6 +142,10 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
     );
   }
 
+  // ✅ SOLUCIÓN: Ajuste inteligente de páginas. Si los registros mostrados son menores a 10 (el límite), 
+  // sabemos garantizadamente que no hay una página siguiente, por lo que forzamos el total.
+  const realTotalPages = dataToShow.length < 10 ? page : totalPages;
+
   return (
     <div className="w-full text-sm font-sans pb-0.5">
       {dataToShow.length > 0 ? (
@@ -368,7 +372,10 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
             {/* Contenedor Izquierdo: Info de Página y Cantidad */}
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
               <span className="text-xs text-gray-600 font-medium">
-                Página <span className="font-bold text-gray-900">{page}</span> de <span className="font-bold text-gray-900">{totalPages}</span>
+                {/* ✅ Además del botón, también maquillamos visualmente el texto. 
+                  Si filtraste 6 elementos, ya no dirá "Página 1 de 2", dirá "Página 1 de 1" 
+                */}
+                Página <span className="font-bold text-gray-900">{page}</span> de <span className="font-bold text-gray-900">{realTotalPages}</span>
               </span>
               <span className="hidden sm:block text-gray-300">|</span>
               <span className="text-[11px] text-gray-500 bg-gray-200/70 px-2 py-0.5 rounded-full font-medium">
@@ -379,14 +386,15 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={() => onPageChange(page - 1)}
-                disabled={page === 1}
+                disabled={page <= 1}
                 className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 Anterior
               </button>
               <button
                 onClick={() => onPageChange(page + 1)}
-                disabled={page === totalPages}
+                // ✅ REGLA DE BLOQUEO: Se deshabilita si alcanzas las páginas reales O si los elementos mostrados son menos del límite
+                disabled={page >= realTotalPages}
                 className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
               >
                 Siguiente

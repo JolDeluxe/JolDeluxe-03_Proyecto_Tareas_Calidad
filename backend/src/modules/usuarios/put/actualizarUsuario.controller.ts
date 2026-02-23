@@ -52,9 +52,9 @@ export const actualizarUsuario = safeAsync(async (req: Request, res: Response) =
         return res.status(403).json({ error: "No puedes transferir usuarios a otro departamento." });
     }
 
-    if (inputData.rol && ["SUPER_ADMIN", "ADMIN"].includes(inputData.rol)) {
-        return res.status(403).json({ error: "No tienes privilegios para asignar roles administrativos de alto nivel." });
-    }
+    if (inputData.rol && inputData.rol !== usuarioActual.rol && ["SUPER_ADMIN", "ADMIN"].includes(inputData.rol)) {
+      return res.status(403).json({ error: "No tienes privilegios para asignar roles administrativos de alto nivel." });
+  }
   }
 
   // =================================================================

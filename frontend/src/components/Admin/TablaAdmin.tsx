@@ -32,8 +32,9 @@ interface TablaProps {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  sortConfig: SortConfig;
+  onSortChange: (key: SortKey, direction: "asc" | "desc" | "atrasadas") => void;
 }
-
 type SortKey = "asignador" | "responsables" | "urgencia" | "fechaRegistro" | "fechaLimite" | "estatus";
 
 interface SortConfig {
@@ -327,6 +328,8 @@ const TablaAdmin: React.FC<TablaProps> = ({
   page,
   totalPages,
   onPageChange,
+  sortConfig,
+  onSortChange,
 }) => {
   // Estados de modales
   const [openModalEditar, setOpenModalEditar] = useState(false);
@@ -339,7 +342,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
   // Estado para el Modal de Entregar
   const [tareaParaEntregar, setTareaParaEntregar] = useState<Tarea | null>(null);
 
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "fechaRegistro", direction: "desc" });
+  // const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "fechaRegistro", direction: "desc" });
 
   const abrirModalAceptar = (tarea: Tarea) => { setTareaSeleccionada(tarea); setOpenModalAceptar(true); };
   const abrirModalEditar = (tarea: Tarea) => { setTareaSeleccionada(tarea); setOpenModalEditar(true); };
@@ -391,12 +394,12 @@ const TablaAdmin: React.FC<TablaProps> = ({
       if (sortConfig.direction === "asc") {
         direction = "desc";
       } else if (sortConfig.direction === "desc" && key === "fechaLimite") {
-        direction = "atrasadas"; // ⬅️ Tercer estado: Atrasadas hasta arriba
+        direction = "atrasadas";
       } else {
         direction = "asc";
       }
     }
-    setSortConfig({ key, direction });
+    onSortChange(key, direction);
   };
 
   const getSortIcon = (columnKey: SortKey) => {
@@ -405,71 +408,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
     return sortConfig.direction === "asc" ? <span className="text-blue-600 ml-1">↑</span> : <span className="text-blue-600 ml-1">↓</span>;
   };
 
-  const tareasOrdenadas = useMemo(() => {
-    const filtradas = tareas.filter((t) => {
-      const estatus = t.estatus;
-      if (estatus === "CANCELADA" && filtro.toLowerCase() !== "canceladas") return false;
-
-      const pasaEstatus =
-        (filtro.toLowerCase() === "total" && (estatus === "PENDIENTE" || estatus === "EN_REVISION" || estatus === "CONCLUIDA")) ||
-        (filtro.toLowerCase() === "pendientes" && estatus === "PENDIENTE") ||
-        (filtro.toLowerCase() === "en_revision" && estatus === "EN_REVISION") ||
-        (filtro.toLowerCase() === "concluidas" && estatus === "CONCLUIDA") ||
-        (filtro.toLowerCase() === "canceladas" && estatus === "CANCELADA");
-
-      const pasaResponsable =
-        responsable === "Todos" ||
-        t.responsables.some((r) => r.id.toString() === responsable);
-
-      const texto = `${t.tarea} ${t.observaciones || ""}`.toLowerCase();
-      const pasaBusqueda = query.trim() === "" || texto.includes(query.toLowerCase());
-
-      return pasaEstatus && pasaResponsable && pasaBusqueda;
-    });
-
-    if (sortConfig) {
-      filtradas.sort((a, b) => {
-        let valA: any = "";
-        let valB: any = "";
-        switch (sortConfig.key) {
-          case "asignador": valA = (a.asignador?.nombre || "").toLowerCase(); valB = (b.asignador?.nombre || "").toLowerCase(); break;
-          case "responsables": valA = a.responsables.map(r => r.nombre).join("").toLowerCase(); valB = b.responsables.map(r => r.nombre).join("").toLowerCase(); break;
-          case "urgencia":
-            const weights = { ALTA: 3, MEDIA: 2, BAJA: 1 };
-            valA = weights[a.urgencia] || 0; valB = weights[b.urgencia] || 0;
-            return sortConfig.direction === "asc" ? valA - valB : valB - valA;
-          case "fechaRegistro":
-            valA = a.fechaRegistro ? new Date(a.fechaRegistro).getTime() : 0; valB = b.fechaRegistro ? new Date(b.fechaRegistro).getTime() : 0;
-            return sortConfig.direction === "asc" ? valA - valB : valB - valA;
-          case "fechaLimite":
-            valA = getFechaLimiteEfectiva(a);
-            valB = getFechaLimiteEfectiva(b);
-
-            // ⬅️ Lógica para agrupar Atrasadas hasta arriba
-            if (sortConfig.direction === "atrasadas") {
-              const hoy = Date.now();
-              const aVencida = a.estatus === "PENDIENTE" && valA > 0 && valA < hoy;
-              const bVencida = b.estatus === "PENDIENTE" && valB > 0 && valB < hoy;
-
-              if (aVencida && !bVencida) return -1; // 'a' (atrasada) va arriba
-              if (!aVencida && bVencida) return 1;  // 'b' (atrasada) va arriba
-
-              // Si ambas están atrasadas o ninguna lo está, se ordenan cronológicamente
-              return valA - valB;
-            }
-
-            return sortConfig.direction === "asc" ? valA - valB : valB - valA;
-          case "estatus": valA = a.estatus; valB = b.estatus; break;
-          default: return 0;
-        }
-        if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
-        if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
-        return 0;
-      });
-    }
-
-    return filtradas;
-  }, [tareas, filtro, responsable, query, sortConfig]);
+  const tareasOrdenadas = tareas;
 
   if (loading) {
     return (
