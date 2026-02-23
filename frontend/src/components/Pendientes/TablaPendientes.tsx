@@ -445,47 +445,66 @@ const TablaPendientes: React.FC<Props> = ({ user, tareas, filtro, loading, onRec
                           </div>
                         </td>
 
-                        <td className="px-2 py-1 text-center align-middle">
+                        <td className="px-2 py-1 text-center align-middle relative">
                           <div className="flex items-center justify-center gap-2">
                             {isResponsable && row.estatus === "PENDIENTE" && (
-                              <button
-                                onClick={() => handleAbrirEntrega(row)}
-                                title={row.feedbackRevision ? "Corregir y re-enviar evidencia" : "Subir evidencias y entregar"}
-                                className={`w-8 h-8 flex items-center justify-center rounded-md border transition-all duration-200 shadow-sm 
-                                  ${row.feedbackRevision ? "border-orange-400 text-orange-600 hover:bg-orange-100 bg-orange-50" : "border-green-400 text-green-700 hover:bg-green-100 bg-green-50 cursor-pointer"}`}
-                              >
-                                {row.feedbackRevision ? (
-                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5 fill-current">
-                                    <path fill="#22c55e" d="M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z" />
-                                    <g transform="translate(50, -450) scale(0.65)">
-                                      <path fill="##742F01" d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z" />
-                                    </g>
-                                  </svg>
-                                ) : (
-                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5 fill-current">
-                                    <path d="M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z" />
-                                  </svg>
-                                )}
-                              </button>
+                              <div className="group relative flex items-center justify-center">
+                                <button
+                                  onClick={() => handleAbrirEntrega(row)}
+                                  className={`w-8 h-8 flex items-center justify-center rounded-md border transition-all duration-200 shadow-sm 
+                                    ${row.feedbackRevision ? "border-orange-400 text-orange-600 hover:bg-orange-100 bg-orange-50 cursor-pointer" : "border-green-400 text-green-700 hover:bg-green-100 bg-green-50 cursor-pointer"}`}
+                                >
+                                  {row.feedbackRevision ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5 fill-current">
+                                      <path fill="#22c55e" d="M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z" />
+                                      <g transform="translate(50, -450) scale(0.65)">
+                                        <path fill="#742F01" d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z" />
+                                      </g>
+                                    </svg>
+                                  ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5 fill-current">
+                                      <path d="M120-160v-640l760 320-760 320Zm80-120 474-200-474-200v140l240 60-240 60v140Zm0 0v-400 400Z" />
+                                    </svg>
+                                  )}
+                                </button>
+                                {/* Tooltip */}
+                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md shadow-xl whitespace-nowrap z-[100] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                  {row.feedbackRevision ? "Corregir y re-enviar evidencia" : "Subir evidencias y entregar"}
+                                  <div className="absolute top-full left-1/2 -ml-1.5 border-4 border-transparent border-t-gray-900"></div>
+                                </div>
+                              </div>
                             )}
 
                             {canReview && row.estatus === "EN_REVISION" && (
-                              <button
-                                onClick={() => handleRevisar(row)}
-                                title="Revisar evidencia y aprobar/rechazar"
-                                className="w-8 h-8 flex items-center justify-center rounded-md border border-indigo-400 text-indigo-700 hover:bg-indigo-100 bg-indigo-50 transition-all duration-200 shadow-sm cursor-pointer"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="20px" height="20px" className="fill-indigo-700">
-                                  <path d="M440-240q116 0 198-81.5T720-520q0-116-82-198t-198-82q-117 0-198.5 82T160-520q0 117 81.5 198.5T440-240Zm0-280Zm0 160q-83 0-147.5-44.5T200-520q28-70 92.5-115T440-680q82 0 146.5 45T680-520q-29 71-93.5 115.5T440-360Zm0-60q55 0 101-26.5t72-73.5q-26-46-72-73t-101-27q-56 0-102 27t-72 73q26 47 72 73.5T440-420Zm0-40q25 0 42.5-17t17.5-43q0-25-17.5-42.5T440-580q-26 0-43 17.5T380-520q0 26 17 43t43 17Zm0 300q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T80-520q0-74 28.5-139.5t77-114.5q48.5-49 114-77.5T440-880q74 0 139.5 28.5T694-774q49 49 77.5 114.5T800-520q0 64-21 121t-58 104l159 159-57 56-159-158q-47 37-104 57.5T440-160Z" />
-                                </svg>
-                              </button>
+                              <div className="group relative flex items-center justify-center">
+                                <button
+                                  onClick={() => handleRevisar(row)}
+                                  className="w-8 h-8 flex items-center justify-center rounded-md border border-indigo-400 text-indigo-700 hover:bg-indigo-100 bg-indigo-50 transition-all duration-200 shadow-sm cursor-pointer"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="20px" height="20px" className="fill-indigo-700">
+                                    <path d="M440-240q116 0 198-81.5T720-520q0-116-82-198t-198-82q-117 0-198.5 82T160-520q0 117 81.5 198.5T440-240Zm0-280Zm0 160q-83 0-147.5-44.5T200-520q28-70 92.5-115T440-680q82 0 146.5 45T680-520q-29 71-93.5 115.5T440-360Zm0-60q55 0 101-26.5t72-73.5q-26-46-72-73t-101-27q-56 0-102 27t-72 73q26 47 72 73.5T440-420Zm0-40q25 0 42.5-17t17.5-43q0-25-17.5-42.5T440-580q-26 0-43 17.5T380-520q0 26 17 43t43 17Zm0 300q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T80-520q0-74 28.5-139.5t77-114.5q48.5-49 114-77.5T440-880q74 0 139.5 28.5T694-774q49 49 77.5 114.5T800-520q0 64-21 121t-58 104l159 159-57 56-159-158q-47 37-104 57.5T440-160Z" />
+                                  </svg>
+                                </button>
+                                {/* Tooltip */}
+                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md shadow-xl whitespace-nowrap z-[100] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                  Revisar evidencia
+                                  <div className="absolute top-full left-1/2 -ml-1.5 border-4 border-transparent border-t-gray-900"></div>
+                                </div>
+                              </div>
                             )}
 
                             {isResponsable && row.estatus === "EN_REVISION" && (
-                              <div className="w-8 h-8 flex items-center justify-center rounded-md border border-indigo-200 bg-indigo-50 text-indigo-400 animate-pulse shadow-sm cursor-help" title="Esperando revisión por parte del asignador">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5 fill-current">
-                                  <path d="M320-160h320v-120q0-66-47-113t-113-47q-66 0-113 47t-47 113v120Zm160-360q66 0 113-47t47-113v-120H320v120q0 66 47 113t113 47ZM160-80v-80h80v-120q0-61 28.5-114.5T348-480q-51-32-79.5-85.5T240-680v-120h-80v-80h640v80h-80v120q0 61-28.5 114.5T612-480q51 32 79.5 85.5T720-280v120h80v80H160Zm320-80Zm0-640Z" />
-                                </svg>
+                              <div className="group relative flex items-center justify-center">
+                                <div className="w-8 h-8 flex items-center justify-center rounded-md border border-indigo-200 bg-indigo-50 text-indigo-400 animate-pulse shadow-sm cursor-help">
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5 fill-current">
+                                    <path d="M320-160h320v-120q0-66-47-113t-113-47q-66 0-113 47t-47 113v120Zm160-360q66 0 113-47t47-113v-120H320v120q0 66 47 113t113 47ZM160-80v-80h80v-120q0-61 28.5-114.5T348-480q-51-32-79.5-85.5T240-680v-120h-80v-80h640v80h-80v120q0 61-28.5 114.5T612-480q51 32 79.5 85.5T720-280v120h80v80H160Zm320-80Zm0-640Z" />
+                                  </svg>
+                                </div>
+                                {/* Tooltip */}
+                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md shadow-xl whitespace-nowrap z-[100] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                  Esperando revisión
+                                  <div className="absolute top-full left-1/2 -ml-1.5 border-4 border-transparent border-t-gray-900"></div>
+                                </div>
                               </div>
                             )}
 
