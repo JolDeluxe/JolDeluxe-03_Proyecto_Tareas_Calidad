@@ -209,43 +209,66 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
                       </td>
 
                       <td className="px-4 py-3 text-center w-[20%]">
-                        <div className="flex items-center justify-center gap-3 h-7">
+                        <div className="flex items-center justify-center gap-3 h-7 w-full">
+                          {/* ✏️ Editar */}
                           {puedeEditar ? (
-                            <button
-                              onClick={() => abrirModalEditar(row)}
-                              title="Editar usuario"
-                              className="w-7 h-7 flex items-center justify-center rounded-md border border-amber-400 text-amber-600 hover:bg-amber-600 hover:text-white transition-all duration-200 cursor-pointer"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5" fill="currentColor">
-                                <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z" />
-                              </svg>
-                            </button>
+                            <div className="group relative flex items-center justify-center">
+                              <button
+                                onClick={() => abrirModalEditar(row)}
+                                className="w-7 h-7 flex items-center justify-center rounded-md border border-amber-400 text-amber-600 hover:bg-amber-600 hover:text-white transition-all duration-200 cursor-pointer"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5" fill="currentColor">
+                                  <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z" />
+                                </svg>
+                              </button>
+                              {/* Tooltip */}
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md shadow-xl whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                Editar usuario
+                                <div className="absolute top-full left-1/2 -ml-1.5 border-4 border-transparent border-t-gray-900"></div>
+                              </div>
+                            </div>
                           ) : (
-                            <div className="w-7 h-7 flex items-center justify-center text-gray-300" title="No tienes permisos para editar este administrador">
-                              <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h40v-80q0-83 58.5-141.5T480-920q83 0 141.5 58.5T680-720v80h40q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H240Zm0-80h480v-400H240v400Zm240-120q33 0 56.5-23.5T560-360q0-33-23.5-56.5T480-440q-33 0-56.5 23.5T400-360q0 33 23.5 56.5T480-280ZM360-640h240v-80q0-50-35-85t-85-35q-50 0-85 35t-35 85v80ZM240-160v-400 400Z" /></svg>
+                            <div className="group relative flex items-center justify-center">
+                              <div className="w-7 h-7 flex items-center justify-center text-gray-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor">
+                                  <path d="M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h40v-80q0-83 58.5-141.5T480-920q83 0 141.5 58.5T680-720v80h40q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H240Zm0-80h480v-400H240v400Zm240-120q33 0 56.5-23.5T560-360q0-33-23.5-56.5T480-440q-33 0-56.5 23.5T400-360q0 33 23.5 56.5T480-280ZM360-640h240v-80q0-50-35-85t-85-35q-50 0-85 35t-35 85v80ZM240-160v-400 400Z" />
+                                </svg>
+                              </div>
+                              {/* Tooltip */}
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md shadow-xl whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                No tienes permisos
+                                <div className="absolute top-full left-1/2 -ml-1.5 border-4 border-transparent border-t-gray-900"></div>
+                              </div>
                             </div>
                           )}
 
+                          {/* 🗑️ / ✅ Desactivar / Reactivar */}
                           {currentUser?.id !== row.id && (esSuperAdmin || (currentUser?.rol === Rol.ADMIN && !esAdminBuscado)) && (
-                            <button
-                              onClick={() => solicitarCambioEstatus(row)}
-                              title={row.estatus === "ACTIVO" ? "Desactivar" : "Reactivar"}
-                              className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 cursor-pointer
-                                ${row.estatus === "ACTIVO"
-                                  ? "border-red-400 text-red-600 hover:bg-red-600 hover:text-white"
-                                  : "border-green-400 text-green-700 hover:bg-green-100"
-                                }`}
-                            >
-                              {row.estatus === "ACTIVO" ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-6 h-6 text-red-700" fill="currentColor">
-                                  <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
-                                </svg>
-                              ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-6 h-6 text-green-700" fill="currentColor">
-                                  <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Z" />
-                                </svg>
-                              )}
-                            </button>
+                            <div className="group relative flex items-center justify-center">
+                              <button
+                                onClick={() => solicitarCambioEstatus(row)}
+                                className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 cursor-pointer
+            ${row.estatus === "ACTIVO"
+                                    ? "border-red-400 text-red-600 hover:bg-red-600 hover:text-white"
+                                    : "border-green-400 text-green-700 hover:bg-green-600 hover:text-white"
+                                  }`}
+                              >
+                                {row.estatus === "ACTIVO" ? (
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5 fill-current">
+                                    <path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z" />
+                                  </svg>
+                                ) : (
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-5 h-5 fill-current">
+                                    <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q8 0 15 1.5t14 4.5l-74 74H200v560h560v-266l80-80v346q0 33-23.5 56.5T760-120H200Zm261-160L235-506l56-56 170 170 367-367 57 55-424 424Z" />
+                                  </svg>
+                                )}
+                              </button>
+                              {/* Tooltip */}
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md shadow-xl whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                {row.estatus === "ACTIVO" ? "Desactivar" : "Reactivar"}
+                                <div className="absolute top-full left-1/2 -ml-1.5 border-4 border-transparent border-t-gray-900"></div>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </td>
