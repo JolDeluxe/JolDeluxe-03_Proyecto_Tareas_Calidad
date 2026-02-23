@@ -17,8 +17,8 @@ const ResumenUsuarios = ({ usuarios, onFilterChange, filtroActual }: Props) => {
     <button
       onClick={() => onFilterChange(value)}
       className={`flex items-center justify-between p-4 rounded-xl border transition-all ${filtroActual === value
-          ? `bg-white border-${colorClass}-500 ring-1 ring-${colorClass}-500 shadow-md`
-          : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm opacity-80 hover:opacity-100'
+        ? `bg-white border-${colorClass}-500 ring-1 ring-${colorClass}-500 shadow-md`
+        : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm opacity-80 hover:opacity-100'
         }`}
     >
       <div className="text-left">

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import type { Usuario } from "../../../types/usuario";
 import type { Departamento } from "../../../api/departamentos.service";
 
@@ -12,6 +12,22 @@ interface Props {
 }
 
 const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Props) => {
+  // --- Lógica de Paginación ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10; // Cantidad de usuarios por página
+
+  // Si cambia la lista de usuarios (ej. el usuario usó el filtro), regresamos a la página 1
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [usuarios]);
+
+  const totalPages = Math.ceil(usuarios.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+
+  // Usuarios correspondientes a la página actual
+  const currentUsers = usuarios.slice(startIndex, endIndex);
+  // ----------------------------
 
   const getNombreDepto = (id?: number | null) => {
     if (!id) return <span className="text-slate-400 italic text-xs">Global / N/A</span>;
@@ -33,12 +49,12 @@ const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Pr
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead className="bg-slate-50 text-slate-600 text-xs uppercase font-bold border-b border-slate-200">
             <tr>
-              <th className="p-4">Usuario</th>
+              <th className="p-4 min-w-[200px]">Usuario</th>
               <th className="p-4">Rol & Acceso</th>
               <th className="p-4">Departamento</th>
               <th className="p-4 text-center">Estatus</th>
@@ -51,25 +67,25 @@ const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Pr
             ) : usuarios.length === 0 ? (
               <tr><td colSpan={5} className="p-8 text-center text-slate-500">No se encontraron usuarios.</td></tr>
             ) : (
-              usuarios.map((u) => (
+              currentUsers.map((u) => (
                 <tr key={u.id} className={`hover:bg-slate-50 transition-colors ${u.estatus === 'INACTIVO' ? 'bg-slate-50/50' : ''}`}>
                   <td className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white ${u.estatus === 'INACTIVO' ? 'bg-slate-400' : 'bg-indigo-500'}`}>
+                      <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white ${u.estatus === 'INACTIVO' ? 'bg-slate-400' : 'bg-indigo-500'}`}>
                         {u.nombre.charAt(0)}
                       </div>
                       <div>
-                        <p className={`font-bold ${u.estatus === 'INACTIVO' ? 'text-slate-500' : 'text-slate-800'}`}>{u.nombre}</p>
-                        <p className="text-xs text-slate-500">{u.username}</p>
+                        <p className={`font-bold truncate ${u.estatus === 'INACTIVO' ? 'text-slate-500' : 'text-slate-800'}`}>{u.nombre}</p>
+                        <p className="text-xs text-slate-500 truncate">{u.username}</p>
                       </div>
                     </div>
                   </td>
                   <td className="p-4">
-                    <span className={`px-2 py-1 rounded text-[10px] font-bold border uppercase ${getRolBadge(u.rol)}`}>
+                    <span className={`px-2 py-1 rounded text-[10px] font-bold border uppercase whitespace-nowrap ${getRolBadge(u.rol)}`}>
                       {u.rol.replace('_', ' ')}
                     </span>
                   </td>
-                  <td className="p-4">
+                  <td className="p-4 whitespace-nowrap">
                     {getNombreDepto(u.departamentoId)}
                   </td>
                   <td className="p-4 text-center">
@@ -86,7 +102,7 @@ const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Pr
                       <button
                         onClick={() => onEdit(u)}
                         title="Editar usuario"
-                        className="w-7 h-7 flex items-center justify-center rounded-md border border-amber-400 text-amber-600 hover:bg-amber-600 hover:text-white transition-all duration-200"
+                        className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md border border-amber-400 text-amber-600 hover:bg-amber-600 hover:text-white transition-all duration-200"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="w-4 h-4" fill="currentColor">
                           <path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z" />
@@ -97,7 +113,7 @@ const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Pr
                       <button
                         onClick={() => onToggleStatus(u)}
                         title={u.estatus === 'ACTIVO' ? "Desactivar usuario" : "Reactivar usuario"}
-                        className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${u.estatus === 'ACTIVO'
+                        className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${u.estatus === 'ACTIVO'
                           ? 'border-red-400 text-red-600 hover:bg-red-600 hover:text-white' // Estilo Borrar
                           : 'border-green-400 text-green-700 hover:bg-green-100' // Estilo Reactivar (Verde)
                           }`}
@@ -122,6 +138,35 @@ const TablaUsuarios = ({ usuarios, deptos, loading, onEdit, onToggleStatus }: Pr
           </tbody>
         </table>
       </div>
+
+      {/* FOOTER DE PAGINACIÓN RESPONSIVO */}
+      {!loading && usuarios.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-slate-200 bg-slate-50 gap-4">
+          <div className="text-xs text-slate-500 text-center sm:text-left">
+            Mostrando <span className="font-bold text-slate-800">{usuarios.length > 0 ? startIndex + 1 : 0}</span> a <span className="font-bold text-slate-800">{Math.min(endIndex, usuarios.length)}</span> de <span className="font-bold text-slate-800">{usuarios.length}</span> resultados
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 rounded text-xs font-bold border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              Anterior
+            </button>
+            <span className="text-xs font-bold text-slate-600 px-2">
+              Página {currentPage} de {totalPages || 1}
+            </span>
+            <button
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="px-3 py-1.5 rounded text-xs font-bold border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
