@@ -8,6 +8,7 @@ import ResumenPrincipalAdmin from "../components/Admin/ResumenAdmin";
 import FiltrosAdmin from "../components/Admin/FiltrosAdmin";
 import ModalNueva from "../components/Admin/ModalNueva";
 import FechasAdmin from "../components/Admin/FechasAdmin";
+import ModalExportar from "../components/Admin/ModalExportar";
 
 // --- Componentes de Métricas ---
 // import ResumenPrincipalDash from "../components/Principal/ResumenDash";
@@ -17,6 +18,8 @@ import DashboardMetricas from "../components/Principal/DashboardMetricas";
 import { tareasService, type TareaFilters, type TareasResponse } from "../api/tareas.service";
 import type { Tarea } from "../types/tarea";
 import type { Usuario } from "../types/usuario";
+
+import { MicrosoftExcel } from "../assets/MicrosoftExcel";
 
 // ---> AGREGAR DEBAJO DE LOS IMPORTS EN Admin.tsx <---
 export type TipoFiltroFecha = "TODAS" | "HOY" | "MANANA" | "ESTA_SEMANA" | "PERSONALIZADO";
@@ -118,6 +121,8 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     });
     return { porMi, aMi };
   }, [tareas, isKaizen, user, verCanceladas]);
+
+  const [openModalExportar, setOpenModalExportar] = useState<boolean>(false);
 
 
 
@@ -515,8 +520,24 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
       {viewMode === "TAREAS" ? (
         <>
-          <div className="flex justify-end sm:justify-between items-center mb-4">
-            <div className="hidden sm:block"></div>
+          <div className="flex justify-between items-center mb-4">
+
+            {/* BOTÓN EXPORTAR (Alineado a la izquierda, Estilo Limpio para Excel) */}
+            <button
+              onClick={() => setOpenModalExportar(true)}
+              className="flex items-center justify-center gap-2 
+                       bg-white hover:bg-gray-50 text-gray-700
+                       border border-gray-300
+                       font-semibold px-4 py-2 rounded-md shadow-sm 
+                       active:scale-[0.97] transition-all duration-200
+                       cursor-pointer sm:px-5 sm:py-2"
+            >
+              {/* Icono de Excel importado */}
+              <MicrosoftExcel className="w-6 h-6" />
+              <span className="hidden sm:inline">Exportar a Excel</span>
+            </button>
+
+            {/* BOTÓN AGREGAR NUEVA TAREA (Alineado a la derecha, tu código original) */}
             <button
               onClick={handleNuevaTarea}
               className="flex items-center justify-center gap-2 
@@ -525,13 +546,14 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                       active:scale-[0.97] transition-all duration-200
                       fixed bottom-40 right-5 sm:static sm:bottom-auto sm:right-auto
                       sm:px-5 sm:py-2 sm:rounded-md sm:shadow 
-                      z-50 sm:z-auto"
+                      z-50 sm:z-auto cursor-pointer"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
                 <path fillRule="evenodd" d="M12 4.5a.75.75 0 01.75.75v6h6a.75.75 0 010 1.5h-6v6a.75.75 0 01-1.5 0v-6h-6a.75.75 0 010-1.5h6v-6A.75.75 0 0112 4.5z" clipRule="evenodd" />
               </svg>
               <span className="hidden sm:inline">Agregar nueva tarea</span>
             </button>
+
           </div>
 
           <div className="shadow-lg rounded-lg border border-gray-400 bg-white overflow-visible pb-5 lg:pb-0 animate-fade-in-up">
@@ -633,6 +655,14 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
           user={user}
         />
       )}
+
+      {openModalExportar && (
+        <ModalExportar
+          onClose={() => setOpenModalExportar(false)}
+          user={user}
+        />
+      )}
+
     </div>
   );
 };
