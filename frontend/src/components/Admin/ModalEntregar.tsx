@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+// 📍 src/components/Admin/ModalEntregar.tsx
+
+import React, { useState, useMemo } from "react";
 import type { Tarea } from "../../types/tarea";
 import { tareasService } from "../../api/tareas.service";
 import { toast } from "react-toastify";
@@ -18,6 +20,21 @@ const ModalEntrega: React.FC<ModalEntregaProps> = ({
   const [archivos, setArchivos] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ✅ LÓGICA PARA DETECTAR SI LA TAREA YA ESTÁ VENCIDA
+  const esFueraDeTiempo = useMemo(() => {
+    // Calculamos la fecha límite real considerando si hubo prórrogas en el historial
+    const fechaLimiteReal = tarea.historialFechas && tarea.historialFechas.length > 0
+      ? new Date(tarea.historialFechas[tarea.historialFechas.length - 1].nuevaFecha!)
+      : (tarea.fechaLimite ? new Date(tarea.fechaLimite) : null);
+
+    if (!fechaLimiteReal) return false;
+
+    const limite = fechaLimiteReal.getTime();
+    const ahora = new Date().getTime(); // Hora actual en la que intenta entregar
+
+    return ahora > limite;
+  }, [tarea]);
 
   // --- Manejadores de Archivos (Con Toastify) ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,6 +128,19 @@ const ModalEntrega: React.FC<ModalEntregaProps> = ({
         <form onSubmit={handleSubmit} className="flex flex-col flex-grow min-h-0">
           <div className="flex-grow overflow-y-auto p-6 text-gray-800">
             <div className="flex flex-col gap-5">
+
+              {/* ⚠️ ALERTA DE TAREA FUERA DE TIEMPO */}
+              {esFueraDeTiempo && (
+                <div className="bg-red-100 border-l-4 border-red-600 text-red-800 p-3 rounded shadow-sm flex items-center gap-3 animate-pulse">
+                  <span className="text-2xl">⚠️</span>
+                  <div>
+                    <p className="font-extrabold uppercase text-sm">Fuera de plazo</p>
+                    <p className="text-xs">
+                      El tiempo límite expiró. Esta tarea se registrará con retraso.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Info Tarea */}
               <div>
