@@ -313,13 +313,9 @@ const getRowClass = (status: Estatus): string => {
 };
 
 const getFechaLimiteEfectiva = (tarea: Tarea): number => {
-  if (tarea.historialFechas && tarea.historialFechas.length > 0) {
-    const last = tarea.historialFechas[tarea.historialFechas.length - 1];
-    return last.nuevaFecha ? new Date(last.nuevaFecha).getTime() : 0;
-  }
+  // Ahora tomamos siempre la fecha límite real directamente
   return tarea.fechaLimite ? new Date(tarea.fechaLimite).getTime() : 0;
 };
-
 const TablaAdmin: React.FC<TablaProps> = ({
   filtro,
   responsable,
@@ -513,9 +509,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
                 {tareasOrdenadas.map((row: Tarea) => {
                   const hoy = new Date();
 
-                  const fechaLimiteObj = row.historialFechas && row.historialFechas.length > 0
-                    ? new Date(row.historialFechas[row.historialFechas.length - 1].nuevaFecha!)
-                    : row.fechaLimite ? new Date(row.fechaLimite) : null;
+                  const fechaLimiteObj = row.fechaLimite ? new Date(row.fechaLimite) : null;
 
                   let vencida = fechaLimiteObj ? (fechaLimiteObj.getTime() < hoy.getTime() && row.estatus === "PENDIENTE") : false;
 
@@ -631,9 +625,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
               const hoy = new Date();
               hoy.setHours(0, 0, 0, 0);
 
-              const fechaLimiteObj = row.historialFechas && row.historialFechas.length > 0
-                ? row.historialFechas[row.historialFechas.length - 1].nuevaFecha
-                : row.fechaLimite;
+              const fechaLimiteObj = row.fechaLimite;
 
               const fechaLimiteDate = typeof fechaLimiteObj === "string" ? new Date(fechaLimiteObj) : fechaLimiteObj;
 

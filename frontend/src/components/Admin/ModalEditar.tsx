@@ -416,6 +416,7 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
           observaciones: comentario,
           urgencia: prioridad,
           responsables: responsablesIds,
+          fechaLimite: fechaLimiteFinal.toISOString(),
         };
         await tareasService.update(tarea.id, payloadDatos as any);
 
@@ -703,62 +704,88 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
                     )}
                   </div>
 
-                  {/* Fecha Límite */}
+                  {/* FECHA LIMITE */}
                   <div>
-                    <label className="block text-sm font-semibold mb-1">Fecha Límite</label>
-                    <div className="flex flex-col gap-2">
-                      <input
-                        type="date"
-                        value={fecha}
-                        onChange={(e) => setFecha(e.target.value)}
-                        required
-                        disabled={loading}
-                        min={formatDateToInput(new Date())}
-                        className={`w-full border rounded-md px-3 py-2 focus:outline-none
-                          ${submitted && !isDateValid() ? "border-red-500" : "border-gray-300"}
-                        `}
-                      />
-                      <div className="flex items-center gap-4 mt-1">
-                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 select-none">
+                    <label
+                      htmlFor="editar-fecha"
+                      className="block text-sm font-semibold mb-1"
+                    >
+                      Fecha Límite
+                    </label>
+
+                    <div className="flex flex-col gap-3">
+                      {/* Contenedor responsivo: apilado en móvil, lado a lado en escritorio */}
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex-1">
                           <input
-                            type="checkbox"
-                            checked={usarHora}
-                            onChange={(e) => {
-                              setUsarHora(e.target.checked);
-                              if (!e.target.checked) setHora("");
-                            }}
+                            type="date"
+                            id="editar-fecha"
+                            value={fecha}
+                            onChange={(e) => setFecha(e.target.value)}
+                            required
                             disabled={loading}
-                            className="w-4 h-4"
-                          />
-                          <span>¿Especificar hora?</span>
-                        </label>
-                        {usarHora && (
-                          <input
-                            type="time"
-                            value={hora}
-                            onChange={(e) => setHora(e.target.value)}
-                            disabled={loading}
-                            required={usarHora}
-                            className={`flex-1 border rounded-md px-2 py-1 text-sm focus:outline-none 
-                              ${submitted && (!hora || !isTimeValidForToday()) ? "border-red-500 bg-red-50" : "border-gray-300"}
+                            min={formatDateToInput(new Date())}
+                            className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed
+                              ${submitted && !isDateValid()
+                                ? "border-red-500"
+                                : "border-gray-300"
+                              }
                             `}
                           />
+                        </div>
+
+                        {usarHora && (
+                          <div className="flex-1 animate-fade-in">
+                            <input
+                              type="time"
+                              value={hora}
+                              onChange={(e) => setHora(e.target.value)}
+                              disabled={loading}
+                              required={usarHora}
+                              className={`w-full border rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-950 focus:outline-none
+                                ${submitted && ((!hora) || (!isTimeValidForToday()))
+                                  ? "border-red-500 bg-red-50"
+                                  : "border-gray-300"
+                                }
+                              `}
+                            />
+                          </div>
                         )}
                       </div>
+
+                      {/* Checkbox en una línea independiente */}
+                      <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 select-none w-fit">
+                        <input
+                          type="checkbox"
+                          checked={usarHora}
+                          onChange={(e) => {
+                            setUsarHora(e.target.checked);
+                            if (!e.target.checked) setHora("");
+                          }}
+                          disabled={loading}
+                          className="w-4 h-4 text-amber-800 border-gray-300 rounded focus:ring-amber-950 cursor-pointer"
+                        />
+                        <span className="font-medium">¿Especificar hora límite?</span>
+                      </label>
                     </div>
-                    {submitted && !isDateValid() && (
-                      <p className="text-red-600 text-xs mt-1">
-                        La fecha límite es obligatoria.
+
+                    {/* Mensajes de Validación Unificados */}
+                    <div className="mt-1">
+                      {submitted && !isDateValid() && (
+                        <p className="text-red-600 text-xs mt-1">La fecha límite es obligatoria.</p>
+                      )}
+                      {submitted && usarHora && !hora && (
+                        <p className="text-red-600 text-xs mt-1">Debes seleccionar una hora.</p>
+                      )}
+                      {submitted && usarHora && hora && !isTimeValidForToday() && (
+                        <p className="text-red-600 text-xs mt-1">La hora no puede ser anterior a la actual.</p>
+                      )}
+                      <p className="text-[10px] text-gray-400 mt-1 italic">
+                        {usarHora
+                          ? "Se requiere entrega antes de la hora exacta."
+                          : "Se considera 'A Tiempo' hasta el final del día (23:59)."}
                       </p>
-                    )}
-                    {submitted && usarHora && !hora && (
-                      <p className="text-red-600 text-xs mt-1">
-                        Debes seleccionar una hora.
-                      </p>
-                    )}
-                    {submitted && usarHora && hora && !isTimeValidForToday() && (
-                      <p className="text-red-600 text-xs mt-1">La hora no puede ser anterior a la actual.</p>
-                    )}
+                    </div>
                   </div>
 
                   {/* Motivo de cambio (Auditoría) */}
