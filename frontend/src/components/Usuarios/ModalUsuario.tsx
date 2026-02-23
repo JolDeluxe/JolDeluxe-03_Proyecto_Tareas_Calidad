@@ -238,7 +238,7 @@ const ModalUsuario = ({ isOpen, onClose, onSuccess, usuarioAEditar, currentUser,
                   type="text"
                   value={username}
                   onChange={handleUsernameChange}
-                  // Si hay error de submit vacío O error de backend, borde rojo
+                  autoComplete="none"
                   className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-mono text-sm bg-slate-50
                     ${(submitted && !username.trim()) || backendError ? "border-red-500 bg-red-50" : "border-slate-300"}
                   `}
@@ -349,6 +349,7 @@ const ModalUsuario = ({ isOpen, onClose, onSuccess, usuarioAEditar, currentUser,
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
                 className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all
                   ${submitted && !usuarioAEditar && !password.trim() ? "border-red-500 bg-red-50" : "border-slate-300"}
                 `}

@@ -53,8 +53,7 @@ const DashboardGeneral = () => {
     setLoading(true);
 
     try {
-      // Traemos Logs también para buscar errores
-      const [d, u, t, l] = await Promise.all([
+      const [d, uRes, tRes, l] = await Promise.all([
         departamentosService.getAll(),
         usuariosService.getAll(),
         tareasService.getAll(),
@@ -64,8 +63,12 @@ const DashboardGeneral = () => {
       const end = performance.now();
       setPing(Math.round(end - start));
 
+      // Extraemos los arrays reales de la propiedad .data
+      const u = uRes.data;
+      const t = tRes.data;
+
       setDeptos(d);
-      setTareas(t);
+      setTareas(t); // Ahora sí es un Array de Tarea[]
 
       // 1. Calcular Actividad de HOY (Pulso del negocio)
       let creadasHoy = 0;
@@ -267,8 +270,8 @@ const DashboardGeneral = () => {
                       <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
                         <div
                           className={`h-full rounded-full transition-all duration-1000 ${m.eficacia >= 80 ? 'bg-gradient-to-r from-green-400 to-green-600' :
-                              m.eficacia >= 60 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
-                                'bg-gradient-to-r from-red-400 to-red-600'
+                            m.eficacia >= 60 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
+                              'bg-gradient-to-r from-red-400 to-red-600'
                             }`}
                           style={{ width: `${m.eficacia}%` }}
                         ></div>

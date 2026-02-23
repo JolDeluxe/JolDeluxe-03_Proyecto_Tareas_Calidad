@@ -29,13 +29,15 @@ const GestionUsuariosGlobal = () => {
       // 1. Pedimos usuarios (Si mostrarInactivos es true, pedimos INACTIVOS, sino ACTIVOS por defecto)
       const estatusRequest = mostrarInactivos ? 'INACTIVO' : 'ACTIVO';
 
-      const [usersData, deptosData] = await Promise.all([
+      const [usersResponse, deptosData] = await Promise.all([
         usuariosService.getAll({ estatus: estatusRequest }),
         departamentosService.getAll()
       ]);
 
-      setUsuarios(usersData);
+      // Accedemos a la propiedad .data de la respuesta paginada
+      setUsuarios(usersResponse.data);
       setDeptos(deptosData);
+
     } catch (error) {
       console.error("Error cargando datos:", error);
     } finally {
