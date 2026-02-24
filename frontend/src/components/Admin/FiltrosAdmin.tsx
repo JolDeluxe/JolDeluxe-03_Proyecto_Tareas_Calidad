@@ -65,7 +65,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
   // 1. Cargar Usuarios
   useEffect(() => {
     const fetchUsuarios = async () => {
-      if (!user) return;
+      // ✅ Se eliminó "if (!user) return;" para que cargue los usuarios incluso para SuperAdmin (user=null)
       try {
         setLoading(true);
         // Pedimos un límite alto (1000) para llenar el Select con todos los usuarios
@@ -94,7 +94,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
     };
 
     fetchUsuarios();
-  }, [user]);
+  }, []); // ✅ Se eliminó [user] de las dependencias
 
   // --- HANDLERS RESPONSABLE ---
   const getSelectedUsuarioNombreResumido = () => {
