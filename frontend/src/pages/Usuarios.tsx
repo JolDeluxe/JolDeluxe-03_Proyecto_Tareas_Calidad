@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import TablaUsuarios from "../components/Usuarios/TablaUsuarios";
 import ResumenUsuarios from "../components/Usuarios/ResumenUsuarios";
 import FiltrosUsuarios from "../components/Usuarios/FiltrosUsuarios";
@@ -6,6 +6,7 @@ import ModalUsuario from "../components/Usuarios/ModalUsuario";
 import { usuariosService } from "../api/usuarios.service";
 import { departamentosService } from "../api/departamentos.service";
 import type { Usuario } from "../types/usuario";
+import { Rol } from "../types/usuario";
 import type { Departamento } from "../api/departamentos.service";
 
 interface UsuariosProps {
@@ -19,6 +20,9 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
   const [page, setPage] = useState<number>(1);
   const [limit] = useState<number>(10);
 
+  const [sortBy, setSortBy] = useState<string>("rolJerarquia");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
   // --- Estados de Datos ---
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
@@ -26,7 +30,7 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
   // --- Estados de Metadatos ---
   const [totalItems, setTotalItems] = useState(0);
   const [resumenRoles, setResumenRoles] = useState<Record<string, number>>({});
-  const [totalPages, setTotalPages] = useState(1);
+  // const [totalPages, setTotalPages] = useState(1);
 
   const [openModal, setOpenModal] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
@@ -38,7 +42,7 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
     try {
       const params: any = {
         page,
-        limit,
+        limit: 10000,
         q: query,
       };
 
@@ -54,7 +58,7 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
       setUsuarios(responseUsuarios.data);
       setTotalItems(responseUsuarios.meta.totalItems);
       setResumenRoles(responseUsuarios.meta.resumenRoles);
-      setTotalPages(responseUsuarios.meta.totalPaginas);
+      // setTotalPages(responseUsuarios.meta.totalPaginas);
 
       if (departamentos.length === 0) {
         setDepartamentos(deptosData as Departamento[]);
@@ -69,7 +73,7 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
 
   useEffect(() => {
     fetchUsuarios();
-  }, [fetchUsuarios]);
+  }, [user, query, filtro]);
 
   // ✅ CORRECCIÓN 1: Envolvemos en useCallback para evitar el ciclo infinito con FiltrosUsuarios
   const handleSearchChange = useCallback((nuevaQuery: string) => {
@@ -88,6 +92,43 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
     setFiltro(nuevoFiltro);
     setPage(1);
   }, []);
+
+  // ✅ 1. ORDENAMIENTO GLOBAL
+  const usuariosOrdenadosGlobalmente = useMemo(() => {
+    const sorted = [...usuarios];
+
+    sorted.sort((a, b) => {
+      if (sortBy === "rolJerarquia") {
+        const roleWeight: Record<string, number> = {
+          [Rol.SUPER_ADMIN]: 0, [Rol.ADMIN]: 1, [Rol.ENCARGADO]: 2, [Rol.USUARIO]: 3, [Rol.INVITADO]: 4
+        };
+        const weightA = roleWeight[a.rol] ?? 99;
+        const weightB = roleWeight[b.rol] ?? 99;
+
+        if (weightA < weightB) return sortDirection === "asc" ? -1 : 1;
+        if (weightA > weightB) return sortDirection === "asc" ? 1 : -1;
+        return 0;
+      }
+
+      const valA = String(a[sortBy as keyof Usuario] || "").toLowerCase();
+      const valB = String(b[sortBy as keyof Usuario] || "").toLowerCase();
+
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  }, [usuarios, sortBy, sortDirection]);
+
+  // ✅ 2. PAGINACIÓN LOCAL (De 10 en 10)
+  const usuariosPaginados = useMemo(() => {
+    const startIndex = (page - 1) * limit; // limit es 10
+    return usuariosOrdenadosGlobalmente.slice(startIndex, startIndex + limit);
+  }, [usuariosOrdenadosGlobalmente, page, limit]);
+
+  // ✅ 3. ACTUALIZAR TOTAL DE PÁGINAS REAL
+  const paginasReales = Math.max(1, Math.ceil(usuariosOrdenadosGlobalmente.length / limit));
 
   if (!user) return null;
 
@@ -139,14 +180,20 @@ const Usuarios: React.FC<UsuariosProps> = ({ user }) => {
 
         <div className="px-1">
           <TablaUsuarios
-            usuarios={usuarios}
+            usuarios={usuariosPaginados}
             loading={loading}
             onRecargarUsuarios={fetchUsuarios}
             currentUser={user}
             departamentos={departamentos}
             page={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
+            totalPages={paginasReales}
+            onPageChange={setPage} // ✅ Te faltaba esta
+            sortConfig={{ key: sortBy as any, direction: sortDirection }} // ✅ Te faltaba esta
+            onSortChange={(key, direction) => { // ✅ Te faltaba esta (y esto quita el error de setSortBy sin usar)
+              setSortBy(key);
+              setSortDirection(direction);
+              setPage(1);
+            }}
           />
         </div>
       </div>

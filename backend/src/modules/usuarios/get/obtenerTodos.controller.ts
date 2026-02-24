@@ -19,6 +19,8 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
 
   // Al tener el schema actualizado, TS ahora reconocerá estas propiedades
   const { departamentoId, estatus, rol, q, page, limit } = queryParseResult.data;
+  const sortBy = req.query.sortBy as string || 'rolJerarquia';
+  const sortDirection = req.query.sortDirection as string || 'asc';
 
   // Cálculo de paginación
   const pageNum = Math.max(1, page);
@@ -71,8 +73,25 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
   // Aplicamos el filtro de Rol específico SOLO a la lista, no a los contadores
   // (A menos que sea Usuario/Invitado, que solo se ven a sí mismos)
   if (rol && !["USUARIO", "INVITADO"].includes(user.rol)) {
-    whereList.rol = rol;
+    whereList.rol 
+    = rol;
   }
+
+// let orderByPrisma: Prisma.UsuarioOrderByWithRelationInput | Prisma.UsuarioOrderByWithRelationInput[] = { id: "desc" };
+
+//   if (sortBy) {
+//     if (sortBy === "rolJerarquia") {
+//       // Prisma ordenará según el orden de declaración en schema.prisma (SUPER_ADMIN, ADMIN, ENCARGADO, USUARIO...)
+//       orderByPrisma = [
+//         { rol: sortDirection === "asc" ? Prisma.SortOrder.asc : Prisma.SortOrder.desc },
+//         { nombre: Prisma.SortOrder.asc } // Desempate alfabético secundario
+//       ];
+//     } 
+//     else if (["nombre", "username", "estatus"].includes(sortBy)) {
+//       // Ordenamiento estándar para strings
+//       orderByPrisma = { [sortBy]: sortDirection === "asc" ? Prisma.SortOrder.asc : Prisma.SortOrder.desc };
+//     }
+//   }
 
   // 6. Ejecución Transaccional
   const [total, usuarios, conteoPorRol] = await prisma.$transaction([
@@ -80,7 +99,7 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
     prisma.usuario.count({ where: whereBase }),
     
     // ✅ Usamos whereList para que la tabla sí reaccione a los clicks de los botones
-    prisma.usuario.findMany({
+prisma.usuario.findMany({
       where: whereList,
       take: limitNum,
       skip: offset,
@@ -94,11 +113,7 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
         departamentoId: true,
         departamento: { select: { id: true, nombre: true } },
       },
-      // Le decimos a Prisma: "Primero ordénalos por la jerarquía del rol, y luego alfabéticamente por nombre"
-      orderBy: [
-        { rol: "asc" }, 
-        { nombre: "asc" } 
-      ],
+      orderBy: { id: "desc" },
     }),
     
     // ✅ Usamos whereBase para que los números de las tarjetas no se pongan en 0

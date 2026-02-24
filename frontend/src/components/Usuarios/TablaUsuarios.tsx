@@ -17,6 +17,8 @@ interface TablaUsuariosProps {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  sortConfig: SortConfig;
+  onSortChange: (key: SortKey, direction: "asc" | "desc") => void;
 }
 
 // Configuración de tipos para el ordenamiento
@@ -35,6 +37,8 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
   page,
   totalPages,
   onPageChange,
+  sortConfig,    // ✅ RECIBIDO
+  onSortChange,
 }) => {
   // --- Estados Modales ---
   const [openModalEditar, setOpenModalEditar] = useState(false);
@@ -45,55 +49,56 @@ const TablaUsuarios: React.FC<TablaUsuariosProps> = ({
   const [usuarioAConfirmar, setUsuarioAConfirmar] = useState<Usuario | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
 
-  // --- Estado de Ordenamiento (Default: Rol Ascendente -> Admin primero) ---
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "rolJerarquia", direction: "asc" });
+  // const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "rolJerarquia", direction: "asc" });
 
   // --- Lógica de Ordenamiento ---
   const handleSort = (key: SortKey) => {
     let direction: "asc" | "desc" = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
+    // Si clickeas la misma columna que ya estaba activa, invertimos la dirección
+    if (sortConfig.key === key) {
+      direction = sortConfig.direction === "asc" ? "desc" : "asc";
     }
-    setSortConfig({ key, direction });
+    onSortChange(key, direction);
   };
 
   // --- Procesamiento de Datos (Ordenamiento del array actual) ---
-  const dataToShow = useMemo(() => {
-    // Hacemos una copia para no mutar los props
-    const sorted = [...usuarios];
+  // const dataToShow = useMemo(() => {
+  //   // Hacemos una copia para no mutar los props
+  //   const sorted = [...usuarios];
 
-    if (sortConfig !== null) {
-      sorted.sort((a, b) => {
-        // 1. Lógica especial para ROLES (Jerarquía personalizada)
-        if (sortConfig.key === "rolJerarquia") {
-          const roleWeight: Record<string, number> = {
-            [Rol.SUPER_ADMIN]: 0,
-            [Rol.ADMIN]: 1,
-            [Rol.ENCARGADO]: 2,
-            [Rol.USUARIO]: 3,
-            [Rol.INVITADO]: 4
-          };
+  //   if (sortConfig !== null) {
+  //     sorted.sort((a, b) => {
+  //       // 1. Lógica especial para ROLES (Jerarquía personalizada)
+  //       if (sortConfig.key === "rolJerarquia") {
+  //         const roleWeight: Record<string, number> = {
+  //           [Rol.SUPER_ADMIN]: 0,
+  //           [Rol.ADMIN]: 1,
+  //           [Rol.ENCARGADO]: 2,
+  //           [Rol.USUARIO]: 3,
+  //           [Rol.INVITADO]: 4
+  //         };
 
-          const weightA = roleWeight[a.rol] ?? 99;
-          const weightB = roleWeight[b.rol] ?? 99;
+  //         const weightA = roleWeight[a.rol] ?? 99;
+  //         const weightB = roleWeight[b.rol] ?? 99;
 
-          if (weightA < weightB) return sortConfig.direction === "asc" ? -1 : 1;
-          if (weightA > weightB) return sortConfig.direction === "asc" ? 1 : -1;
-          return 0;
-        }
+  //         if (weightA < weightB) return sortConfig.direction === "asc" ? -1 : 1;
+  //         if (weightA > weightB) return sortConfig.direction === "asc" ? 1 : -1;
+  //         return 0;
+  //       }
 
-        // 2. Lógica estándar para Strings (Nombre, Username, Estatus)
-        // Usamos una clave segura casteada a string para evitar errores de TS
-        const valA = String(a[sortConfig.key as keyof Usuario] || "").toLowerCase();
-        const valB = String(b[sortConfig.key as keyof Usuario] || "").toLowerCase();
+  //       // 2. Lógica estándar para Strings (Nombre, Username, Estatus)
+  //       // Usamos una clave segura casteada a string para evitar errores de TS
+  //       const valA = String(a[sortConfig.key as keyof Usuario] || "").toLowerCase();
+  //       const valB = String(b[sortConfig.key as keyof Usuario] || "").toLowerCase();
 
-        if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
-        if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
-        return 0;
-      });
-    }
-    return sorted;
-  }, [usuarios, sortConfig]);
+  //       if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+  //       if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+  //       return 0;
+  //     });
+  //   }
+  //   return sorted;
+  // }, [usuarios, sortConfig]);
+  const dataToShow = usuarios;
 
   // --- Handlers de Acción ---
   const abrirModalEditar = (usuario: Usuario) => {
