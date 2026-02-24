@@ -1,6 +1,6 @@
 // 📍 src/components/Admin/ModalExportar.tsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
 import { tareasService } from "../../api/tareas.service";
@@ -43,6 +43,7 @@ const formatearFechaExcel = (fechaStr: string | Date | null | undefined) => {
 type TipoRango = "HOY" | "ESTA_SEMANA" | "MES_ACTUAL" | "PERSONALIZADO" | "TODAS";
 
 const ModalExportar: React.FC<ModalExportarProps> = ({ onClose, user }) => {
+  const mouseDownInside = useRef(false);
   // --- ESTADOS: COLUMNA 1 (Fechas y Rangos) ---
   const [tipoFecha, setTipoFecha] = useState<"LIMITE" | "REGISTRO">("LIMITE");
   const [rango, setRango] = useState<TipoRango>("MES_ACTUAL");
@@ -262,10 +263,24 @@ const ModalExportar: React.FC<ModalExportarProps> = ({ onClose, user }) => {
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 cursor-pointer"
-      onClick={onClose}
+      // ✅ Quitamos onClick y agregamos los eventos del mouse
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          mouseDownInside.current = false;
+        }
+      }}
+      onMouseUp={(e) => {
+        if (!mouseDownInside.current && e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className="bg-white rounded-lg shadow-xl w-[90%] md:max-w-md lg:max-w-6xl relative flex flex-col max-h-[90vh] cursor-default"
+        // ✅ Agregamos onMouseDown a la caja blanca
+        onMouseDown={() => {
+          mouseDownInside.current = true;
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex-shrink-0 p-6 pb-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">

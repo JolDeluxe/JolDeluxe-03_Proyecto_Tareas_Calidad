@@ -1,6 +1,6 @@
 // 📍 src/components/Principal/ModalGaleria.tsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { Tarea } from "../../types/tarea";
 
 // Asegúrate de importar tu tipo ImagenTarea
@@ -18,6 +18,7 @@ const ModalGaleria: React.FC<ModalGaleriaProps> = ({
   onClose,
   tipo = "REFERENCIA", // Por defecto será referencia
 }) => {
+  const mouseDownInside = useRef(false);
   const [imagenes, setImagenes] = useState(initialImagenes);
   const [indiceActual, setIndiceActual] = useState(0);
 
@@ -61,11 +62,27 @@ const ModalGaleria: React.FC<ModalGaleriaProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[100] p-4"
-      onClick={onClose}
+      // Fondo oscuro
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4"
+      // ✅ 3. Quitamos onClick={onClose} y ponemos esto:
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          mouseDownInside.current = false;
+        }
+      }}
+      onMouseUp={(e) => {
+        if (!mouseDownInside.current && e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
+      {/* Contenedor del Modal (evita cierre al hacer clic) */}
       <div
-        className="relative bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+        className="relative bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col"
+        // ✅ 4. Agregamos onMouseDown a la caja blanca
+        onMouseDown={() => {
+          mouseDownInside.current = true;
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* --- HEADER DEL MODAL --- */}

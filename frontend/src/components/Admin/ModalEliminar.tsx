@@ -1,6 +1,6 @@
 // 📍 src/components/Admin/ModalEliminar.tsx
 
-import React from "react";
+import React, { useRef } from "react"; // <-- 1. Importar useRef
 
 interface ModalEliminarProps {
   onClose: () => void;
@@ -13,13 +13,31 @@ const ModalEliminar: React.FC<ModalEliminarProps> = ({
   onConfirm,
   tareaNombre,
 }) => {
+  // 2. Creamos una referencia para rastrear si el clic inició dentro del modal
+  const mouseDownInside = useRef(false);
+
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4 cursor-pointer"
-      onClick={onClose}
+      // 3. Controlamos dónde empieza y dónde termina el clic
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          mouseDownInside.current = false; // Empezó en el fondo oscuro
+        }
+      }}
+      onMouseUp={(e) => {
+        // Solo cerramos si NO empezó dentro y si soltamos en el fondo oscuro
+        if (!mouseDownInside.current && e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className="bg-white rounded-lg shadow-2xl w-[90%] max-w-lg relative flex flex-col animate-fade-in-up cursor-default overflow-hidden"
+        // 4. Marcamos que el clic empezó dentro del área blanca
+        onMouseDown={() => {
+          mouseDownInside.current = true;
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* HEADER */}

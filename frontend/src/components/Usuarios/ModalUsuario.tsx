@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from "react";
-// ❌ No importamos el Modal genérico para poder personalizar estilo y tamaño al 100%
+import React, { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
 import { usuariosService } from "../../api/usuarios.service";
 import type { Usuario, Rol } from "../../types/usuario";
@@ -15,6 +14,9 @@ interface Props {
 }
 
 const ModalUsuario = ({ isOpen, onClose, onSuccess, usuarioAEditar, currentUser, departamentos }: Props) => {
+
+  const mouseDownInside = useRef(false);
+
   // --- ESTADOS ---
   const [nombre, setNombre] = useState("");
   const [username, setUsername] = useState("");
@@ -181,11 +183,25 @@ const ModalUsuario = ({ isOpen, onClose, onSuccess, usuarioAEditar, currentUser,
     // 1. FONDO OSCURO Y BLUR (Igual a ModalNueva)
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      // ✅ 2. Reemplazamos onClick por onMouseDown y onMouseUp
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          mouseDownInside.current = false;
+        }
+      }}
+      onMouseUp={(e) => {
+        if (!mouseDownInside.current && e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       {/* 2. CONTENEDOR PRINCIPAL */}
       <div
         className="bg-white rounded-lg shadow-xl w-[95%] max-w-2xl relative flex flex-col max-h-[90vh]"
+        // ✅ 3. Agregamos onMouseDown aquí
+        onMouseDown={() => {
+          mouseDownInside.current = true;
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* 3. HEADER */}

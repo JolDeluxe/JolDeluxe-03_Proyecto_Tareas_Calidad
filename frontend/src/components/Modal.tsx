@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 
 interface ModalProps {
   // Se elimina 'isOpen' ya que el componente padre lo controla
@@ -12,15 +12,31 @@ interface ModalProps {
 const Modal: React.FC<ModalProps> = ({ onClose, children, title }) => {
   // Se elimina el chequeo de if (!isOpen) return null;
 
+  const mouseDownInside = useRef(false);
+
   return (
     <div
       // Se añade p-4 para un mejor espaciado en móviles
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      // ✅ 3. Reemplazamos onClick por onMouseDown y onMouseUp
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          mouseDownInside.current = false;
+        }
+      }}
+      onMouseUp={(e) => {
+        if (!mouseDownInside.current && e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         // Se añade overflow-hidden para asegurar bordes redondeados limpios
         className="bg-white rounded-lg shadow-xl w-[90%] max-w-md overflow-hidden"
+        // ✅ 4. Agregamos onMouseDown
+        onMouseDown={() => {
+          mouseDownInside.current = true;
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ✅ Encabezado con título y botón de cierre */}

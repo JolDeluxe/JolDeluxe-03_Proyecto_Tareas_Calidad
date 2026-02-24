@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import type { Usuario } from "../../types/usuario";
 
 interface Props {
@@ -16,6 +16,8 @@ const ModalConfirmarEstatus: React.FC<Props> = ({
   usuario,
   isSubmitting,
 }) => {
+  const mouseDownInside = useRef(false);
+
   if (!isOpen || !usuario) return null;
 
   const esActivo = usuario.estatus === "ACTIVO";
@@ -23,16 +25,29 @@ const ModalConfirmarEstatus: React.FC<Props> = ({
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          mouseDownInside.current = false;
+        }
+      }}
+      onMouseUp={(e) => {
+        if (!mouseDownInside.current && e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className="bg-white rounded-lg shadow-xl w-[90%] max-w-md p-6 relative"
+        // ✅ 4. Agregamos el onMouseDown para marcar que el clic empezó adentro
+        onMouseDown={() => {
+          mouseDownInside.current = true;
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Botón cerrar */}
         <button
           onClick={onClose}
-          className="absolute top-2 right-3 text-gray-500 hover:text-gray-800 text-lg font-bold"
+          className="absolute top-2 right-3 text-gray-500 hover:text-gray-800 text-lg font-bold cursor-pointer transition-colors duration-200"
           disabled={isSubmitting}
         >
           ×

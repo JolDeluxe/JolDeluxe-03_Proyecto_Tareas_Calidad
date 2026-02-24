@@ -1,6 +1,6 @@
 // 📍 src/components/Admin/ModalNueva.tsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -54,6 +54,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   onTareaAgregada,
   user,
 }) => {
+  const mouseDownInside = useRef(false);
   // --- Estados del formulario ---
   const [nombre, setNombre] = useState("");
   const [isKaizen, setIsKaizen] = useState(false);
@@ -405,16 +406,30 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      // ✅ Quitamos onClick y agregamos los eventos del mouse
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          mouseDownInside.current = false;
+        }
+      }}
+      onMouseUp={(e) => {
+        if (!mouseDownInside.current && e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className="bg-white rounded-lg shadow-xl w-[90%] md:max-w-md lg:max-w-6xl relative flex flex-col max-h-[90vh]"
+        // ✅ Agregamos onMouseDown a la caja blanca
+        onMouseDown={() => {
+          mouseDownInside.current = true;
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex-shrink-0 p-6 pb-4 border-b border-gray-200">
           <button
             onClick={onClose}
-            className="absolute top-2 right-3 text-gray-500 hover:text-gray-800 text-lg font-bold"
+            className="absolute top-2 right-3 text-gray-500 hover:text-gray-800 text-lg font-bold cursor-pointer"
             aria-label="Cerrar modal"
             disabled={loading}
           >
@@ -901,14 +916,14 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-2 rounded-md transition-all duration-200 disabled:opacity-70"
+              className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold px-4 py-2 rounded-md transition-all duration-200 disabled:opacity-70 cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className={`${loading ? "opacity-70 cursor-not-allowed" : "hover:bg-green-700"
+              className={`${loading ? "opacity-70 cursor-not-allowed" : "hover:bg-green-700 cursor-pointer"
                 } bg-green-600 text-white font-semibold px-4 py-2 rounded-md transition-all duration-200`}
             >
               {loading ? "Guardando..." : "Guardar"}

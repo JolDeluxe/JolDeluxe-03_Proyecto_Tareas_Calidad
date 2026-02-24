@@ -1,6 +1,6 @@
 // 📍 src/components/Admin/ModalEditar.tsx
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { toast } from "react-toastify";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -62,6 +62,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   tarea,
   user,
 }) => {
+
+  const mouseDownInside = useRef(false);
+
   // --- Estados del formulario ---
   const [nombre, setNombre] = useState("");
   const [comentario, setComentario] = useState("");
@@ -458,10 +461,24 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      // ✅ Quitamos onClick y agregamos los eventos del mouse
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          mouseDownInside.current = false;
+        }
+      }}
+      onMouseUp={(e) => {
+        if (!mouseDownInside.current && e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className="bg-white rounded-lg shadow-xl w-[90%] md:max-w-md lg:max-w-6xl relative flex flex-col max-h-[90vh]"
+        // ✅ Agregamos onMouseDown a la caja blanca
+        onMouseDown={() => {
+          mouseDownInside.current = true;
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex-shrink-0 p-6 pb-4 border-b border-gray-200">

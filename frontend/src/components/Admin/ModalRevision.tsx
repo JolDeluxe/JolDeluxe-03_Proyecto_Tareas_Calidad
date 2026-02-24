@@ -1,6 +1,6 @@
 // 📍 src/components/Admin/ModalRevision.tsx
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import type { Tarea, ImagenTarea } from "../../types/tarea";
 import { tareasService } from "../../api/tareas.service";
 
@@ -17,6 +17,9 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
   onSuccess,
   onVerImagenes,
 }) => {
+
+  const mouseDownInside = useRef(false);
+
   const [decision, setDecision] = useState<"APROBAR" | "RECHAZAR">("APROBAR");
   const [feedback, setFeedback] = useState(tarea.feedbackRevision || "");
   const [nuevaFechaLimite, setNuevaFechaLimite] = useState<string>("");
@@ -93,10 +96,24 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      // ✅ Quitamos onClick y agregamos los eventos del mouse
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          mouseDownInside.current = false;
+        }
+      }}
+      onMouseUp={(e) => {
+        if (!mouseDownInside.current && e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className="bg-white rounded-lg shadow-xl w-[90%] max-w-md relative flex flex-col max-h-[90vh]"
+        // ✅ Agregamos onMouseDown a la caja blanca
+        onMouseDown={() => {
+          mouseDownInside.current = true;
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* HEADER */}
