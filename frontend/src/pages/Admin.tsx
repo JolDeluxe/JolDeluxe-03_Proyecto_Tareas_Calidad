@@ -200,6 +200,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
       const apiFilters: TareaFilters = {
         query: query,
         responsableId: responsable !== "Todos" ? Number(responsable) : undefined,
+        asignadorId: asignador !== "Todos" ? Number(asignador) : undefined,
         limit: 1000,
         fechaInicio: fechaInicioStr,
         fechaFin: fechaFinStr
@@ -235,7 +236,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     } finally {
       setLoading(false);
     }
-  }, [responsable, query, year, month]);
+  }, [responsable, asignador, query, year, month]);
 
   useEffect(() => {
     fetchTareas();
@@ -243,7 +244,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
   useEffect(() => {
     setPage(1);
-  }, [filtro, responsable, query, isKaizen, verCanceladas]);
+  }, [filtro, responsable, asignador, query, isKaizen, verCanceladas]);
 
   // --- Lógica de Filtrado Visual (Cliente) ---
   const tareasFiltradas = useMemo(() => {

@@ -10,6 +10,8 @@ import type { Tarea, Estatus, Urgencia } from "../../types/tarea";
 import type { Usuario } from "../../types/usuario";
 import { Rol } from "../../types/usuario";
 
+import { BUSINESS_RULES } from "../../config/businessRules";
+
 interface ModalNuevaProps {
   onClose: () => void;
   onTareaAgregada: () => void;
@@ -85,12 +87,14 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // ✅ NUEVA LÓGICA DE VISUALIZACIÓN DE NOMBRES
   const getDisplayName = (userToDisplay: Usuario): string => {
     if (isKaizen) {
       return userToDisplay.nombre;
     }
     // Etiquetas globales para todos los departamentos
+    if (userToDisplay.rol === Rol.ADMIN) {
+      return `${userToDisplay.nombre} (Gestión)`;
+    }
     if (userToDisplay.rol === Rol.ENCARGADO) {
       return `${userToDisplay.nombre} (Supervisión)`;
     }
@@ -100,8 +104,10 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     return userToDisplay.nombre;
   };
 
-  // ✅ NUEVA LÓGICA DE COLORES (Azul y Rosa)
   const getRoleColorClass = (userToDisplay: Usuario): string => {
+    if (userToDisplay.rol === Rol.ADMIN) {
+      return "text-yellow-700 font-bold"; // Amarillo Gestión (font-bold para que resalte más)
+    }
     if (userToDisplay.rol === Rol.ENCARGADO) {
       return "text-blue-700 font-semibold"; // Azul Supervisión
     }
@@ -130,16 +136,24 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
         // ✅ REGLAS DE VISIBILIDAD (FILTRADO)
         let usuariosVisibles = [];
 
+        // 1. Validamos si el departamento tiene la regla especial (Ej. Pieles)
+        const nombreDeptoUser = user?.departamento?.nombre || "";
+        const esAsignacionEspecial = BUSINESS_RULES.departamentosAsignacionJerarquiaLibre.includes(nombreDeptoUser);
+
         if (user.rol === Rol.ADMIN) {
-          // Admin ve: ENCARGADOS y USUARIOS. (No ve otros Admins)
-          usuariosVisibles = internos.filter(u =>
-            u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
-          );
+          const rolesPermitidos: Rol[] = esAsignacionEspecial
+            ? [Rol.ADMIN, Rol.ENCARGADO, Rol.USUARIO]
+            : [Rol.ENCARGADO, Rol.USUARIO];
+
+          usuariosVisibles = internos.filter(u => rolesPermitidos.includes(u.rol));
+
         } else if (user.rol === Rol.ENCARGADO) {
-          // Encargado ve: ENCARGADOS y USUARIOS. (No ve Admins)
-          usuariosVisibles = internos.filter(u =>
-            u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
-          );
+          const rolesPermitidos: Rol[] = esAsignacionEspecial
+            ? [Rol.ADMIN, Rol.ENCARGADO, Rol.USUARIO]
+            : [Rol.ENCARGADO, Rol.USUARIO];
+
+          usuariosVisibles = internos.filter(u => rolesPermitidos.includes(u.rol));
+
         } else {
           // Fallback para SuperAdmin u otros (ven todo)
           usuariosVisibles = internos;

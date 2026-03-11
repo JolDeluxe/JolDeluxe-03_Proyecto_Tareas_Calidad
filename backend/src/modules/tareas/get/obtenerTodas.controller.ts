@@ -4,6 +4,7 @@ import { prisma } from "../../../config/db.js";
 import { safeAsync } from "../../../utils/safeAsync.js";
 import { getTareasQuerySchema } from "../schemas/tarea.schema.js";
 import { tareaConRelacionesInclude } from "../helpers/prisma.constants.js";
+import { BUSINESS_RULES } from "../../../config/businessRules.js";
 
 // Estructura para el desglose individual (por depto o usuario)
 interface BreakdownMetrics {
@@ -72,6 +73,8 @@ export const obtenerTodas = safeAsync(async (req: Request, res: Response) => {
 
   // 2. Lógica de "Calidad" (Permite ver KAIZEN)
   let esDepartamentoCalidad = false;
+  let esAsignacionEspecial = false;
+
   if (user.rol === "SUPER_ADMIN") {
     esDepartamentoCalidad = true;
   } else if (user.departamentoId) {
@@ -79,8 +82,13 @@ export const obtenerTodas = safeAsync(async (req: Request, res: Response) => {
       where: { id: user.departamentoId },
       select: { nombre: true },
     });
-    if (depto?.nombre?.toUpperCase().includes("CALIDAD")) {
-      esDepartamentoCalidad = true;
+    if (depto) {
+      if (depto.nombre.toUpperCase().includes("CALIDAD")) {
+        esDepartamentoCalidad = true;
+      }
+      if (BUSINESS_RULES.departamentosAsignacionJerarquiaLibre.includes(depto.nombre)) {
+        esAsignacionEspecial = true;
+      }
     }
   }
 
@@ -180,8 +188,11 @@ export const obtenerTodas = safeAsync(async (req: Request, res: Response) => {
         break;
       default: // "TODAS"
         if (user.rol === "ENCARGADO") {
-          // Encargado ve todo MENOS lo de los Admins
-          andClauses.push({ responsables: { none: { usuario: { rol: "ADMIN" } } } });
+          // Encargado ve todo MENOS lo de los Admins, 
+          // a MENOS que sea un departamento con jerarquía libre (como Pieles).
+          if (!esAsignacionEspecial) {
+            andClauses.push({ responsables: { none: { usuario: { rol: "ADMIN" } } } });
+          }
         }
         break;
     }

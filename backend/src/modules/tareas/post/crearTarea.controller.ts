@@ -2,11 +2,11 @@ import type { Request, Response } from "express";
 import { prisma } from "../../../config/db.js";
 import { safeAsync } from "../../../utils/safeAsync.js";
 import { crearTareaSchema } from "../schemas/tarea.schema.js"; 
-import { 
-  tareaConRelacionesInclude 
-} from "../helpers/prisma.constants.js";
+import { tareaConRelacionesInclude } from "../helpers/prisma.constants.js";
 import { sendNotificationToUsers } from "../helpers/notificaciones.helper.js";
 import { registrarBitacora } from "../../../services/logger.service.js"; 
+// 👇 Importamos las reglas de negocio
+import { BUSINESS_RULES } from "../../../config/businessRules.js";
 
 export const crearTarea = safeAsync(async (req: Request, res: Response) => {
   const user = req.user!;
@@ -37,32 +37,56 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Uno o más responsables no existen o están inactivos." });
   }
 
-  // Validación jerárquica
+  // 🔹 NUEVO: Identificar si el departamento actual usa la regla de asignación especial
+  const departamentoAsignado = await prisma.departamento.findUnique({
+    where: { id: departamentoId },
+    select: { nombre: true }
+  });
+
+  const esAsignacionEspecial = departamentoAsignado 
+    ? BUSINESS_RULES.departamentosAsignacionJerarquiaLibre.includes(departamentoAsignado.nombre)
+    : false;
+
+  // Validación jerárquica actualizada
   for (const responsable of usuariosResponsables) {
+    let valido = false;
+
     if (user.rol === "ADMIN") {
-      const valido = 
-        (responsable.departamentoId === user.departamentoId && ["ENCARGADO", "USUARIO"].includes(responsable.rol)) ||
-        responsable.rol === "INVITADO";
+      const rolesPermitidos = esAsignacionEspecial 
+        ? ["ADMIN", "ENCARGADO", "USUARIO"] // Pieles: Permite ADMIN
+        : ["ENCARGADO", "USUARIO"];         // Normal
+        
+      valido = (responsable.departamentoId === user.departamentoId && rolesPermitidos.includes(responsable.rol)) || responsable.rol === "INVITADO";
       
-      if (!valido) return res.status(403).json({ error: `No puedes asignar al usuario ID ${responsable.id} por reglas de jerarquía.` });
+    } else if (user.rol === "ENCARGADO") {
+      const rolesPermitidos = esAsignacionEspecial 
+        ? ["ADMIN", "ENCARGADO", "USUARIO"] // Pieles: Permite ADMIN y otros ENCARGADOS
+        : ["ENCARGADO", "USUARIO"];         // Normal
+        
+      valido = (responsable.departamentoId === user.departamentoId && rolesPermitidos.includes(responsable.rol)) || responsable.rol === "INVITADO";
+      
+    } else if (user.rol === "SUPER_ADMIN") {
+      valido = true;
+    }
+
+    if (!valido) {
+      return res.status(403).json({ 
+        error: `No puedes asignar al usuario ${responsable.nombre} (${responsable.rol}) por reglas de jerarquía en el departamento ${departamentoAsignado?.nombre}.` 
+      });
     }
   }
 
   // 3. --- LÓGICA DE TIEMPO (11:59:59 PM) ---
   const fechaLimiteFinal = new Date(data.fechaLimite);
-  
-  // Si la hora es 00:00:00 (o muy cercano), asumimos que el usuario eligió solo fecha
-  // y otorgamos hasta el final del día.
   if (fechaLimiteFinal.getHours() === 0 && fechaLimiteFinal.getMinutes() === 0) {
       fechaLimiteFinal.setHours(23, 59, 59, 999);
   }
-  // ------------------------------------------
 
   // 4. Crear en BD
   const nuevaTarea = await prisma.tarea.create({
     data: {
       ...data,
-      fechaLimite: fechaLimiteFinal, // Usamos la fecha ajustada
+      fechaLimite: fechaLimiteFinal,
       observaciones: observaciones ?? null,
       fechaRegistro: new Date(),
       asignador: { connect: { id: user.id } },
@@ -91,11 +115,7 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
     "CREAR_TAREA",
     `${user.nombre} creó la tarea "${nuevaTarea.tarea}" y la asignó a: ${nombresAsignados}.`,
     user.id,
-    { 
-        tareaId: nuevaTarea.id, 
-        departamento: nuevaTarea.departamento.nombre,
-        responsablesIds: responsables 
-    }
+    { tareaId: nuevaTarea.id, departamento: nuevaTarea.departamento.nombre, responsablesIds: responsables }
   );
 
   // 6. Respuesta limpia

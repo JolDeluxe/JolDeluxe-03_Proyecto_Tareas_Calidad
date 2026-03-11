@@ -10,6 +10,8 @@ import type { Tarea, Urgencia } from "../../types/tarea";
 import type { Usuario } from "../../types/usuario";
 import { Rol } from "../../types/usuario";
 
+import { BUSINESS_RULES } from "../../config/businessRules";
+
 interface ModalEditarProps {
   onClose: () => void;
   onSuccess: () => void;
@@ -113,6 +115,10 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     if (isKaizen) {
       return userToDisplay.nombre;
     }
+    // Etiquetas globales para todos los departamentos
+    if (userToDisplay.rol === Rol.ADMIN) {
+      return `${userToDisplay.nombre} (Gestión)`;
+    }
     if (userToDisplay.rol === Rol.ENCARGADO) {
       return `${userToDisplay.nombre} (Supervisión)`;
     }
@@ -123,11 +129,14 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   };
 
   const getRoleColorClass = (userToDisplay: Usuario): string => {
+    if (userToDisplay.rol === Rol.ADMIN) {
+      return "text-yellow-700 font-bold"; // Amarillo Gestión (font-bold para que resalte más)
+    }
     if (userToDisplay.rol === Rol.ENCARGADO) {
-      return "text-blue-700 font-semibold";
+      return "text-blue-700 font-semibold"; // Azul Supervisión
     }
     if (userToDisplay.rol === Rol.USUARIO) {
-      return "text-rose-700 font-semibold";
+      return "text-rose-700 font-semibold"; // Rosa Operativo
     }
     return "text-gray-800";
   };
@@ -179,14 +188,23 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
 
         let usuariosVisibles = [];
 
+        const nombreDeptoUser = user?.departamento?.nombre || "";
+        const esAsignacionEspecial = BUSINESS_RULES.departamentosAsignacionJerarquiaLibre.includes(nombreDeptoUser);
+
         if (user.rol === Rol.ADMIN) {
-          usuariosVisibles = internos.filter(u =>
-            u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
-          );
+          const rolesPermitidos: Rol[] = esAsignacionEspecial
+            ? [Rol.ADMIN, Rol.ENCARGADO, Rol.USUARIO]
+            : [Rol.ENCARGADO, Rol.USUARIO];
+
+          usuariosVisibles = internos.filter(u => rolesPermitidos.includes(u.rol));
+
         } else if (user.rol === Rol.ENCARGADO) {
-          usuariosVisibles = internos.filter(u =>
-            u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
-          );
+          const rolesPermitidos: Rol[] = esAsignacionEspecial
+            ? [Rol.ADMIN, Rol.ENCARGADO, Rol.USUARIO]
+            : [Rol.ENCARGADO, Rol.USUARIO];
+
+          usuariosVisibles = internos.filter(u => rolesPermitidos.includes(u.rol));
+
         } else {
           usuariosVisibles = internos;
         }

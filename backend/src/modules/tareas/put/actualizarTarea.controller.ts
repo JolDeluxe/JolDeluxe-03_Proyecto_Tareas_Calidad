@@ -5,6 +5,8 @@ import { paramsSchema, actualizarTareaSchema } from "../schemas/tarea.schema.js"
 import { tareaConRelacionesInclude } from "../helpers/prisma.constants.js";
 import { sendNotificationToUsers } from "../helpers/notificaciones.helper.js";
 import { registrarBitacora } from "../../../services/logger.service.js"; 
+// 👇 Importamos las reglas de negocio
+import { BUSINESS_RULES } from "../../../config/businessRules.js";
 
 export const actualizarTarea = safeAsync(async (req: Request, res: Response) => {
   // 1. Validar ID y Body
@@ -31,8 +33,6 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
   if (!tareaExistente) return res.status(404).json({ error: "Tarea no encontrada" });
 
   // 3. --- INMUTABILIDAD (El Candado) ---
-  // Si la tarea ya finalizó o se canceló, NADIE la puede tocar.
-  // TypeScript deduce aquí que si pasa este if, el estatus NO es CONCLUIDA ni CANCELADA.
   if (tareaExistente.estatus === "CONCLUIDA" || tareaExistente.estatus === "CANCELADA") {
     return res.status(400).json({ 
         error: `No se puede modificar una tarea con estatus ${tareaExistente.estatus}.` 
@@ -48,7 +48,7 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
     return res.status(403).json({ error: "No tienes permiso para editar esta tarea." });
   }
 
-  // 5. Restricciones específicas de ENCARGADO
+  // 5. Restricciones específicas de ENCARGADO (No puede editar lo de un superior)
   if (user.rol === "ENCARGADO") {
     const rolCreador = tareaExistente.asignador?.rol;
     if (rolCreador === "ADMIN" || rolCreador === "SUPER_ADMIN") {
@@ -65,7 +65,6 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
   // --- MANEJO DE FECHA LÍMITE (11:59:59 PM) ---
   if (fechaLimite) {
     const nuevaFecha = new Date(fechaLimite);
-    // Si la hora es 00:00 (usuario seleccionó solo fecha), damos hasta el final del día.
     if (nuevaFecha.getHours() === 0 && nuevaFecha.getMinutes() === 0) {
         nuevaFecha.setHours(23, 59, 59, 999);
     }
@@ -75,12 +74,9 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
 
   // Cambio de Estatus
   if (validatedBody.estatus) {
-    // ✅ CORRECCIÓN: Eliminamos la redundancia "&& tareaExistente.estatus !== 'CONCLUIDA'"
-    // TypeScript ya sabe que NO está CONCLUIDA gracias al "Candado" del paso 3.
     if (validatedBody.estatus === "CONCLUIDA") {
       dataParaActualizar.fechaConclusion = new Date();
     } else {
-      // Si cambia a PENDIENTE, EN_REVISION, etc., nos aseguramos de limpiar la fecha de conclusión.
       dataParaActualizar.fechaConclusion = null;
     }
   }
@@ -91,9 +87,50 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
     dataParaActualizar.departamento = { connect: { id: validatedBody.departamentoId } };
   }
 
-  // Cambio de Responsables (Lógica para transacción)
+  // Cambio de Responsables (Lógica para transacción con REGLA DE PIELES)
   let nuevosResponsablesIds: number[] = [];
   if (responsables) {
+    // ---- NUEVA VALIDACIÓN DE JERARQUÍA ----
+    const deptIdAUsar = validatedBody.departamentoId || tareaExistente.departamentoId;
+    
+    const usuariosResponsables = await prisma.usuario.findMany({
+      where: { id: { in: responsables }, estatus: "ACTIVO" },
+      select: { id: true, rol: true, departamentoId: true, nombre: true }, 
+    });
+
+    if (usuariosResponsables.length !== responsables.length) {
+      return res.status(400).json({ error: "Uno o más responsables no existen o están inactivos." });
+    }
+
+    const departamentoAsignado = await prisma.departamento.findUnique({
+      where: { id: deptIdAUsar },
+      select: { nombre: true }
+    });
+
+    const esAsignacionEspecial = departamentoAsignado 
+      ? BUSINESS_RULES.departamentosAsignacionJerarquiaLibre.includes(departamentoAsignado.nombre)
+      : false;
+
+    for (const responsable of usuariosResponsables) {
+      let valido = false;
+      if (user.rol === "ADMIN") {
+        const rolesPermitidos = esAsignacionEspecial ? ["ADMIN", "ENCARGADO", "USUARIO"] : ["ENCARGADO", "USUARIO"];
+        valido = (responsable.departamentoId === deptIdAUsar && rolesPermitidos.includes(responsable.rol)) || responsable.rol === "INVITADO";
+      } else if (user.rol === "ENCARGADO") {
+        const rolesPermitidos = esAsignacionEspecial ? ["ADMIN", "ENCARGADO", "USUARIO"] : ["ENCARGADO", "USUARIO"];
+        valido = (responsable.departamentoId === deptIdAUsar && rolesPermitidos.includes(responsable.rol)) || responsable.rol === "INVITADO";
+      } else if (user.rol === "SUPER_ADMIN") {
+        valido = true;
+      }
+
+      if (!valido) {
+        return res.status(403).json({ 
+          error: `No puedes asignar al usuario ${responsable.nombre} (${responsable.rol}) por reglas de jerarquía.` 
+        });
+      }
+    }
+    // ------------------------------------------------
+
     nuevosResponsablesIds = responsables; // Guardamos para usar en notificaciones
     dataParaActualizar.responsables = {
       deleteMany: {},
@@ -109,7 +146,6 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
   });
 
   // 8. Notificaciones y Logs
-  
   // A. Si se asignaron NUEVOS responsables
   if (nuevosResponsablesIds.length > 0) {
      sendNotificationToUsers(
