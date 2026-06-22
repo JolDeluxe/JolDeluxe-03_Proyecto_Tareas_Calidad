@@ -4,6 +4,7 @@ import { safeAsync } from "../../../utils/safeAsync.js";
 import { paramsSchema, revisionTareaSchema } from "../schemas/tarea.schema.js";
 import { sendNotificationToUsers } from "../helpers/notificaciones.helper.js";
 import { registrarBitacora } from "../../../services/logger.service.js";
+import { puedeRevisarOAutorizarTarea } from "../helpers/permisosTareas.helper.js";
 
 export const revisionTarea = safeAsync(async (req: Request, res: Response) => {
   const { id: tareaId } = paramsSchema.parse(req.params);
@@ -17,22 +18,20 @@ export const revisionTarea = safeAsync(async (req: Request, res: Response) => {
   const { decision, feedback, nuevaFechaLimite } = bodyParse.data;
   const user = req.user!;
 
-  // 1. Obtener tarea
+  // 1. Obtener tarea con información del asignador
   const tarea = await prisma.tarea.findUnique({
     where: { id: tareaId },
     include: { 
         responsables: { select: { usuarioId: true } },
-        departamento: { select: { nombre: true } }
+        departamento: { select: { nombre: true } },
+        asignador: { select: { id: true, rol: true, departamentoId: true } }
     },
   });
 
   if (!tarea) return res.status(404).json({ error: "Tarea no encontrada" });
 
-  // 2. Permisos: Super Admin, Admin del mismo depto, o el Asignador original
-  const permitido = 
-    user.rol === "SUPER_ADMIN" || 
-    (user.rol === "ADMIN" && tarea.departamentoId === user.departamentoId) ||
-    tarea.asignadorId === user.id;
+  // En tareas externas, solo revisa/autoriza el departamento origen.
+  const permitido = puedeRevisarOAutorizarTarea(tarea, user);
 
   if (!permitido) return res.status(403).json({ error: "No tienes permiso para revisar esta tarea." });
 

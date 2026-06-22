@@ -25,6 +25,9 @@ export const deptoSchema = z.object({
 // Esquema para actualizar (PUT)
 export const actualizarDeptoSchema = deptoSchema
   .partial()
-  .refine((data) => data.nombre !== undefined || data.tipo !== undefined, {
-    message: "Debe proporcionar al menos un campo (nombre o tipo) para actualizar.",
+  .extend({
+    tareasExternasHabilitadas: z.boolean().optional(),
+  })
+  .refine((data) => data.nombre !== undefined || data.tipo !== undefined || data.tareasExternasHabilitadas !== undefined, {
+    message: "Debe proporcionar al menos un campo para actualizar.",
   });

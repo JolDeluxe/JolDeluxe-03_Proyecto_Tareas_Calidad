@@ -64,7 +64,26 @@ export const obtenerKPIs = safeAsync(async (req: Request, res: Response) => {
 
   // Filtro de Departamento (Si aplica)
   if (deptoObjetivo) {
-    where.departamentoId = deptoObjetivo;
+    if (user.rol === "SUPER_ADMIN") {
+      where.departamentoId = deptoObjetivo;
+    } else {
+      // Para ADMIN/ENCARGADO, si puede asignar externas, mostramos:
+      // tareas de su depto OR tareas que él asignó.
+      const deptoUsuario = await prisma.departamento.findUnique({
+        where: { id: user.departamentoId! },
+        select: { tareasExternasHabilitadas: true }
+      });
+      const puedeAsignarExternas = deptoUsuario?.tareasExternasHabilitadas || false;
+
+      if (puedeAsignarExternas) {
+        where.OR = [
+          { departamentoId: user.departamentoId! },
+          { asignadorId: user.id }
+        ];
+      } else {
+        where.departamentoId = user.departamentoId!;
+      }
+    }
   }
 
   // Filtro de seguridad para roles bajos (si no es admin/encargado)
@@ -73,6 +92,45 @@ export const obtenerKPIs = safeAsync(async (req: Request, res: Response) => {
       { asignadorId: user.id },
       { responsables: { some: { usuarioId: user.id } } }
     ];
+  }
+
+  // Regla Anti-KAIZEN (solo si NO es de calidad/superadmin)
+  let esDepartamentoCalidad = false;
+  if (user.rol === "SUPER_ADMIN") {
+    esDepartamentoCalidad = true;
+  } else if (user.departamentoId) {
+    const depto = await prisma.departamento.findUnique({
+      where: { id: user.departamentoId },
+      select: { nombre: true },
+    });
+    if (depto?.nombre.toUpperCase().includes("CALIDAD")) {
+      esDepartamentoCalidad = true;
+    }
+  }
+
+  if (!esDepartamentoCalidad) {
+    const antiKaizenRule: Prisma.TareaWhereInput = {
+      OR: [
+        { tarea: { not: { startsWith: "KAIZEN" } } },
+        {
+          AND: [
+            { tarea: { startsWith: "KAIZEN" } },
+            { responsables: { some: { usuarioId: user.id } } },
+          ],
+        },
+      ],
+    };
+
+    if (where.OR) {
+      const existingOR = where.OR;
+      delete where.OR;
+      where.AND = [
+        { OR: existingOR },
+        antiKaizenRule
+      ];
+    } else {
+      where.AND = [antiKaizenRule];
+    }
   }
 
   // 3. Consultar Tareas

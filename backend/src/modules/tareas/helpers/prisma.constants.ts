@@ -3,7 +3,15 @@ import { Prisma } from "@prisma/client";
 // Include para listas y creación/edición
 export const tareaConRelacionesInclude = {
   departamento: { select: { id: true, nombre: true } },
-  asignador: { select: { id: true, nombre: true, rol: true } },
+  asignador: { 
+    select: { 
+      id: true, 
+      nombre: true, 
+      rol: true,
+      departamentoId: true,
+      departamento: { select: { nombre: true } }
+    } 
+  },
   responsables: {
     select: {
       usuario: { select: { id: true, nombre: true, rol: true } },

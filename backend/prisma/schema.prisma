@@ -59,6 +59,7 @@ model Departamento {
   nombre        String   @unique
   fechaCreacion DateTime @default(now())
   fechaEdicion  DateTime @default(now())
+  tareasExternasHabilitadas Boolean @default(false)
 
   usuarios Usuario[]
   tareas   Tarea[]

@@ -1,17 +1,21 @@
 // 📍 src/components/Admin/ModalEliminar.tsx
 
-import React, { useRef } from "react"; // <-- 1. Importar useRef
+import React, { useRef } from "react";
+import type { Tarea } from "../../types/tarea";
+import { getTareaExternaInfo, getBadgeClasses } from "../../utils/tareasExternas";
 
 interface ModalEliminarProps {
   onClose: () => void;
   onConfirm: () => void;
   tareaNombre: string;
+  tarea?: Tarea; // ✅ NUEVO
 }
 
 const ModalEliminar: React.FC<ModalEliminarProps> = ({
   onClose,
   onConfirm,
   tareaNombre,
+  tarea,
 }) => {
   // 2. Creamos una referencia para rastrear si el clic inició dentro del modal
   const mouseDownInside = useRef(false);
@@ -74,6 +78,18 @@ const ModalEliminar: React.FC<ModalEliminarProps> = ({
 
         {/* BODY */}
         <div className="p-6 text-gray-800">
+          {tarea && (() => {
+            const info = getTareaExternaInfo(tarea);
+            if (!info.esExterna) return null;
+            const classes = getBadgeClasses(info.esKaizen);
+            return (
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${classes.bg} ${classes.text} ${classes.border} mb-3 animate-fadeIn`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${classes.dot}`} />
+                {info.label}
+              </div>
+            );
+          })()}
+
           <p className="text-base text-gray-700 leading-relaxed mb-4">
             Estás a punto de enviar esta tarea a la papelera. Su estatus cambiará a <span className="font-bold text-red-700">CANCELADA</span>.
           </p>

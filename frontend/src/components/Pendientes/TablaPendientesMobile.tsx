@@ -8,12 +8,13 @@ import type {
   ImagenTarea,
 } from "../../types/tarea";
 import type { Usuario } from "../../types/usuario";
+import { getTareaExternaInfo, getBadgeClasses, puedeRevisarTarea, esResponsableDeTarea } from "../../utils/tareasExternas";
 
 interface TablaPendientesMobileProps {
   tareas: Tarea[];
   user: Usuario | null;
   formateaFecha: (fecha?: Date | string | null) => string;
-  getRowClass: (estatus: Estatus) => string;
+  getRowClass: (estatus: Estatus, tarea?: Tarea) => string;
   getFechaFinalObj: (row: Tarea) => Date | string | null;
   getEstadoFecha: (
     fechaLimiteObj: Date | string | null
@@ -215,22 +216,39 @@ const TablaPendientesMobile: React.FC<TablaPendientesMobileProps> = ({
             labelColumna = "Cancelación";
           }
 
-          const isResponsable = row.responsables.some((r) => r.id === user?.id);
-          const canReview =
-            row.asignadorId === user?.id ||
-            user?.rol === "ADMIN" ||
-            user?.rol === "SUPER_ADMIN";
+          const isResponsable = esResponsableDeTarea(row, user);
+          const canReview = puedeRevisarTarea(row, user);
 
           return (
             <div
               key={row.id}
-              className={`border border-gray-300 shadow-sm p-4 rounded-md ${getRowClass(row.estatus)}`}
+              className={`border border-gray-300 shadow-sm p-4 rounded-md ${getRowClass(row.estatus, row)}`}
             >
               {/* --- CABECERA (Como en Admin) --- */}
               <div className="flex justify-between items-start mb-2">
-                <h3 className="font-bold text-gray-800 text-base leading-snug w-[75%] break-words">
-                  {row.tarea}
-                </h3>
+                <div className="flex flex-col gap-1.5 w-[75%]">
+                  <h3 className="font-bold text-gray-800 text-base leading-snug break-words">
+                    {row.tarea}
+                  </h3>
+                  <div className="flex flex-wrap gap-1">
+                    {(user?.rol === "SUPER_ADMIN" || (user?.departamento?.nombre || "").toUpperCase().includes("CALIDAD")) && (
+                      <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase border border-slate-300 bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 leading-none">
+                        ÁREA · {row.departamento?.nombre || "N/A"}
+                      </span>
+                    )}
+                    {(() => {
+                      const info = getTareaExternaInfo(row);
+                      if (!info.esExterna) return null;
+                      const classes = getBadgeClasses(info.esKaizen);
+                      return (
+                        <span className={`w-fit inline-flex items-center gap-1 text-[9px] font-black uppercase border rounded px-1.5 py-0.5 leading-none ${classes.bg} ${classes.text} ${classes.border}`}>
+                          <span className={`w-1 h-1 rounded-full ${classes.dot}`} />
+                          {info.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
                 <span
                   className={`flex-shrink-0 px-2 py-0.5 text-xs font-semibold ${row.urgencia === "ALTA"
                     ? "bg-red-100 text-red-700 border-red-300"

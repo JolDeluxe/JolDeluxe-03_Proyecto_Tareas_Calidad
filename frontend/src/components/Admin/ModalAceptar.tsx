@@ -1,17 +1,21 @@
 // 📍 src/components/Admin/ModalAceptar.tsx
 
 import React, { useRef } from "react";
+import type { Tarea } from "../../types/tarea";
+import { getTareaExternaInfo, getBadgeClasses } from "../../utils/tareasExternas";
 
 interface ModalAceptarProps {
   onClose: () => void;
   onConfirm: () => void;
   tareaNombre: string;
+  tarea?: Tarea; // ✅ NUEVO
 }
 
 const ModalAceptar: React.FC<ModalAceptarProps> = ({
   onClose,
   onConfirm,
   tareaNombre,
+  tarea,
 }) => {
   // ✅ 2. Creamos la referencia para rastrear dónde inicia el clic
   const mouseDownInside = useRef(false);
@@ -73,6 +77,18 @@ const ModalAceptar: React.FC<ModalAceptarProps> = ({
 
         {/* BODY */}
         <div className="p-6 text-gray-800">
+          {tarea && (() => {
+            const info = getTareaExternaInfo(tarea);
+            if (!info.esExterna) return null;
+            const classes = getBadgeClasses(info.esKaizen);
+            return (
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${classes.bg} ${classes.text} ${classes.border} mb-3 animate-fadeIn`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${classes.dot}`} />
+                {info.label}
+              </div>
+            );
+          })()}
+
           <p className="text-base text-gray-700 leading-relaxed mb-4">
             Estás a punto de cambiar el estatus de esta tarea a <span className="font-bold text-green-700">CONCLUIDA</span>.
           </p>

@@ -2,13 +2,16 @@
 
 import React, { useState, useMemo, useRef } from "react";
 import type { Tarea, ImagenTarea } from "../../types/tarea";
+import type { Usuario } from "../../types/usuario";
 import { tareasService } from "../../api/tareas.service";
+import { getTareaExternaInfo, getBadgeClasses, puedeRevisarTarea } from "../../utils/tareasExternas";
 
 interface ModalRevisionProps {
   tarea: Tarea;
   onClose: () => void;
   onSuccess: () => void;
   onVerImagenes: (imagenes: ImagenTarea[]) => void;
+  user?: Usuario | null;
 }
 
 const ModalRevision: React.FC<ModalRevisionProps> = ({
@@ -16,6 +19,7 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
   onClose,
   onSuccess,
   onVerImagenes,
+  user,
 }) => {
 
   const mouseDownInside = useRef(false);
@@ -28,6 +32,7 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
 
   const isFeedbackRequired = decision === "RECHAZAR";
   const tieneImagenes = tarea.imagenes && tarea.imagenes.length > 0;
+  const puedeRevisar = user === undefined ? true : puedeRevisarTarea(tarea, user);
 
   // ✅ LÓGICA PARA DETECTAR ENTREGA TARDÍA
   const esFueraDeTiempo = useMemo(() => {
@@ -51,6 +56,11 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!puedeRevisar) {
+      setError("No puedes revisar ni autorizar una tarea asignada a ti.");
+      return;
+    }
 
     if (isFeedbackRequired && !feedback.trim()) {
       setError("El motivo de rechazo (feedback) es obligatorio.");
@@ -134,6 +144,17 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
         <form onSubmit={handleSubmit} className="flex flex-col flex-grow min-h-0">
           <div className="flex-grow overflow-y-auto p-6 text-gray-800">
             <div className="flex flex-col gap-5">
+              {(() => {
+                const info = getTareaExternaInfo(tarea);
+                if (!info.esExterna) return null;
+                const classes = getBadgeClasses(info.esKaizen);
+                return (
+                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${classes.bg} ${classes.text} ${classes.border} mr-auto animate-fadeIn`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${classes.dot}`} />
+                    {info.label}
+                  </div>
+                );
+              })()}
 
               {/* ⚠️ ALERTA DE TAREA FUERA DE TIEMPO (NUEVO) */}
               {esFueraDeTiempo && (
@@ -266,6 +287,12 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
                   {error}
                 </p>
               )}
+
+              {!puedeRevisar && (
+                <p className="text-amber-700 text-sm font-bold bg-amber-50 p-3 rounded border border-amber-200 text-center">
+                  Esta entrega debe ser revisada por el departamento que la asignó.
+                </p>
+              )}
             </div>
           </div>
 
@@ -281,7 +308,7 @@ const ModalRevision: React.FC<ModalRevisionProps> = ({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !puedeRevisar}
               className={`font-semibold px-4 py-2 rounded-md text-white transition-all duration-200 disabled:opacity-70 shadow-sm ${decision === "APROBAR"
                 ? "bg-green-600 hover:bg-green-700"
                 : "bg-red-600 hover:bg-red-700"

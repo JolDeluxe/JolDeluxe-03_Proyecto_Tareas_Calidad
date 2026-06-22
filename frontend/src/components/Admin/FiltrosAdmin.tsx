@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { usuariosService } from "../../api/usuarios.service";
-import type { Usuario } from "../../types/usuario";
+import type { Usuario, Departamento } from "../../types/usuario";
 import type { RangoFechaEspecial } from "../../pages/Admin";
 
 // Importamos los dos componentes nuevos
@@ -32,6 +32,14 @@ interface FiltrosProps {
   filtroMisTareas: { asignadasPorMi: boolean; asignadasAMi: boolean };
   onFiltroMisTareasChange: (val: { asignadasPorMi: boolean; asignadasAMi: boolean }) => void;
   conteoMisTareas: { porMi: number; aMi: number };
+  filtroExterno: boolean;
+  onFiltroExternoChange: (v: boolean) => void;
+  conteoTareasExternas: number;
+  esDeptoConExternasHabilitadas: boolean;
+  esDesdeCalidad: boolean;
+  departamentos: Departamento[];
+  filtroDepartamento: number | "Todos";
+  onDepartamentoChange: (deptoId: number | "Todos") => void;
 }
 
 const FiltrosAdmin: React.FC<FiltrosProps> = ({
@@ -56,7 +64,15 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
   onAsignadorChange,
   filtroMisTareas,
   onFiltroMisTareasChange,
-  conteoMisTareas
+  conteoMisTareas,
+  filtroExterno,
+  onFiltroExternoChange,
+  conteoTareasExternas,
+  esDeptoConExternasHabilitadas,
+  esDesdeCalidad,
+  departamentos,
+  filtroDepartamento,
+  onDepartamentoChange,
 }) => {
   // --- Estados ---
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -65,11 +81,13 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
   // 1. Cargar Usuarios
   useEffect(() => {
     const fetchUsuarios = async () => {
-      // ✅ Se eliminó "if (!user) return;" para que cargue los usuarios incluso para SuperAdmin (user=null)
       try {
         setLoading(true);
-        // Pedimos un límite alto (1000) para llenar el Select con todos los usuarios
-        const response = await usuariosService.getAll({ limit: 1000 });
+        const queryParams: any = { limit: 1000 };
+        if (filtroDepartamento !== "Todos") {
+          queryParams.departamentoId = filtroDepartamento;
+        }
+        const response = await usuariosService.getAll(queryParams);
 
         let todosLosUsuarios: Usuario[] = [];
         if (Array.isArray(response)) {
@@ -94,7 +112,7 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
     };
 
     fetchUsuarios();
-  }, []); // ✅ Se eliminó [user] de las dependencias
+  }, [filtroDepartamento]);
 
   // --- HANDLERS RESPONSABLE ---
   const getSelectedUsuarioNombreResumido = () => {
@@ -132,13 +150,18 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
     if (onBuscarChange) onBuscarChange("");
   };
 
+  const usuariosFiltrados = React.useMemo(() => {
+    if (filtroDepartamento === "Todos") return usuarios;
+    return usuarios.filter((u) => u.departamentoId === filtroDepartamento);
+  }, [usuarios, filtroDepartamento]);
+
   return (
     <div className="w-full bg-white font-sans border-b border-gray-200">
 
       {/* VISTA ESCRITORIO */}
       <FiltrosAdminDesktop
         user={user}
-        usuarios={usuarios}
+        usuarios={usuariosFiltrados}
         loading={loading}
         selectedUsuarioId={responsable}
         nombreResumido={getSelectedUsuarioNombreResumido()}
@@ -165,11 +188,19 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
         filtroMisTareas={filtroMisTareas}
         onFiltroMisTareasChange={onFiltroMisTareasChange}
         conteoMisTareas={conteoMisTareas}
+        filtroExterno={filtroExterno}
+        onFiltroExternoChange={onFiltroExternoChange}
+        conteoTareasExternas={conteoTareasExternas}
+        esDeptoConExternasHabilitadas={esDeptoConExternasHabilitadas}
+        esDesdeCalidad={esDesdeCalidad}
+        departamentos={departamentos}
+        filtroDepartamento={filtroDepartamento}
+        onDepartamentoChange={onDepartamentoChange}
       />
 
       {/* VISTA MOVIL */}
       <FiltrosAdminMobile
-        usuarios={usuarios}
+        usuarios={usuariosFiltrados}
         loading={loading}
         selectedUsuarioId={responsable}
         nombreResumido={getSelectedUsuarioNombreResumido()}
@@ -197,6 +228,14 @@ const FiltrosAdmin: React.FC<FiltrosProps> = ({
         filtroMisTareas={filtroMisTareas}
         onFiltroMisTareasChange={onFiltroMisTareasChange}
         conteoMisTareas={conteoMisTareas}
+        filtroExterno={filtroExterno}
+        onFiltroExternoChange={onFiltroExternoChange}
+        conteoTareasExternas={conteoTareasExternas}
+        esDeptoConExternasHabilitadas={esDeptoConExternasHabilitadas}
+        esDesdeCalidad={esDesdeCalidad}
+        departamentos={departamentos}
+        filtroDepartamento={filtroDepartamento}
+        onDepartamentoChange={onDepartamentoChange}
       />
 
     </div>

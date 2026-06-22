@@ -1,7 +1,5 @@
-// 📍 src/components/Admin/FiltrosAdminMobile.tsx
-
 import React, { useState, useRef, useEffect } from "react";
-import type { Usuario } from "../../types/usuario";
+import type { Usuario, Departamento } from "../../types/usuario";
 import type { RangoFechaEspecial } from "../../pages/Admin";
 
 // ✅ Helpers de Fechas
@@ -61,6 +59,14 @@ interface MobileProps {
   filtroMisTareas: { asignadasPorMi: boolean; asignadasAMi: boolean };
   onFiltroMisTareasChange: (val: { asignadasPorMi: boolean; asignadasAMi: boolean }) => void;
   conteoMisTareas: { porMi: number; aMi: number };
+  filtroExterno: boolean;
+  onFiltroExternoChange: (val: boolean) => void;
+  conteoTareasExternas: number;
+  esDeptoConExternasHabilitadas: boolean;
+  esDesdeCalidad: boolean;
+  departamentos: Departamento[];
+  filtroDepartamento: number | "Todos";
+  onDepartamentoChange: (deptoId: number | "Todos") => void;
 }
 
 const FiltrosAdminMobile: React.FC<MobileProps> = ({
@@ -91,7 +97,15 @@ const FiltrosAdminMobile: React.FC<MobileProps> = ({
   user,
   filtroMisTareas,
   onFiltroMisTareasChange,
-  conteoMisTareas
+  conteoMisTareas,
+  filtroExterno,
+  onFiltroExternoChange,
+  conteoTareasExternas,
+  esDeptoConExternasHabilitadas,
+  esDesdeCalidad,
+  departamentos,
+  filtroDepartamento,
+  onDepartamentoChange,
 }) => {
   const [mostrarFiltrosMovil, setMostrarFiltrosMovil] = useState(false);
 
@@ -187,7 +201,8 @@ const FiltrosAdminMobile: React.FC<MobileProps> = ({
     filtroFechaRegistro.tipo !== "TODAS" ||
     filtroFechaLimite.tipo !== "TODAS" ||
     filtroMisTareas.asignadasPorMi ||
-    filtroMisTareas.asignadasAMi;
+    filtroMisTareas.asignadasAMi ||
+    filtroExterno;
 
   const handleLimpiarTodos = () => {
     if (onLimpiarResponsable) onLimpiarResponsable();
@@ -197,6 +212,7 @@ const FiltrosAdminMobile: React.FC<MobileProps> = ({
     onFiltroFechaRegistroChange({ tipo: "TODAS", inicio: null, fin: null });
     onFiltroFechaLimiteChange({ tipo: "TODAS", inicio: null, fin: null });
     onFiltroMisTareasChange({ asignadasPorMi: false, asignadasAMi: false });
+    onFiltroExternoChange(false);
   };
 
 
@@ -266,6 +282,67 @@ const FiltrosAdminMobile: React.FC<MobileProps> = ({
       {/* 🔽 PANEL DE FILTROS DESPLEGABLE (SE BLOQUEA SI ESTÁ EN PAPELERA) */}
       {mostrarFiltrosMovil && !verCanceladas && (
         <div className="flex flex-col gap-3 text-xs animate-fade-in-down bg-gray-50 p-3 rounded-lg border border-gray-200 shadow-inner">
+
+          {/* ========================================================
+              NIVEL 1.5: DEPARTAMENTO DESTINO (Solo tareas externas)
+              ======================================================== */}
+          {(filtroExterno || esDesdeCalidad || (user && user.rol === "SUPER_ADMIN")) && (
+            <div className="flex gap-2 items-center w-full">
+              {/* Departamento */}
+              <div
+                className={`
+                  relative flex-1 flex items-center justify-between h-[46px]
+                  rounded-lg border px-2.5 py-2 transition-colors cursor-pointer min-w-0 shadow-sm
+                  ${filtroDepartamento !== "Todos"
+                    ? "bg-blue-100 border-blue-300 text-blue-900"
+                    : "bg-white border-gray-300 text-gray-700"
+                  }
+                `}
+              >
+                <span className="flex items-center text-xs font-bold truncate">
+                  <svg className="w-4 h-4 mr-1.5 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011-1v5m-4 0h4" />
+                  </svg>
+                  <span className="truncate">
+                    {loading ? "..." : (filtroDepartamento === "Todos" ? "Departamento" : departamentos.find(d => d.id === filtroDepartamento)?.nombre || "Depto")}
+                  </span>
+                </span>
+
+                {filtroDepartamento !== "Todos" ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDepartamentoChange("Todos");
+                    }}
+                    className="z-20 bg-blue-200/50 hover:bg-blue-300 rounded-full p-0.5 text-blue-800 flex-shrink-0 ml-1 cursor-pointer"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                ) : (
+                  <svg className="w-4 h-4 flex-shrink-0 text-gray-400 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                )}
+
+                <select
+                  disabled={loading}
+                  value={filtroDepartamento}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    onDepartamentoChange(val === "Todos" ? "Todos" : Number(val));
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
+                >
+                  <option value="Todos">Todos</option>
+                  {departamentos.map((d) => (
+                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* ========================================================
               NIVEL 2: RESPONSABLES Y PRIORIDAD
@@ -491,6 +568,37 @@ const FiltrosAdminMobile: React.FC<MobileProps> = ({
               </div>
             ) : null}
           </div>
+
+          {/* ====== BOTÓN FILTRO KAIZEN / EXTERNAS ====== */}
+          {esDeptoConExternasHabilitadas && (
+            <button
+              onClick={() => onFiltroExternoChange(!filtroExterno)}
+              className={`
+                w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-xs font-bold
+                transition-all duration-200 cursor-pointer select-none h-[46px]
+                ${filtroExterno
+                  ? (esDesdeCalidad 
+                    ? "bg-indigo-600 border-indigo-700 text-white shadow-md font-black"
+                    : "bg-amber-600 border-amber-700 text-white shadow-md font-black")
+                  : (esDesdeCalidad
+                    ? "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 font-bold"
+                    : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 font-bold")
+                }
+              `}
+              title={`Filtrar tareas ${esDesdeCalidad ? "KAIZEN" : "externas"}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+              {esDesdeCalidad ? "VER SÓLO TAREAS KAIZEN" : "VER SÓLO TAREAS EXTERNAS"}
+              <span className={`
+                ml-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full
+                ${filtroExterno ? "bg-white/20 text-white" : (esDesdeCalidad ? "bg-indigo-100 text-indigo-700" : "bg-amber-100 text-amber-700")}
+              `}>
+                {conteoTareasExternas}
+              </span>
+            </button>
+          )}
 
           {/* ========================================================
               NIVEL 3: FECHAS (ASIGNACIÓN Y LÍMITE)

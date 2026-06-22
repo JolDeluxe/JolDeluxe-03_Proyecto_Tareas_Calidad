@@ -23,8 +23,23 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
   const { departamentoId, responsables, observaciones, ...data } = bodyParse.data;
 
   // 2. Reglas de Negocio (Permisos de asignación)
-  if (user.rol !== "SUPER_ADMIN" && departamentoId !== user.departamentoId) {
-    return res.status(403).json({ error: "Solo puedes asignar tareas a tu departamento." });
+  const esTareaExterna = departamentoId !== user.departamentoId;
+
+  if (esTareaExterna && user.rol !== "SUPER_ADMIN") {
+    if (!user.departamentoId) {
+      return res.status(403).json({ error: "No tienes departamento asignado." });
+    }
+
+    const departamentoAsignador = await prisma.departamento.findUnique({
+      where: { id: user.departamentoId },
+      select: { nombre: true, tareasExternasHabilitadas: true }
+    });
+
+    if (!departamentoAsignador?.tareasExternasHabilitadas) {
+      return res.status(403).json({ 
+        error: "Tu departamento no tiene habilitada la asignación de tareas externas." 
+      });
+    }
   }
 
   // Verificar existencia de responsables
@@ -37,41 +52,44 @@ export const crearTarea = safeAsync(async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Uno o más responsables no existen o están inactivos." });
   }
 
-  // 🔹 NUEVO: Identificar si el departamento actual usa la regla de asignación especial
-  const departamentoAsignado = await prisma.departamento.findUnique({
+  // Obtener info del departamento DESTINO
+  const departamentoDestino = await prisma.departamento.findUnique({
     where: { id: departamentoId },
-    select: { nombre: true }
+    select: { nombre: true, tareasExternasHabilitadas: true }
   });
 
-  const esAsignacionEspecial = departamentoAsignado 
-    ? BUSINESS_RULES.departamentosAsignacionJerarquiaLibre.includes(departamentoAsignado.nombre)
-    : false;
+  if (!departamentoDestino) {
+    return res.status(400).json({ error: "Departamento destino no encontrado." });
+  }
+
+  const esAsignacionEspecial = BUSINESS_RULES.departamentosAsignacionJerarquiaLibre.includes(departamentoDestino.nombre);
 
   // Validación jerárquica actualizada
   for (const responsable of usuariosResponsables) {
     let valido = false;
 
-    if (user.rol === "ADMIN") {
+    if (user.rol === "SUPER_ADMIN") {
+      valido = true;
+    } else if (esTareaExterna) {
+      // 🔹 TAREA EXTERNA: ADMIN/ENCARGADO pueden asignar a cualquier rol activo del depto destino
+      valido = responsable.departamentoId === departamentoId 
+                && ["ADMIN", "ENCARGADO", "USUARIO"].includes(responsable.rol);
+    } else if (user.rol === "ADMIN") {
+      // 🔹 TAREA INTERNA NORMAL
       const rolesPermitidos = esAsignacionEspecial 
-        ? ["ADMIN", "ENCARGADO", "USUARIO"] // Pieles: Permite ADMIN
-        : ["ENCARGADO", "USUARIO"];         // Normal
-        
-      valido = (responsable.departamentoId === user.departamentoId && rolesPermitidos.includes(responsable.rol)) || responsable.rol === "INVITADO";
-      
+        ? ["ADMIN", "ENCARGADO", "USUARIO"]
+        : ["ENCARGADO", "USUARIO"];
+      valido = (responsable.departamentoId === user.departamentoId && rolesPermitidos.includes(responsable.rol));
     } else if (user.rol === "ENCARGADO") {
       const rolesPermitidos = esAsignacionEspecial 
-        ? ["ADMIN", "ENCARGADO", "USUARIO"] // Pieles: Permite ADMIN y otros ENCARGADOS
-        : ["ENCARGADO", "USUARIO"];         // Normal
-        
-      valido = (responsable.departamentoId === user.departamentoId && rolesPermitidos.includes(responsable.rol)) || responsable.rol === "INVITADO";
-      
-    } else if (user.rol === "SUPER_ADMIN") {
-      valido = true;
+        ? ["ADMIN", "ENCARGADO", "USUARIO"]
+        : ["ENCARGADO", "USUARIO"];
+      valido = (responsable.departamentoId === user.departamentoId && rolesPermitidos.includes(responsable.rol));
     }
 
     if (!valido) {
       return res.status(403).json({ 
-        error: `No puedes asignar al usuario ${responsable.nombre} (${responsable.rol}) por reglas de jerarquía en el departamento ${departamentoAsignado?.nombre}.` 
+        error: `No puedes asignar al usuario "${responsable.nombre}" (${responsable.rol}) en este contexto.` 
       });
     }
   }

@@ -4,9 +4,11 @@ import ResumenPendientes from "../components/Pendientes/ResumenPendientes";
 import TablaPendientes from "../components/Pendientes/TablaPendientes";
 import ModalNueva from "../components/Admin/ModalNueva";
 import { tareasService } from "../api/tareas.service";
-import type { Usuario } from "../types/usuario";
+import type { Usuario, Departamento } from "../types/usuario";
 import type { Tarea } from "../types/tarea";
 import FiltrosPendientes from "../components/Pendientes/Filtros/FiltrosPendientes";
+import { departamentosService } from "../api/departamentos.service";
+import { esTareaExterna } from "../utils/tareasExternas";
 
 // ✅ Importamos los tipos de fechas
 import type { RangoFechaEspecial } from "./Admin";
@@ -40,13 +42,58 @@ const Pendientes: React.FC<Props> = ({ user }) => {
   const [filtroFechaRegistro, setFiltroFechaRegistro] = useState<RangoFechaEspecial>(defaultRango);
   const [filtroFechaLimite, setFiltroFechaLimite] = useState<RangoFechaEspecial>(defaultRango);
 
+  const [filtroExterno, setFiltroExterno] = useState(false);
+  const [filtroDepartamento, setFiltroDepartamento] = useState<number | "Todos">("Todos");
+  const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
+
+  useEffect(() => {
+    const loadDeptos = async () => {
+      try {
+        const data = await departamentosService.getAll();
+        setDepartamentos(data);
+      } catch (err) {
+        console.error("Error al cargar departamentos:", err);
+      }
+    };
+    loadDeptos();
+  }, []);
+
+  const userDepto = useMemo(() => {
+    if (!user || !user.departamentoId) return null;
+    return departamentos.find(d => d.id === user.departamentoId) || null;
+  }, [departamentos, user]);
+
+  const esDesdeCalidad = useMemo(() => {
+    if (!userDepto) return false;
+    return userDepto.nombre.toUpperCase().includes("CALIDAD");
+  }, [userDepto]);
+
+  const esDeptoConExternasHabilitadas = useMemo(() => {
+    if (!userDepto) return false;
+    return !!userDepto.tareasExternasHabilitadas;
+  }, [userDepto]);
+
+  const puedeAsignarExternas = useMemo(() => {
+    return esDesdeCalidad && (user?.rol === "ADMIN" || user?.rol === "ENCARGADO");
+  }, [esDesdeCalidad, user]);
+
   // --- ESTADOS DE DATOS ---
   const [tareas, setTareas] = useState<Tarea[]>([]);
 
-  // Resetear filtros al cambiar de vista
+  const conteoTareasExternas = useMemo(() => {
+    return tareas.filter(t => {
+      const esExterna = esTareaExterna(t);
+      if (!esExterna) return false;
+      if (t.estatus === "CANCELADA") return false;
+      return true;
+    }).length;
+  }, [tareas]);
+
   useEffect(() => {
     setFiltro("total");
     setFiltroExtra("NINGUNO");
+    setFiltroExterno(false);
+    setFiltroDepartamento("Todos");
   }, [activeView]);
 
   // ✅ Saber si "HOY" está activo
@@ -106,6 +153,16 @@ const Pendientes: React.FC<Props> = ({ user }) => {
   const conteoDinamico = useMemo(() => {
     let base = [...tareas];
 
+    base = base.filter(t => {
+      const esExterna = esTareaExterna(t);
+      if (filtroDepartamento !== "Todos" && t.departamentoId !== filtroDepartamento) return false;
+      if (filtroExterno) return esExterna;
+      // Modo normal: incluir internas + KAIZEN
+      if (!esExterna) return true;
+      const deptoNombre = (t.asignador?.departamento?.nombre || "").toUpperCase();
+      return deptoNombre.includes("CALIDAD");
+    });
+
     if (filtroFechaLimite.tipo !== "TODAS" && filtroFechaLimite.inicio) {
       base = base.filter(t => {
         const flObj = t.historialFechas && t.historialFechas.length > 0
@@ -125,11 +182,28 @@ const Pendientes: React.FC<Props> = ({ user }) => {
       canceladas: base.filter(t => t.estatus === "CANCELADA").length,
       todas: base.length
     };
-  }, [tareas, filtroFechaLimite]);
+  }, [tareas, filtroFechaLimite, filtroExterno, filtroDepartamento]);
 
   // --- LÓGICA DE FILTRADO VISUAL A LA TABLA ---
   const tareasFiltradas = useMemo(() => {
     let filtered = [...tareas];
+
+    filtered = filtered.filter(t => {
+      const esExterna = esTareaExterna(t);
+      if (filtroExterno) {
+        // Modo filtro externo: solo mostrar las externas
+        return esExterna;
+      }
+      // Modo normal: mostrar internas + las KAIZEN (para que se vean con fondo ámbar)
+      if (!esExterna) return true;
+      // Es externa: solo incluir si es KAIZEN (de Calidad)
+      const deptoNombre = (t.asignador?.departamento?.nombre || "").toUpperCase();
+      return deptoNombre.includes("CALIDAD");
+    });
+
+    if (filtroDepartamento !== "Todos") {
+      filtered = filtered.filter(t => t.departamentoId === filtroDepartamento);
+    }
 
     // 1. Filtro por Pestaña
     if (filtro === "pendientes") {
@@ -153,7 +227,7 @@ const Pendientes: React.FC<Props> = ({ user }) => {
     }
 
     return filtered;
-  }, [tareas, filtro, filtroFechaLimite]);
+  }, [tareas, filtro, filtroFechaLimite, filtroExterno, filtroDepartamento]);
 
   // --- RENDERIZADO PRINCIPAL ---
   const mainTitle = useMemo(() => {
@@ -222,6 +296,17 @@ const Pendientes: React.FC<Props> = ({ user }) => {
             filtroFechaLimite={filtroFechaLimite}
             onFiltroFechaRegistroChange={setFiltroFechaRegistro}
             onFiltroFechaLimiteChange={setFiltroFechaLimite}
+            filtroExterno={filtroExterno}
+            onFiltroExternoChange={(v) => {
+              setFiltroExterno(v);
+              setFiltroDepartamento("Todos");
+            }}
+            departamentos={departamentos}
+            filtroDepartamento={filtroDepartamento}
+            onDepartamentoChange={setFiltroDepartamento}
+            conteoTareasExternas={conteoTareasExternas}
+            esDeptoConExternasHabilitadas={esDeptoConExternasHabilitadas}
+            esDesdeCalidad={esDesdeCalidad}
           />
 
         </div>
@@ -232,6 +317,7 @@ const Pendientes: React.FC<Props> = ({ user }) => {
             filtro={filtro}
             loading={loading}
             onRecargar={fetchTareasCentralizadas}
+            filtroExterno={filtroExterno}
           />
         </div>
       </div>
@@ -276,6 +362,8 @@ const Pendientes: React.FC<Props> = ({ user }) => {
           onClose={() => setOpenModal(false)}
           onTareaAgregada={fetchTareasCentralizadas}
           user={user}
+          departamentos={departamentos}
+          puedeAsignarExternas={puedeAsignarExternas}
         />
       )}
 

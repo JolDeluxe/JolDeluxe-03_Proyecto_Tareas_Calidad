@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef } from "react";
 import type { Tarea } from "../../types/tarea";
 import { tareasService } from "../../api/tareas.service";
 import { toast } from "react-toastify";
+import { getTareaExternaInfo, getBadgeClasses } from "../../utils/tareasExternas";
 
 interface ModalEntregaProps {
   tarea: Tarea;
@@ -143,6 +144,17 @@ const ModalEntrega: React.FC<ModalEntregaProps> = ({
         <form onSubmit={handleSubmit} className="flex flex-col flex-grow min-h-0">
           <div className="flex-grow overflow-y-auto p-6 text-gray-800">
             <div className="flex flex-col gap-5">
+              {(() => {
+                const info = getTareaExternaInfo(tarea);
+                if (!info.esExterna) return null;
+                const classes = getBadgeClasses(info.esKaizen);
+                return (
+                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${classes.bg} ${classes.text} ${classes.border} mr-auto animate-fadeIn`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${classes.dot}`} />
+                    {info.label}
+                  </div>
+                );
+              })()}
 
               {/* ⚠️ ALERTA DE TAREA FUERA DE TIEMPO */}
               {esFueraDeTiempo && (

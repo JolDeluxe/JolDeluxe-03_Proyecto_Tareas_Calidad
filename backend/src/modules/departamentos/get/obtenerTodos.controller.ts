@@ -8,6 +8,8 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
     select: {
       id: true,
       nombre: true,
+      tipo: true,
+      tareasExternasHabilitadas: true,
       fechaCreacion: true,
       _count: {
         select: { usuarios: true, tareas: true }

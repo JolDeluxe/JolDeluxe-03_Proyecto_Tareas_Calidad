@@ -16,9 +16,23 @@ interface Props {
   onPageChange: (page: number) => void;
   sortConfig: SortConfig;
   onSortChange: (key: string, direction: "asc" | "desc") => void;
+  onToggleTareasExternas?: (id: number, habilitadas: boolean) => void; // ✅ NUEVO
+  togglingId?: number | null; // ✅ NUEVO
 }
 
-const TablaDeptos = ({ deptos, total, loading, onEdit, page, totalPages, onPageChange, sortConfig, onSortChange }: Props) => {
+const TablaDeptos = ({ 
+  deptos, 
+  total, 
+  loading, 
+  onEdit, 
+  page, 
+  totalPages, 
+  onPageChange, 
+  sortConfig, 
+  onSortChange,
+  onToggleTareasExternas,
+  togglingId
+}: Props) => {
 
   const handleSort = (key: string) => {
     const direction = sortConfig.key === key && sortConfig.direction === "asc" ? "desc" : "asc";
@@ -49,9 +63,10 @@ const TablaDeptos = ({ deptos, total, loading, onEdit, page, totalPages, onPageC
               <thead className="bg-slate-50 text-slate-600 text-xs uppercase font-bold border-b border-slate-200">
                 <tr>
                   <th className="p-4 cursor-pointer hover:bg-slate-200 transition select-none w-20" onClick={() => handleSort("id")}>ID {getSortIcon("id")}</th>
-                  <th className="p-4 cursor-pointer hover:bg-slate-200 transition select-none w-[35%]" onClick={() => handleSort("nombre")}>Departamento {getSortIcon("nombre")}</th>
-                  <th className="p-4 cursor-pointer hover:bg-slate-200 transition select-none w-[30%]" onClick={() => handleSort("jefe")}>Jefatura (Admin) {getSortIcon("jefe")}</th>
+                  <th className="p-4 cursor-pointer hover:bg-slate-200 transition select-none w-[30%]" onClick={() => handleSort("nombre")}>Departamento {getSortIcon("nombre")}</th>
+                  <th className="p-4 cursor-pointer hover:bg-slate-200 transition select-none w-[25%]" onClick={() => handleSort("jefe")}>Jefatura (Admin) {getSortIcon("jefe")}</th>
                   <th className="p-4 cursor-pointer hover:bg-slate-200 transition select-none text-center" onClick={() => handleSort("personal")}>Personal {getSortIcon("personal")}</th>
+                  <th className="p-4 text-center w-28">Tareas Ext.</th>
                   <th className="p-4 text-center">Acciones</th>
                 </tr>
               </thead>
@@ -79,6 +94,29 @@ const TablaDeptos = ({ deptos, total, loading, onEdit, page, totalPages, onPageC
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                           <span className="font-extrabold">{d._count?.usuarios || 0}</span>
                         </div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => onToggleTareasExternas?.(d.id, !d.tareasExternasHabilitadas)}
+                          disabled={togglingId === d.id}
+                          className={`
+                            relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full 
+                            border-2 transition-colors duration-200 ease-in-out cursor-pointer mx-auto
+                            ${d.tareasExternasHabilitadas 
+                              ? "bg-indigo-600 border-indigo-600" 
+                              : "bg-gray-200 border-gray-300"
+                            }
+                            ${togglingId === d.id ? "opacity-50 cursor-wait" : ""}
+                          `}
+                          title={d.tareasExternasHabilitadas ? "Deshabilitar tareas externas" : "Habilitar tareas externas"}
+                        >
+                          <span
+                            className={`
+                              inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200
+                              ${d.tareasExternasHabilitadas ? "translate-x-5" : "translate-x-0.5"}
+                            `}
+                          />
+                        </button>
                       </td>
                       <td className="p-4 text-center">
                         <div className="flex justify-center gap-2 relative">
@@ -114,7 +152,7 @@ const TablaDeptos = ({ deptos, total, loading, onEdit, page, totalPages, onPageC
                     <h3 className="font-extrabold text-slate-800 text-lg leading-tight mb-1 pr-8">{d.nombre}</h3>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                  <div className="grid grid-cols-3 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                     <div>
                       <p className="text-slate-400 font-bold uppercase text-[9px] mb-1">Jefatura</p>
                       {jefe ? (
@@ -130,8 +168,31 @@ const TablaDeptos = ({ deptos, total, loading, onEdit, page, totalPages, onPageC
                       <p className="text-slate-400 font-bold uppercase text-[9px] mb-1">Personal</p>
                       <p className="font-extrabold text-emerald-600 flex items-center gap-1">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                        {d._count?.usuarios || 0} integrantes
+                        {d._count?.usuarios || 0}
                       </p>
+                    </div>
+                    <div className="flex flex-col items-center justify-center border-l border-slate-200 pl-2">
+                      <p className="text-slate-400 font-bold uppercase text-[9px] mb-1 text-center">Tareas Ext.</p>
+                      <button
+                        onClick={() => onToggleTareasExternas?.(d.id, !d.tareasExternasHabilitadas)}
+                        disabled={togglingId === d.id}
+                        className={`
+                          relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full 
+                          border-2 transition-colors duration-200 ease-in-out cursor-pointer
+                          ${d.tareasExternasHabilitadas 
+                            ? "bg-indigo-600 border-indigo-600" 
+                            : "bg-gray-200 border-gray-300"
+                          }
+                          ${togglingId === d.id ? "opacity-50 cursor-wait" : ""}
+                        `}
+                      >
+                        <span
+                          className={`
+                            inline-block h-3.5 w-3.5 rounded-full bg-white shadow transform transition-transform duration-200
+                            ${d.tareasExternasHabilitadas ? "translate-x-4" : "translate-x-0.5"}
+                          `}
+                        />
+                      </button>
                     </div>
                   </div>
 

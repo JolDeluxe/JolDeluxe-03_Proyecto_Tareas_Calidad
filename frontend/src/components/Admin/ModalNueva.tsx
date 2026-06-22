@@ -7,7 +7,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { tareasService } from "../../api/tareas.service";
 import { usuariosService } from "../../api/usuarios.service";
 import type { Tarea, Estatus, Urgencia } from "../../types/tarea";
-import type { Usuario } from "../../types/usuario";
+import type { Usuario, Departamento } from "../../types/usuario";
 import { Rol } from "../../types/usuario";
 
 import { BUSINESS_RULES } from "../../config/businessRules";
@@ -17,6 +17,8 @@ interface ModalNuevaProps {
   onTareaAgregada: () => void;
   user: Usuario | null;
   tarea?: Tarea;
+  departamentos?: Departamento[];
+  puedeAsignarExternas?: boolean;
 }
 
 const MAX_NOMBRE_LENGTH = 50;
@@ -55,11 +57,12 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   onClose,
   onTareaAgregada,
   user,
+  departamentos = [],
+  puedeAsignarExternas = false,
 }) => {
   const mouseDownInside = useRef(false);
   // --- Estados del formulario ---
   const [nombre, setNombre] = useState("");
-  const [isKaizen, setIsKaizen] = useState(false);
   const [comentario, setComentario] = useState("");
   const [prioridad, setPrioridad] = useState<Urgencia | "">("");
 
@@ -87,8 +90,52 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // --- Estados de Tareas Externas ---
+  const [modoExterno, setModoExterno] = useState(false);
+  const [deptoDestinoId, setDeptoDestinoId] = useState<number | null>(null);
+  const [usuariosDestino, setUsuariosDestino] = useState<Usuario[]>([]);
+  const [cargandoUsuariosDestino, setCargandoUsuariosDestino] = useState(false);
+
+  const esDesdeCalidad = (user?.departamento?.nombre || "").toUpperCase().includes("CALIDAD");
+
+  useEffect(() => {
+    if (!modoExterno || !deptoDestinoId) {
+      setUsuariosDestino([]);
+      return;
+    }
+
+    const cargarUsuariosDestino = async () => {
+      setCargandoUsuariosDestino(true);
+      try {
+        const resp = await usuariosService.getAll({
+          departamentoId: deptoDestinoId,
+          estatus: "ACTIVO",
+          limit: 200,
+        });
+        const uDestinoFiltered = resp.data.filter(u =>
+          u.rol === Rol.ADMIN || u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
+        );
+        const sortedUDestino = uDestinoFiltered.sort((a, b) => {
+          const rolesOrder = { [Rol.ADMIN]: 1, [Rol.ENCARGADO]: 2, [Rol.USUARIO]: 3, [Rol.INVITADO]: 4 };
+          const orderA = rolesOrder[a.rol] || 99;
+          const orderB = rolesOrder[b.rol] || 99;
+          if (orderA !== orderB) return orderA - orderB;
+          return a.nombre.localeCompare(b.nombre);
+        });
+        setUsuariosDestino(sortedUDestino);
+      } catch (error) {
+        console.error("Error al cargar usuarios de destino:", error);
+        toast.error("Error al cargar los usuarios del departamento de destino.");
+      } finally {
+        setCargandoUsuariosDestino(false);
+      }
+    };
+
+    cargarUsuariosDestino();
+  }, [modoExterno, deptoDestinoId]);
+
   const getDisplayName = (userToDisplay: Usuario): string => {
-    if (isKaizen) {
+    if (modoExterno) {
       return userToDisplay.nombre;
     }
     // Etiquetas globales para todos los departamentos
@@ -105,6 +152,9 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
   };
 
   const getRoleColorClass = (userToDisplay: Usuario): string => {
+    if (modoExterno) {
+      return "text-gray-800 font-normal";
+    }
     if (userToDisplay.rol === Rol.ADMIN) {
       return "text-yellow-700 font-bold"; // Amarillo Gestión (font-bold para que resalte más)
     }
@@ -296,7 +346,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     const comentarioValido = comentario && comentario.trim().length > 0 && comentario.length <= MAX_OBSERVACIONES_LENGTH;
     const horaValida = !usarHora || (usarHora && !!hora);
     const tiempoValido = isTimeValidForToday();
-    const kaizenValido = !isKaizen || (isKaizen && responsablesIds.length > 0); // Validación redundante con responsablesValidos pero explícita para lógica
+    const deptoDestinoValido = !modoExterno || (modoExterno && !!deptoDestinoId);
 
     if (
       !nombreValido ||
@@ -306,7 +356,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
       !comentarioValido ||
       !horaValida ||
       !tiempoValido ||
-      !kaizenValido
+      !deptoDestinoValido
     ) {
       // Si hay errores, no hacemos nada (los mensajes se muestran inline)
       return;
@@ -338,11 +388,6 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
 
     try {
       let tituloFinal = nombre;
-      if (isKaizen) {
-        if (!tituloFinal.startsWith("KAIZEN")) {
-          tituloFinal = `${getKaizenPrefix()} ${nombre}`;
-        }
-      }
 
       // ⏰ CONSTRUCCIÓN DE FECHA LÍMITE
       let fechaLimiteFinal: Date;
@@ -365,7 +410,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
         urgencia: prioridad,
         fechaLimite: fechaLimiteFinal.toISOString(),
         estatus: "PENDIENTE" as Estatus,
-        departamentoId: user.departamentoId,
+        departamentoId: modoExterno && deptoDestinoId ? deptoDestinoId : user.departamentoId,
         responsables: responsablesIds,
       };
 
@@ -410,7 +455,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
     }
   };
 
-  const usuariosFiltrados = (isKaizen ? listaInvitados : listaUsuarios).filter((u) =>
+  const usuariosFiltrados = (modoExterno ? usuariosDestino : listaUsuarios).filter((u) =>
     u.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
 
@@ -461,39 +506,25 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
         >
           <div className="flex-grow overflow-y-auto p-6">
             <div className="flex flex-col gap-4 text-gray-800">
+              {/* ====== BANNER KAIZEN / EXTERNA ====== */}
+              {modoExterno && deptoDestinoId && (
+                <div className={`
+                  flex items-center gap-2 px-4 py-2 rounded-lg mb-4 text-sm font-bold border animate-fadeIn
+                  ${esDesdeCalidad 
+                    ? "bg-indigo-50 border-indigo-200 text-indigo-700" 
+                    : "bg-amber-50 border-amber-200 text-amber-700"}
+                `}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                  </svg>
+                  {esDesdeCalidad ? "TAREA KAIZEN" : `TAREA EXTERNA · ${user?.departamento?.nombre}`}
+                  <span className="ml-auto font-normal text-xs opacity-70">
+                    → {departamentos?.find(d => d.id === deptoDestinoId)?.nombre}
+                  </span>
+                </div>
+              )}
 
-              {/* --- HEADER: TIPO DE TAREA (KAIZEN) --- */}
-              {(user?.rol === "SUPER_ADMIN" ||
-                ((user?.rol === "ADMIN" || user?.rol === "ENCARGADO") &&
-                  user?.departamento?.nombre
-                    ?.toUpperCase()
-                    .includes("CALIDAD"))) && (
-                  <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsKaizen(false);
-                        setResponsablesIds([]);
-                        setBusqueda("");
-                      }}
-                      className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${!isKaizen
-                        ? "bg-white text-blue-700 shadow-sm"
-                        : "text-gray-500 hover:text-gray-700"
-                        }`}
-                    >
-                      Tarea Estándar
-                    </button>
-                    <button
-                      type="button"
-                      disabled={true}
-                      title="Módulo en mantenimiento"
-                      className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all 
-                        bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent`}
-                    >
-                      Tarea KAIZEN
-                    </button>
-                  </div>
-                )}
+
 
               {/* --- BODY: GRID DE 3 COLUMNAS EN DESKTOP --- */}
               <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-6">
@@ -563,12 +594,73 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
 
                 {/* --- COLUMNA 2: RESPONSABLES --- */}
                 <div className="flex flex-col gap-4">
+                  {/* ====== TOGGLE Y SELECTOR TAREA EXTERNA ====== */}
+                  {puedeAsignarExternas && (
+                    <div className="flex flex-col gap-3 p-3 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700">¿Asignación Externa?</p>
+                          <p className="text-xs text-gray-500">
+                            {esDesdeCalidad ? "Crear Tarea KAIZEN" : "Asignar a otro departamento"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModoExterno(!modoExterno);
+                            setDeptoDestinoId(null);
+                            setResponsablesIds([]);
+                          }}
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full 
+                            border-2 transition-colors duration-200 ease-in-out cursor-pointer
+                            ${modoExterno ? "bg-indigo-600 border-indigo-600" : "bg-gray-200 border-gray-300"}`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200
+                              ${modoExterno ? "translate-x-5" : "translate-x-0.5"}`}
+                          />
+                        </button>
+                      </div>
+
+                      {modoExterno && (
+                        <div className="animate-fadeIn">
+                          <label className="block text-xs font-bold text-gray-700 mb-1">
+                            DEPARTAMENTO DESTINO <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={deptoDestinoId || ""}
+                            onChange={(e) => {
+                              setDeptoDestinoId(e.target.value ? Number(e.target.value) : null);
+                              setResponsablesIds([]);
+                            }}
+                            className={`w-full text-sm border rounded-md px-2 py-1.5 focus:ring-2 focus:ring-amber-950 focus:outline-none bg-white
+                              ${submitted && modoExterno && !deptoDestinoId ? "border-red-500" : "border-gray-300"}`}
+                          >
+                            <option value="">Selecciona departamento...</option>
+                            {departamentos
+                              .filter((d) => d.id !== user?.departamentoId)
+                              .map((d) => (
+                                <option key={d.id} value={d.id}>
+                                  {d.nombre}
+                                </option>
+                              ))}
+                          </select>
+                          {submitted && modoExterno && !deptoDestinoId && (
+                            <p className="text-red-600 text-[10px] mt-1">El departamento de destino es obligatorio.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <label
                       htmlFor="responsable-list"
                       className="block text-sm font-semibold mb-1"
                     >
-                      {isKaizen ? "Selecciona Invitado(s)" : "Responsable(s)"}
+                      {modoExterno 
+                        ? `Responsables (${departamentos.find(d => d.id === deptoDestinoId)?.nombre || "Externo"})` 
+                        : "Responsable(s)"}
                     </label>
 
                     <input
@@ -580,7 +672,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                       className="w-full border rounded-md px-3 py-2 mb-2 focus:ring-2 focus:ring-amber-950 focus:outline-none disabled:bg-gray-100"
                     />
 
-                    {loadingUsuarios ? (
+                    {(modoExterno ? cargandoUsuariosDestino : loadingUsuarios) ? (
                       <div
                         className="relative w-full h-32 lg:h-64 border rounded-md px-3 py-2 
                     bg-gray-100 border-gray-300 
@@ -626,11 +718,6 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                               {getDisplayName(u)}
                             </span>
 
-                            {isKaizen && (
-                              <span className="text-xs text-gray-400 ml-auto">
-                                (Invitado)
-                              </span>
-                            )}
                           </label>
                         ))}
 
@@ -641,9 +728,7 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
                               ? "Error al cargar usuarios"
                               : busqueda
                                 ? "No se encontraron resultados."
-                                : isKaizen
-                                  ? "No se encontraron invitados registrados."
-                                  : "No hay usuarios disponibles."}
+                                : "No hay usuarios disponibles."}
                           </p>
                         )}
                       </div>

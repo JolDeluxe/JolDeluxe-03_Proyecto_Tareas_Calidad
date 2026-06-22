@@ -19,6 +19,10 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
 
   // Al tener el schema actualizado, TS ahora reconocerá estas propiedades
   const { departamentoId, estatus, rol, q, page, limit } = queryParseResult.data;
+  console.log("🔍 [BACKEND OBTER TODOS] Query Params:", req.query);
+  console.log("🔍 [BACKEND OBTER TODOS] Zod parsed:", queryParseResult.data);
+  console.log("🔍 [BACKEND OBTER TODOS] User:", { id: user.id, rol: user.rol, departamentoId: user.departamentoId });
+
   const sortBy = req.query.sortBy as string || 'rolJerarquia';
   const sortDirection = req.query.sortDirection as string || 'asc';
 
@@ -33,6 +37,7 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
   const whereBase: Prisma.UsuarioWhereInput = {
     estatus: estatus ?? "ACTIVO",
   };
+  console.log("🔍 [BACKEND OBTER TODOS] whereBase:", whereBase);
 
   // 3. Filtro de Búsqueda (Buscador general)
   if (q) {
@@ -50,12 +55,12 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
 
     case "ADMIN":
       if (!user.departamentoId) return res.status(403).json({ error: "Usuario ADMIN sin departamento asignado." });
-      whereBase.departamentoId = user.departamentoId;
+      whereBase.departamentoId = departamentoId ?? user.departamentoId;
       break;
 
     case "ENCARGADO":
       if (!user.departamentoId) return res.status(403).json({ error: "Usuario ENCARGADO sin departamento asignado." });
-      whereBase.departamentoId = user.departamentoId;
+      whereBase.departamentoId = departamentoId ?? user.departamentoId;
       break;
 
     case "USUARIO":
@@ -64,11 +69,14 @@ export const obtenerTodos = safeAsync(async (req: Request, res: Response) => {
       break;
   }
 
+  console.log("🔍 [BACKEND OBTER TODOS] Final whereBase after switch:", whereBase);
+
   // =====================================================================
   // 5. CONSTRUCCIÓN DEL FILTRO DE LISTA (Solo para la tabla de resultados)
   // =====================================================================
   // Clonamos las reglas base (seguridad, estatus y búsqueda)
   const whereList: Prisma.UsuarioWhereInput = { ...whereBase };
+  console.log("🔍 [BACKEND OBTER TODOS] whereList:", whereList);
 
   // Aplicamos el filtro de Rol específico SOLO a la lista, no a los contadores
   // (A menos que sea Usuario/Invitado, que solo se ven a sí mismos)

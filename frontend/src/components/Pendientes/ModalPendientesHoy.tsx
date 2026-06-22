@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import type { Tarea } from "../../types/tarea";
 import { tareasService } from "../../api/tareas.service";
+import { getTareaExternaInfo, getBadgeClasses } from "../../utils/tareasExternas";
 
 /**
  * Interface para las propiedades del componente.
@@ -289,6 +290,17 @@ const ModalPendientesHoy: React.FC<Props> = ({ onClose }) => {
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                   <h3 className={`text-sm md:text-base xl:text-lg font-bold leading-tight line-clamp-2 shrink-0 ${tarea.estaVencida ? 'text-red-700 font-black' : 'text-gray-900'}`}>
                     {tarea.tarea}
+                    {(() => {
+                      const info = getTareaExternaInfo(tarea);
+                      if (!info.esExterna) return null;
+                      const cls = getBadgeClasses(info.esKaizen);
+                      return (
+                        <span className={`inline-flex items-center gap-1 ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold border leading-none ${cls.bg} ${cls.text} ${cls.border}`}>
+                          <span className={`w-1 h-1 rounded-full ${cls.dot}`} />
+                          {info.label}
+                        </span>
+                      );
+                    })()}
                   </h3>
 
                   {/* INSTRUCCIONES (Observaciones) */}

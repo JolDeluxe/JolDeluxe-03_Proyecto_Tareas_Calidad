@@ -116,7 +116,8 @@ export const obtenerDetalle = safeAsync(async (req: Request, res: Response) => {
     asignador: {
       id: tarea.asignador.id,
       nombre: tarea.asignador.nombre,
-      rol: tarea.asignador.rol
+      rol: tarea.asignador.rol,
+      departamentoId: tarea.asignador.departamentoId
     }
   };
 

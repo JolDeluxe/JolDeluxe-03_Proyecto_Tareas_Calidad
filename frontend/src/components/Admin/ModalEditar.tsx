@@ -111,7 +111,20 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     return fecha !== fechaStringOriginal;
   }, [fecha, fechaStringOriginal]);
 
+  const tareaEsExterna = useMemo(() => {
+    if (!user) return false;
+    return !!tarea.departamentoId && user.departamentoId !== tarea.departamentoId;
+  }, [tarea, user]);
+
+  const tareaEsKaizen = useMemo(() => {
+    return tareaEsExterna && 
+      (tarea?.asignador?.departamento?.nombre || "").toUpperCase().includes("CALIDAD");
+  }, [tareaEsExterna, tarea]);
+
   const getDisplayName = (userToDisplay: Usuario): string => {
+    if (tareaEsExterna) {
+      return userToDisplay.nombre;
+    }
     if (isKaizen) {
       return userToDisplay.nombre;
     }
@@ -129,6 +142,9 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
   };
 
   const getRoleColorClass = (userToDisplay: Usuario): string => {
+    if (tareaEsExterna) {
+      return "text-gray-800 font-normal";
+    }
     if (userToDisplay.rol === Rol.ADMIN) {
       return "text-yellow-700 font-bold"; // Amarillo Gestión (font-bold para que resalte más)
     }
@@ -180,7 +196,11 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
       setLoadingUsuarios(true);
       setErrorUsuarios(false);
       try {
-        const responseUsuarios = await usuariosService.getAll({ limit: 1000 });
+        const queryParams: any = { limit: 1000 };
+        if (tareaEsExterna) {
+          queryParams.departamentoId = tarea.departamentoId;
+        }
+        const responseUsuarios = await usuariosService.getAll(queryParams);
         const todosLosUsuarios = responseUsuarios.data;
 
         const internos = todosLosUsuarios.filter(u => u.rol !== Rol.INVITADO);
@@ -191,7 +211,12 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         const nombreDeptoUser = user?.departamento?.nombre || "";
         const esAsignacionEspecial = BUSINESS_RULES.departamentosAsignacionJerarquiaLibre.includes(nombreDeptoUser);
 
-        if (user.rol === Rol.ADMIN) {
+        if (tareaEsExterna) {
+          // Si es externa, permite cualquier rol activo del depto destino
+          usuariosVisibles = internos.filter(u => 
+            u.rol === Rol.ADMIN || u.rol === Rol.ENCARGADO || u.rol === Rol.USUARIO
+          );
+        } else if (user.rol === Rol.ADMIN) {
           const rolesPermitidos: Rol[] = esAsignacionEspecial
             ? [Rol.ADMIN, Rol.ENCARGADO, Rol.USUARIO]
             : [Rol.ENCARGADO, Rol.USUARIO];
@@ -210,6 +235,14 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         }
 
         const sortedUsers = usuariosVisibles.sort((a, b) => {
+          if (tareaEsExterna) {
+            const rolesOrder = { [Rol.ADMIN]: 1, [Rol.ENCARGADO]: 2, [Rol.USUARIO]: 3, [Rol.INVITADO]: 4 };
+            const orderA = rolesOrder[a.rol] || 99;
+            const orderB = rolesOrder[b.rol] || 99;
+            if (orderA !== orderB) return orderA - orderB;
+            return a.nombre.localeCompare(b.nombre);
+          }
+
           const rolA = a.rol;
           const rolB = b.rol;
 
@@ -238,7 +271,7 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
     };
 
     fetchUsuarios();
-  }, [user]);
+  }, [user, tareaEsExterna, tarea.departamentoId]);
 
   // 🔄 DETECTOR DE CAMBIOS
   const hayCambios = useMemo(() => {
@@ -515,6 +548,20 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
         <form onSubmit={handleSubmit} className="flex flex-col flex-grow min-h-0" noValidate>
           <div className="flex-grow overflow-y-auto p-6">
             <div className="flex flex-col gap-4 text-gray-800">
+              {/* ====== BADGE TAREA EXTERNA / KAIZEN ====== */}
+              {tareaEsExterna && (
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border mb-2
+                  ${tareaEsKaizen 
+                    ? "bg-indigo-50 border-indigo-200 text-indigo-700" 
+                    : "bg-amber-50 border-amber-200 text-amber-700"}`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${tareaEsKaizen ? "bg-indigo-500" : "bg-amber-500"}`} />
+                  {tareaEsKaizen ? "TAREA KAIZEN" : `TAREA EXTERNA · ${tarea?.asignador?.departamento?.nombre || ""}`}
+                  <span className="ml-auto font-normal text-xs opacity-70">
+                    → {tarea?.departamento?.nombre || ""}
+                  </span>
+                </div>
+              )}
 
               <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-6">
 

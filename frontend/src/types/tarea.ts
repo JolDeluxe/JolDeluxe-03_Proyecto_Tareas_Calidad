@@ -80,6 +80,8 @@ export interface Tarea {
     id: number;
     nombre: string;
     rol?: string;
+    departamentoId?: number | null;               // ✅ NUEVO
+    departamento?: { nombre: string } | null;     // ✅ NUEVO
   };
 
   // 👇 CORRECCIÓN: Debe usar el tipo ResponsableLimpio

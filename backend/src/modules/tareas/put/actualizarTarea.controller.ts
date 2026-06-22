@@ -7,6 +7,7 @@ import { sendNotificationToUsers } from "../helpers/notificaciones.helper.js";
 import { registrarBitacora } from "../../../services/logger.service.js"; 
 // 👇 Importamos las reglas de negocio
 import { BUSINESS_RULES } from "../../../config/businessRules.js";
+import { puedeEditarTarea } from "../helpers/permisosTareas.helper.js";
 
 export const actualizarTarea = safeAsync(async (req: Request, res: Response) => {
   // 1. Validar ID y Body
@@ -25,7 +26,7 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
     where: { id: tareaId },
     include: {
       responsables: { select: { usuarioId: true } },
-      asignador: { select: { id: true, rol: true } },
+      asignador: { select: { id: true, rol: true, departamentoId: true } },
       departamento: { select: { nombre: true } } // Obtenemos Depto
     },
   });
@@ -40,23 +41,14 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
   }
 
   // 4. Permisos Generales
-  const esSuperAdmin = user.rol === "SUPER_ADMIN";
-  const esAdminDepto = user.rol === "ADMIN" && tareaExistente.departamentoId === user.departamentoId;
-  const esEncargadoDepto = user.rol === "ENCARGADO" && tareaExistente.departamentoId === user.departamentoId;
+  // En tareas externas, edita el departamento origen; el destino no puede modificarla.
+  const puedeEditar = puedeEditarTarea(tareaExistente, user);
 
-  if (!esSuperAdmin && !esAdminDepto && !esEncargadoDepto) {
+  if (!puedeEditar) {
     return res.status(403).json({ error: "No tienes permiso para editar esta tarea." });
   }
 
-  // 5. Restricciones específicas de ENCARGADO (No puede editar lo de un superior)
-  if (user.rol === "ENCARGADO") {
-    const rolCreador = tareaExistente.asignador?.rol;
-    if (rolCreador === "ADMIN" || rolCreador === "SUPER_ADMIN") {
-      return res.status(403).json({ error: "No puedes editar tareas asignadas por un Administrador." });
-    }
-  }
-
-  // 6. Preparar actualización
+  // 5. Preparar actualización
   const { fechaLimite, responsables, ...restoDelBody } = validatedBody;
   
   const dataParaActualizar: any = { ...restoDelBody };
@@ -83,6 +75,7 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
 
   // Cambio de Departamento (Solo Super Admin)
   if (validatedBody.departamentoId) {
+    const esSuperAdmin = user.rol === "SUPER_ADMIN";
     if (!esSuperAdmin) return res.status(403).json({ error: "Solo Super Admin cambia departamento." });
     dataParaActualizar.departamento = { connect: { id: validatedBody.departamentoId } };
   }
@@ -111,21 +104,27 @@ export const actualizarTarea = safeAsync(async (req: Request, res: Response) => 
       ? BUSINESS_RULES.departamentosAsignacionJerarquiaLibre.includes(departamentoAsignado.nombre)
       : false;
 
+    const esTareaExterna = deptIdAUsar !== user.departamentoId;
+
     for (const responsable of usuariosResponsables) {
       let valido = false;
-      if (user.rol === "ADMIN") {
+      if (user.rol === "SUPER_ADMIN") {
+        valido = true;
+      } else if (esTareaExterna) {
+        // 🔹 TAREA EXTERNA: ADMIN/ENCARGADO pueden asignar a cualquier rol activo del depto destino
+        valido = responsable.departamentoId === deptIdAUsar 
+                  && ["ADMIN", "ENCARGADO", "USUARIO"].includes(responsable.rol);
+      } else if (user.rol === "ADMIN") {
         const rolesPermitidos = esAsignacionEspecial ? ["ADMIN", "ENCARGADO", "USUARIO"] : ["ENCARGADO", "USUARIO"];
-        valido = (responsable.departamentoId === deptIdAUsar && rolesPermitidos.includes(responsable.rol)) || responsable.rol === "INVITADO";
+        valido = (responsable.departamentoId === deptIdAUsar && rolesPermitidos.includes(responsable.rol));
       } else if (user.rol === "ENCARGADO") {
         const rolesPermitidos = esAsignacionEspecial ? ["ADMIN", "ENCARGADO", "USUARIO"] : ["ENCARGADO", "USUARIO"];
-        valido = (responsable.departamentoId === deptIdAUsar && rolesPermitidos.includes(responsable.rol)) || responsable.rol === "INVITADO";
-      } else if (user.rol === "SUPER_ADMIN") {
-        valido = true;
+        valido = (responsable.departamentoId === deptIdAUsar && rolesPermitidos.includes(responsable.rol));
       }
 
       if (!valido) {
         return res.status(403).json({ 
-          error: `No puedes asignar al usuario ${responsable.nombre} (${responsable.rol}) por reglas de jerarquía.` 
+          error: `No puedes asignar al usuario "${responsable.nombre}" (${responsable.rol}) en este contexto.` 
         });
       }
     }

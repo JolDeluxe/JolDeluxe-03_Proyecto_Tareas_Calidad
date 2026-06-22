@@ -20,6 +20,7 @@ import ModalRevision from "./ModalRevision";
 // ✅ Importamos el Modal de Entrega
 import ModalEntrega from "./ModalEntregar";
 import { toast } from "react-toastify";
+import { getTareaExternaInfo, getBadgeClasses, puedeRevisarTarea, puedeEditarTarea } from "../../utils/tareasExternas";
 
 interface TablaProps {
   filtro: string;
@@ -34,6 +35,7 @@ interface TablaProps {
   onPageChange: (page: number) => void;
   sortConfig: SortConfig;
   onSortChange: (key: SortKey, direction: "asc" | "desc" | "atrasadas") => void;
+  filtroExterno?: boolean;
 }
 type SortKey = "asignador" | "responsables" | "urgencia" | "fechaRegistro" | "fechaLimite" | "estatus";
 
@@ -304,7 +306,24 @@ const formateaSoloFecha = (fechaInput?: Date | string | null): string => {
   }
 };
 
-const getRowClass = (status: Estatus): string => {
+const getRowClass = (status: Estatus, tarea?: Tarea, filtroExterno?: boolean): string => {
+  // Si es KAIZEN y estamos en vista "todas" (sin filtro externo activo),
+  // usamos fondo ámbar como indicador visual pero mantenemos el border-left del estatus
+  if (!filtroExterno && tarea) {
+    const deptoNombre = (tarea.asignador?.departamento?.nombre || "").toUpperCase();
+    const esExterna = !!tarea.asignador.departamentoId && tarea.asignador.departamentoId !== tarea.departamentoId;
+    const esKaizen = esExterna && deptoNombre.includes("CALIDAD");
+    if (esKaizen) {
+      // Fondo ámbar pero conservamos el border-left según estatus
+      const borderLeft = {
+        "PENDIENTE": "border-l-4 border-blue-500",
+        "CONCLUIDA": "border-l-4 border-green-500",
+        "CANCELADA": "border-l-4 border-red-500",
+        "EN_REVISION": "border-l-4 border-indigo-500",
+      }[status] || "border-l-4 border-amber-600";
+      return `bg-amber-50 ${borderLeft}`;
+    }
+  }
   switch (status) {
     case "CONCLUIDA": return "bg-green-100 border-l-4 border-green-500";
     case "CANCELADA": return "bg-red-50 border-l-4 border-red-500";
@@ -330,6 +349,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
   onPageChange,
   sortConfig,
   onSortChange,
+  filtroExterno,
 }) => {
   // Estados de modales
   const [openModalEditar, setOpenModalEditar] = useState(false);
@@ -470,10 +490,28 @@ const TablaAdmin: React.FC<TablaProps> = ({
                     fechaParaColumna = row.fechaConclusion || null;
                   }
 
-                  return (
-                    <tr key={row.id} className={`${getRowClass(row.estatus)} transition`}>
+                   return (
+                    <tr key={row.id} className={`${getRowClass(row.estatus, row, filtroExterno)} transition`}>
                       <td className="px-3 py-3 text-left font-semibold w-[18%] break-words">
-                        {row.tarea}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span>{row.tarea}</span>
+                          {(user?.rol === "SUPER_ADMIN" || (user?.departamento?.nombre || "").toUpperCase().includes("CALIDAD")) && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase border border-slate-300 bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 leading-none">
+                              ÁREA · {row.departamento?.nombre || "N/A"}
+                            </span>
+                          )}
+                          {(() => {
+                            const info = getTareaExternaInfo(row);
+                            if (!info.esExterna) return null;
+                            const classes = getBadgeClasses(info.esKaizen);
+                            return (
+                              <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase border rounded px-1.5 py-0.5 leading-none ${classes.bg} ${classes.text} ${classes.border}`}>
+                                <span className={`w-1 h-1 rounded-full ${classes.dot}`} />
+                                {info.label}
+                              </span>
+                            );
+                          })()}
+                        </div>
                         {row.estatus === "EN_REVISION" && (<span className="block text-[10px] text-indigo-700 font-bold bg-indigo-100 w-fit px-1 rounded mt-1">EN REVISIÓN</span>)}
                         {row.estatus === "PENDIENTE" && row.feedbackRevision && (<span className="block text-[10px] text-red-700 font-bold bg-red-100 w-fit px-1 rounded mt-1 border border-red-200">⚠️ Corrección req.</span>)}
                       </td>
@@ -576,15 +614,14 @@ const TablaAdmin: React.FC<TablaProps> = ({
               }
 
               // Permisos para Móvil
-              const esPropietario = row.asignadorId === user?.id;
               // ✅ Saber si soy responsable para habilitar botón Entregar en móvil
               const isResponsable = row.responsables.some((r) => r.id === user?.id);
 
-              const puedeValidar = user && (user.rol === Rol.SUPER_ADMIN || user.rol === Rol.ADMIN || (user.rol === Rol.ENCARGADO && esPropietario));
+              const puedeValidar = puedeRevisarTarea(row, user);
               const canEditOrCancelStatus = row.estatus === "PENDIENTE";
               const puedeCancelar = puedeValidar && canEditOrCancelStatus;
               const asignadorEsAdmin = row.asignador?.rol === Rol.ADMIN || row.asignador?.rol === Rol.SUPER_ADMIN;
-              const puedeEditar = user && canEditOrCancelStatus && (user.rol === Rol.SUPER_ADMIN || user.rol === Rol.ADMIN || (user.rol === Rol.ENCARGADO && !asignadorEsAdmin));
+              const puedeEditar = user && canEditOrCancelStatus && puedeEditarTarea(row, user);
 
               let fechaParaColumna: Date | string | null = null;
               let labelColumna = "Conclusión";
@@ -606,9 +643,29 @@ const TablaAdmin: React.FC<TablaProps> = ({
               }
 
               return (
-                <div key={row.id} className={`border border-gray-300 shadow-sm p-4 ${getRowClass(row.estatus)} rounded-md`}>
+                <div key={row.id} className={`border border-gray-300 shadow-sm p-4 ${getRowClass(row.estatus, row, filtroExterno)} rounded-md`}>
                   <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-gray-800 text-base leading-snug w-[75%] break-words">{row.tarea}</h3>
+                    <div className="flex flex-col gap-1.5 w-[75%]">
+                      <h3 className="font-bold text-gray-800 text-base leading-snug break-words">{row.tarea}</h3>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(user?.rol === "SUPER_ADMIN" || (user?.departamento?.nombre || "").toUpperCase().includes("CALIDAD")) && (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase border border-slate-300 bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 leading-none">
+                            ÁREA · {row.departamento?.nombre || "N/A"}
+                          </span>
+                        )}
+                        {(() => {
+                          const info = getTareaExternaInfo(row);
+                          if (!info.esExterna) return null;
+                          const classes = getBadgeClasses(info.esKaizen);
+                          return (
+                            <span className={`w-fit inline-flex items-center gap-1 text-[9px] font-black uppercase border rounded px-1.5 py-0.5 leading-none ${classes.bg} ${classes.text} ${classes.border}`}>
+                              <span className={`w-1 h-1 rounded-full ${classes.dot}`} />
+                              {info.label}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </div>
                     <span className={`flex-shrink-0 px-2 py-0.5 text-xs font-semibold ${row.urgencia === "ALTA" ? "bg-red-100 text-red-700 border-red-300" : row.urgencia === "MEDIA" ? "bg-amber-100 text-amber-700 border-amber-300" : "bg-green-100 text-green-700 border-green-300"} rounded-full border`}>
                       {row.urgencia.charAt(0) + row.urgencia.slice(1).toLowerCase()}
                     </span>
@@ -750,7 +807,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
           {openModalEliminar && tareaSeleccionada && (<ModalEliminar onClose={() => setOpenModalEliminar(false)} onConfirm={confirmarEliminacion} tareaNombre={tareaSeleccionada.tarea} />)}
           {openModalAceptar && tareaSeleccionada && (<ModalAceptar onClose={() => setOpenModalAceptar(false)} onConfirm={confirmarFinalizacion} tareaNombre={tareaSeleccionada.tarea} />)}
           {modalImagenes && (<ModalGaleria imagenes={modalImagenes} onClose={() => setModalImagenes(null)} />)}
-          {tareaParaRevisar && (<ModalRevision tarea={tareaParaRevisar} onClose={handleCerrarRevision} onSuccess={handleExitoRevision} onVerImagenes={(imagenes) => setModalImagenes(imagenes)} />)}
+          {tareaParaRevisar && (<ModalRevision tarea={tareaParaRevisar} onClose={handleCerrarRevision} onSuccess={handleExitoRevision} onVerImagenes={(imagenes) => setModalImagenes(imagenes)} user={user} />)}
 
           {/* ✅ NUEVO: Componente para Modal de Entrega */}
           {tareaParaEntregar && (<ModalEntrega tarea={tareaParaEntregar} onClose={cerrarModalEntrega} onSuccess={exitoEntrega} />)}

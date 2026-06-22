@@ -30,6 +30,25 @@ const GestionDeptos = () => {
   // --- Estados del Modal ---
   const [modalOpen, setModalOpen] = useState(false);
   const [deptoEditar, setDeptoEditar] = useState<Departamento | null>(null);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+
+  const handleToggleTareasExternas = async (id: number, habilitadas: boolean) => {
+    setTogglingId(id);
+    try {
+      await departamentosService.toggleTareasExternas(id, habilitadas);
+      setDeptos((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, tareasExternasHabilitadas: habilitadas } : d))
+      );
+      toast.success(
+        `Tareas externas ${habilitadas ? "habilitadas" : "deshabilitadas"} correctamente.`
+      );
+    } catch (error) {
+      console.error("Error al cambiar tareas externas:", error);
+      toast.error("Error al actualizar la configuración de tareas externas.");
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const cargarDatos = async () => {
     setLoading(true);
@@ -188,6 +207,8 @@ const GestionDeptos = () => {
           setSortDirection(direction);
           setPage(1);
         }}
+        onToggleTareasExternas={handleToggleTareasExternas}
+        togglingId={togglingId}
       />
 
       {/* 4. Modal Inquebrantable */}

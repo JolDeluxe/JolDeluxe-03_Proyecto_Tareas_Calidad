@@ -31,6 +31,9 @@ export const actualizarDepartamento = safeAsync(async (req: Request, res: Respon
     fechaEdicion: new Date(),
     ...(validatedBody.nombre !== undefined && { nombre: validatedBody.nombre }),
     ...(validatedBody.tipo !== undefined && { tipo: validatedBody.tipo }),
+    ...(validatedBody.tareasExternasHabilitadas !== undefined && {
+      tareasExternasHabilitadas: validatedBody.tareasExternasHabilitadas,
+    }),
   };
 
   // 4. Actualizar en la BD

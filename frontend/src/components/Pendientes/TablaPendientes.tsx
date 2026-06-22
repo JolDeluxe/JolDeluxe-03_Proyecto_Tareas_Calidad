@@ -14,6 +14,7 @@ import TablaPendientesMobile from "./TablaPendientesMobile";
 import ModalGaleria from "../Principal/ModalGaleria";
 import ModalEntrega from "../Admin/ModalEntregar";
 import ModalRevision from "../Admin/ModalRevision";
+import { getTareaExternaInfo, getBadgeClasses, puedeRevisarTarea, esResponsableDeTarea } from "../../utils/tareasExternas";
 
 // ✅ 1. TIPOS PARA EL ORDENAMIENTO
 type SortKey = "default" | "responsables" | "urgencia" | "fechaLimite";
@@ -128,7 +129,23 @@ const formateaFechaString = (fecha?: Date | string | null): string => {
   return `${fechaStr} ${formatTimeAMPM(dateObj)}`;
 };
 
-const getRowClass = (estatus: Estatus): string => {
+const getRowClass = (estatus: Estatus, tarea?: Tarea, filtroExterno?: boolean): string => {
+  // Si es KAIZEN y estamos en vista "todas" (sin filtro externo activo),
+  // aplicamos fondo ámbar como indicador visual
+  if (!filtroExterno && tarea) {
+    const deptoNombre = (tarea.asignador?.departamento?.nombre || "").toUpperCase();
+    const esExterna = !!tarea.asignador.departamentoId && tarea.asignador.departamentoId !== tarea.departamentoId;
+    const esKaizen = esExterna && deptoNombre.includes("CALIDAD");
+    if (esKaizen) {
+      const borderLeft = {
+        "PENDIENTE": "border-l-4 border-blue-500",
+        "CONCLUIDA": "border-l-4 border-green-500",
+        "CANCELADA": "border-l-4 border-red-500",
+        "EN_REVISION": "border-l-4 border-indigo-500",
+      }[estatus] || "border-l-4 border-amber-600";
+      return `bg-amber-50 text-amber-900 ${borderLeft}`;
+    }
+  }
   switch (estatus) {
     case "CONCLUIDA":
       return "bg-green-50 text-green-900 border-l-4 border-green-500";
@@ -175,9 +192,10 @@ interface Props {
   filtro: string;
   loading: boolean;
   onRecargar: () => void;
+  filtroExterno?: boolean;
 }
 
-const TablaPendientes: React.FC<Props> = ({ user, tareas, filtro, loading, onRecargar }) => {
+const TablaPendientes: React.FC<Props> = ({ user, tareas, filtro, loading, onRecargar, filtroExterno }) => {
   // --- Estados para Modales ---
   const [modalImagenes, setModalImagenes] = useState<ImagenTarea[] | null>(null);
   const [tipoGaleria, setTipoGaleria] = useState<"REFERENCIA" | "EVIDENCIA">("REFERENCIA");
@@ -377,15 +395,13 @@ const TablaPendientes: React.FC<Props> = ({ user, tareas, filtro, loading, onRec
                       entregadaTarde = dEntrega > dLimite;
                     }
 
-                    const isResponsable = row.responsables.some(r => r.id === user?.id);
-                    const isAsignador = row.asignadorId === user?.id;
-                    const isAdmin = user?.rol === "ADMIN" || user?.rol === "SUPER_ADMIN";
-                    const canReview = isAsignador || isAdmin;
+                    const isResponsable = esResponsableDeTarea(row, user);
+                    const canReview = puedeRevisarTarea(row, user);
 
                     return (
                       <tr
                         key={row.id}
-                        className={`${getRowClass(row.estatus)} transition ${vencida ? "bg-red-50/60" : ""}`}
+                        className={`${getRowClass(row.estatus, row, filtroExterno)} transition ${vencida ? "bg-red-50/60" : ""}`}
                       >
                         <td className="px-2 py-1 text-left text-lg font-semibold text-blue-700">
                           <ul className="list-disc list-inside m-0 p-0">
@@ -396,8 +412,24 @@ const TablaPendientes: React.FC<Props> = ({ user, tareas, filtro, loading, onRec
                         </td>
                         <td className="px-3 py-1.5 text-left font-semibold text-lg align-top">
                           <div className="text-gray-800 flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                              {row.tarea}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span>{row.tarea}</span>
+                              {(user?.rol === "SUPER_ADMIN" || (user?.departamento?.nombre || "").toUpperCase().includes("CALIDAD")) && (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase border border-slate-300 bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 leading-none">
+                                  ÁREA · {row.departamento?.nombre || "N/A"}
+                                </span>
+                              )}
+                              {(() => {
+                                const info = getTareaExternaInfo(row);
+                                if (!info.esExterna) return null;
+                                const classes = getBadgeClasses(info.esKaizen);
+                                return (
+                                  <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase border rounded px-1.5 py-0.5 leading-none ${classes.bg} ${classes.text} ${classes.border}`}>
+                                    <span className={`w-1 h-1 rounded-full ${classes.dot}`} />
+                                    {info.label}
+                                  </span>
+                                );
+                              })()}
                               {row.estatus === "EN_REVISION" && (
                                 <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-full border border-indigo-300">
                                   EN REVISIÓN
@@ -556,7 +588,7 @@ const TablaPendientes: React.FC<Props> = ({ user, tareas, filtro, loading, onRec
             tareas={tareasPaginadas} // ✅ Le pasamos la lista paginada al movil
             user={user}
             formateaFecha={formateaFechaString}
-            getRowClass={getRowClass}
+            getRowClass={(estatus, tarea) => getRowClass(estatus, tarea, filtroExterno)}
             getFechaFinalObj={getFechaFinalObj}
             getEstadoFecha={getEstadoFecha}
             onVerImagenes={(imagenes) => {
@@ -596,6 +628,7 @@ const TablaPendientes: React.FC<Props> = ({ user, tareas, filtro, loading, onRec
                 setTipoGaleria("EVIDENCIA");
                 setModalImagenes(imagenes);
               }}
+              user={user}
             />
           )}
         </>

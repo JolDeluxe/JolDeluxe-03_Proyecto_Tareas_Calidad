@@ -1,7 +1,7 @@
 // 📍 src/components/Admin/FiltrosAdminDesktop.tsx
 
 import React, { useState, useRef, useEffect } from "react";
-import type { Usuario } from "../../types/usuario";
+import type { Usuario, Departamento } from "../../types/usuario";
 // ✅ IMPORTACIÓN CORREGIDA DEL TIPO DE FECHAS
 import type { RangoFechaEspecial } from "../../pages/Admin";
 
@@ -70,6 +70,14 @@ interface DesktopProps {
   filtroMisTareas: { asignadasPorMi: boolean; asignadasAMi: boolean };
   onFiltroMisTareasChange: (val: { asignadasPorMi: boolean; asignadasAMi: boolean }) => void;
   conteoMisTareas: { porMi: number; aMi: number };
+  filtroExterno: boolean;
+  onFiltroExternoChange: (v: boolean) => void;
+  conteoTareasExternas: number;
+  esDeptoConExternasHabilitadas: boolean;
+  esDesdeCalidad: boolean;
+  departamentos: Departamento[];
+  filtroDepartamento: number | "Todos";
+  onDepartamentoChange: (deptoId: number | "Todos") => void;
 }
 
 const FiltrosAdminDesktop: React.FC<DesktopProps> = ({
@@ -100,8 +108,15 @@ const FiltrosAdminDesktop: React.FC<DesktopProps> = ({
   user,
   filtroMisTareas,
   onFiltroMisTareasChange,
-  conteoMisTareas
-
+  conteoMisTareas,
+  filtroExterno,
+  onFiltroExternoChange,
+  conteoTareasExternas,
+  esDeptoConExternasHabilitadas,
+  esDesdeCalidad,
+  departamentos,
+  filtroDepartamento,
+  onDepartamentoChange,
 }) => {
   // --- ESTADOS DE APERTURA DE MENÚS ---
   const [responsableOpen, setResponsableOpen] = useState(false);
@@ -248,7 +263,9 @@ const FiltrosAdminDesktop: React.FC<DesktopProps> = ({
     filtroFechaRegistro.tipo !== "TODAS" ||
     filtroFechaLimite.tipo !== "TODAS" ||
     filtroMisTareas.asignadasPorMi ||
-    filtroMisTareas.asignadasAMi;
+    filtroMisTareas.asignadasAMi ||
+    filtroExterno ||
+    filtroDepartamento !== "Todos";
 
   const handleLimpiarTodos = () => {
     onLimpiarResponsable();
@@ -258,6 +275,8 @@ const FiltrosAdminDesktop: React.FC<DesktopProps> = ({
     onFiltroFechaRegistroChange({ tipo: "TODAS", inicio: null, fin: null });
     onFiltroFechaLimiteChange({ tipo: "TODAS", inicio: null, fin: null });
     onFiltroMisTareasChange({ asignadasPorMi: false, asignadasAMi: false });
+    onFiltroExternoChange(false);
+    onDepartamentoChange("Todos");
   };
 
   return (
@@ -268,6 +287,39 @@ const FiltrosAdminDesktop: React.FC<DesktopProps> = ({
         {/* ✅ ENVOLVEMOS TODOS LOS FILTROS PARA QUE DESAPAREZCAN EN LA PAPELERA */}
         {!verCanceladas && (
           <>
+            {/* ============================================================== */}
+            {/* 0. Dropdown Departamento (Solo cuando está en modo externo) */}
+            {/* ============================================================== */}
+            {(filtroExterno || esDesdeCalidad || (user && user.rol === "SUPER_ADMIN")) && (
+              <div className="relative">
+                <select
+                  disabled={loading}
+                  value={filtroDepartamento}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    onDepartamentoChange(val === "Todos" ? "Todos" : Number(val));
+                  }}
+                  className={`
+                    flex items-center justify-between gap-2 px-4 py-2.5 
+                    text-sm font-medium rounded-lg border shadow-sm transition-all h-[46px] bg-white
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    cursor-pointer min-w-[180px]
+                    ${filtroDepartamento !== "Todos"
+                      ? "bg-blue-50 border-blue-200 text-blue-900 font-semibold"
+                      : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }
+                  `}
+                >
+                  <option value="Todos">Departamento: Todos</option>
+                  {departamentos.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* ============================================================== */}
             {/* 1. Dropdown Responsable */}
             {/* ============================================================== */}
@@ -666,6 +718,37 @@ const FiltrosAdminDesktop: React.FC<DesktopProps> = ({
                 </div>
               )}
             </div>
+
+            {/* ====== BOTÓN FILTRO KAIZEN / EXTERNAS ====== */}
+            {esDeptoConExternasHabilitadas && (
+              <button
+                onClick={() => onFiltroExternoChange(!filtroExterno)}
+                className={`
+                  flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold
+                  transition-all duration-200 cursor-pointer select-none h-[46px]
+                  ${filtroExterno
+                    ? (esDesdeCalidad 
+                      ? "bg-indigo-600 border-indigo-700 text-white shadow-md font-black"
+                      : "bg-amber-50 border-amber-600 text-white shadow-md font-black")
+                    : (esDesdeCalidad
+                      ? "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 font-bold"
+                      : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 font-bold")
+                  }
+                `}
+                title={`Filtrar tareas ${esDesdeCalidad ? "KAIZEN" : "externas"}`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                </svg>
+                {esDesdeCalidad ? "KAIZEN" : "EXTERNAS"}
+                <span className={`
+                  ml-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full
+                  ${filtroExterno ? "bg-white/20 text-white" : (esDesdeCalidad ? "bg-indigo-100 text-indigo-700" : "bg-amber-100 text-amber-700")}
+                `}>
+                  {conteoTareasExternas}
+                </span>
+              </button>
+            )}
 
             {/* ============================================================== */}
             {/* ✅ FILTRO FECHA REGISTRO / ASIGNACIÓN */}

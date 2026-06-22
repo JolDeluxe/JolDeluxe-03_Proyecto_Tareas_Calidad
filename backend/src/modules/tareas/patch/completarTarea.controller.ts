@@ -5,6 +5,7 @@ import { paramsSchema } from "../schemas/tarea.schema.js";
 import { tareaConRelacionesInclude } from "../helpers/prisma.constants.js";
 import { sendNotificationToUsers } from "../helpers/notificaciones.helper.js";
 import { registrarBitacora } from "../../../services/logger.service.js"; 
+import { puedeRevisarOAutorizarTarea } from "../helpers/permisosTareas.helper.js";
 
 export const completarTarea = safeAsync(async (req: Request, res: Response) => {
   const { id: tareaId } = paramsSchema.parse(req.params);
@@ -14,17 +15,15 @@ export const completarTarea = safeAsync(async (req: Request, res: Response) => {
     where: { id: tareaId },
     include: { 
         responsables: { select: { usuarioId: true } },
-        departamento: { select: { nombre: true } } // Obtenemos Depto
+        departamento: { select: { nombre: true } }, // Obtenemos Depto
+        asignador: { select: { departamentoId: true } }
     },
   });
 
   if (!tarea) return res.status(404).json({ error: "Tarea no encontrada" });
 
-  // Permisos
-  const permitido = 
-    user.rol === "SUPER_ADMIN" || 
-    user.rol === "ADMIN" || 
-    (user.rol === "ENCARGADO" && tarea.asignadorId === user.id);
+  // En tareas externas, solo autoriza el departamento origen.
+  const permitido = puedeRevisarOAutorizarTarea(tarea, user);
 
   if (!permitido) return res.status(403).json({ error: "No tienes permiso para validar esta tarea." });
 

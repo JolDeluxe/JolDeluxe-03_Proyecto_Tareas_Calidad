@@ -1,6 +1,5 @@
-// 📍 src/components/Pendientes/Filtros/FiltrosPendientesMobile.tsx
-
 import React from "react";
+import type { Usuario, Departamento } from "../../../types/usuario";
 import type { RangoFechaEspecial } from "../../../pages/Admin";
 
 // Helper para calcular el inicio y fin del día de HOY
@@ -11,20 +10,38 @@ const getHoy = () => {
 };
 
 interface MobileProps {
+  user?: Usuario | null;
   searchText: string;
   onSearchChange: (val: string) => void;
   onLimpiarBusqueda: () => void;
   filtroFechaLimite: RangoFechaEspecial;
   onFiltroFechaLimiteChange: (val: RangoFechaEspecial) => void;
+  filtroExterno: boolean;
+  onFiltroExternoChange: (val: boolean) => void;
+  conteoTareasExternas: number;
+  esDeptoConExternasHabilitadas: boolean;
+  esDesdeCalidad: boolean;
+  departamentos: Departamento[];
+  filtroDepartamento: number | "Todos";
+  onDepartamentoChange: (deptoId: number | "Todos") => void;
   [key: string]: any;
 }
 
 const FiltrosPendientesMobile: React.FC<MobileProps> = ({
+  user,
   searchText,
   onSearchChange,
   onLimpiarBusqueda,
   filtroFechaLimite,
   onFiltroFechaLimiteChange,
+  filtroExterno,
+  onFiltroExternoChange,
+  conteoTareasExternas,
+  esDeptoConExternasHabilitadas,
+  esDesdeCalidad,
+  departamentos,
+  filtroDepartamento,
+  onDepartamentoChange
 }) => {
 
   const isHoyActivo = filtroFechaLimite.tipo === "HOY";
@@ -84,7 +101,67 @@ const FiltrosPendientesMobile: React.FC<MobileProps> = ({
           <span className="hidden sm:block">HOY</span>
         </button>
 
+        {/* Botón KAIZEN / EXTERNAS */}
+        {esDeptoConExternasHabilitadas && (
+          <button
+            onClick={() => onFiltroExternoChange(!filtroExterno)}
+            title={`Filtrar tareas ${esDesdeCalidad ? "KAIZEN" : "externas"}`}
+            className={`
+              flex-shrink-0 flex items-center justify-center gap-1.5 px-3 rounded-lg border transition-all h-[46px] font-bold text-xs shadow-sm cursor-pointer
+              ${filtroExterno
+                ? (esDesdeCalidad 
+                  ? "bg-indigo-600 border-indigo-700 text-white ring-2 ring-indigo-200"
+                  : "bg-amber-600 border-amber-700 text-white ring-2 ring-amber-200")
+                : (esDesdeCalidad
+                  ? "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                  : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100")
+              }
+            `}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+            <span className="hidden sm:block">{esDesdeCalidad ? "KAIZEN" : "EXTERNAS"}</span>
+            <span className={`
+              text-[10px] font-extrabold px-1.5 py-0.5 rounded-full
+              ${filtroExterno ? "bg-white/20 text-white" : (esDesdeCalidad ? "bg-indigo-100 text-indigo-700" : "bg-amber-100 text-amber-700")}
+            `}>
+              {conteoTareasExternas}
+            </span>
+          </button>
+        )}
+
       </div>
+
+      {(filtroExterno || esDesdeCalidad || (user && user.rol === "SUPER_ADMIN")) && (
+        <div className="mt-2 animate-fadeIn flex gap-2">
+          {/* Departamento select */}
+          <div className="relative flex-grow">
+            <select
+              value={filtroDepartamento}
+              onChange={(e) => {
+                const val = e.target.value;
+                onDepartamentoChange(val === "Todos" ? "Todos" : Number(val));
+              }}
+              className={`
+                w-full px-3 py-2.5 h-[46px] text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition-shadow bg-gray-50 cursor-pointer
+                ${filtroDepartamento !== "Todos"
+                  ? "bg-blue-50 border-blue-200 text-blue-900 font-semibold"
+                  : "border-gray-300 text-gray-700"
+                }
+              `}
+            >
+              <option value="Todos">Departamento: Todos</option>
+              {departamentos.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

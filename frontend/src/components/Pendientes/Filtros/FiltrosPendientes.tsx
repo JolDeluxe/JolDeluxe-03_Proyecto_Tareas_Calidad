@@ -1,7 +1,7 @@
 // 📍 src/components/Pendientes/Filtros/FiltrosPendientes.tsx
 
 import React, { useState } from "react";
-import type { Usuario } from "../../../types/usuario";
+import type { Usuario, Departamento } from "../../../types/usuario";
 import type { RangoFechaEspecial } from "../../../pages/Admin";
 
 import FiltrosPendientesDesktop from "./FiltrosPendientesDesktop";
@@ -21,6 +21,14 @@ interface FiltrosProps {
   filtroFechaLimite: RangoFechaEspecial;
   onFiltroFechaRegistroChange: (val: RangoFechaEspecial) => void;
   onFiltroFechaLimiteChange: (val: RangoFechaEspecial) => void;
+  filtroExterno: boolean;
+  onFiltroExternoChange: (val: boolean) => void;
+  conteoTareasExternas: number;
+  esDeptoConExternasHabilitadas: boolean;
+  esDesdeCalidad: boolean;
+  departamentos: Departamento[];
+  filtroDepartamento: number | "Todos";
+  onDepartamentoChange: (deptoId: number | "Todos") => void;
 }
 
 const FiltrosPendientes: React.FC<FiltrosProps> = ({
@@ -36,7 +44,15 @@ const FiltrosPendientes: React.FC<FiltrosProps> = ({
   filtroFechaRegistro,
   filtroFechaLimite,
   onFiltroFechaRegistroChange,
-  onFiltroFechaLimiteChange
+  onFiltroFechaLimiteChange,
+  filtroExterno,
+  onFiltroExternoChange,
+  conteoTareasExternas,
+  esDeptoConExternasHabilitadas,
+  esDesdeCalidad,
+  departamentos,
+  filtroDepartamento,
+  onDepartamentoChange
 }) => {
   const [searchText, setSearchText] = useState("");
 
@@ -69,10 +85,19 @@ const FiltrosPendientes: React.FC<FiltrosProps> = ({
         filtroFechaLimite={filtroFechaLimite}
         onFiltroFechaRegistroChange={onFiltroFechaRegistroChange}
         onFiltroFechaLimiteChange={onFiltroFechaLimiteChange}
+        filtroExterno={filtroExterno}
+        onFiltroExternoChange={onFiltroExternoChange}
+        conteoTareasExternas={conteoTareasExternas}
+        esDeptoConExternasHabilitadas={esDeptoConExternasHabilitadas}
+        esDesdeCalidad={esDesdeCalidad}
+        departamentos={departamentos}
+        filtroDepartamento={filtroDepartamento}
+        onDepartamentoChange={onDepartamentoChange}
       />
 
       {/* VISTA MOVIL */}
       <FiltrosPendientesMobile
+        user={user}
         searchText={searchText}
         onSearchChange={handleSearchChange}
         onLimpiarBusqueda={handleLimpiarBusqueda}
@@ -86,6 +111,14 @@ const FiltrosPendientes: React.FC<FiltrosProps> = ({
         filtroFechaLimite={filtroFechaLimite}
         onFiltroFechaRegistroChange={onFiltroFechaRegistroChange}
         onFiltroFechaLimiteChange={onFiltroFechaLimiteChange}
+        filtroExterno={filtroExterno}
+        onFiltroExternoChange={onFiltroExternoChange}
+        conteoTareasExternas={conteoTareasExternas}
+        esDeptoConExternasHabilitadas={esDeptoConExternasHabilitadas}
+        esDesdeCalidad={esDesdeCalidad}
+        departamentos={departamentos}
+        filtroDepartamento={filtroDepartamento}
+        onDepartamentoChange={onDepartamentoChange}
       />
     </div>
   );

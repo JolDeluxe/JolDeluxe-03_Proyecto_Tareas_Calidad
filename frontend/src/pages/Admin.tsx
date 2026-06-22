@@ -17,7 +17,9 @@ import DashboardMetricas from "../components/Principal/DashboardMetricas";
 // --- API y Tipos ---
 import { tareasService, type TareaFilters, type TareasResponse } from "../api/tareas.service";
 import type { Tarea } from "../types/tarea";
-import type { Usuario } from "../types/usuario";
+import type { Usuario, Departamento } from "../types/usuario";
+import { departamentosService } from "../api/departamentos.service";
+import { esTareaExterna } from "../utils/tareasExternas";
 
 import { MicrosoftExcel } from "../assets/MicrosoftExcel";
 
@@ -99,6 +101,50 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
   const [isKaizen, setIsKaizen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("TAREAS");
 
+  const [filtroExterno, setFiltroExterno] = useState(false);
+  const [filtroDepartamento, setFiltroDepartamento] = useState<number | "Todos">("Todos");
+  const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
+
+  useEffect(() => {
+    const loadDeptos = async () => {
+      try {
+        const data = await departamentosService.getAll();
+        setDepartamentos(data);
+      } catch (err) {
+        console.error("Error al cargar departamentos:", err);
+      }
+    };
+    loadDeptos();
+  }, []);
+
+  const userDepto = useMemo(() => {
+    if (!user || !user.departamentoId) return null;
+    return departamentos.find(d => d.id === user.departamentoId) || null;
+  }, [departamentos, user]);
+
+  const esDesdeCalidad = useMemo(() => {
+    if (!userDepto) return false;
+    return userDepto.nombre.toUpperCase().includes("CALIDAD");
+  }, [userDepto]);
+
+  const esDeptoConExternasHabilitadas = useMemo(() => {
+    if (!userDepto) return false;
+    return !!userDepto.tareasExternasHabilitadas;
+  }, [userDepto]);
+
+  const puedeAsignarExternas = useMemo(() => {
+    return esDesdeCalidad && (user?.rol === "ADMIN" || user?.rol === "ENCARGADO");
+  }, [esDesdeCalidad, user]);
+
+  const conteoTareasExternas = useMemo(() => {
+    return tareas.filter(t => {
+      const esExterna = esTareaExterna(t);
+      if (!esExterna) return false;
+      if (t.estatus === "CANCELADA" && !verCanceladas) return false;
+      return true;
+    }).length;
+  }, [tareas, verCanceladas]);
+
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
 
@@ -111,17 +157,15 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     if (!user) return { porMi, aMi };
 
     tareas.forEach(t => {
-      // Filtro Kaizen base para que los números cuadren con la pestaña actual
-      const nombreTarea = t.tarea || "";
-      const esKaizen = nombreTarea.trim().toUpperCase().startsWith("KAIZEN");
-      if (isKaizen ? !esKaizen : esKaizen) return;
+      const esExterna = esTareaExterna(t);
+      if (filtroDepartamento !== "Todos" && t.departamentoId !== filtroDepartamento) return;
       if (t.estatus === "CANCELADA" && !verCanceladas) return;
 
       if (t.asignadorId === user.id) porMi++;
       if (t.responsables.some(r => r.id === user.id)) aMi++;
     });
     return { porMi, aMi };
-  }, [tareas, isKaizen, user, verCanceladas]);
+  }, [tareas, filtroExterno, user, verCanceladas, filtroDepartamento]);
 
   const [openModalExportar, setOpenModalExportar] = useState<boolean>(false);
 
@@ -244,15 +288,27 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
   useEffect(() => {
     setPage(1);
-  }, [filtro, responsable, asignador, query, isKaizen, verCanceladas]);
+  }, [filtro, responsable, asignador, query, filtroExterno, filtroDepartamento, verCanceladas]);
 
   // --- Lógica de Filtrado Visual (Cliente) ---
   const tareasFiltradas = useMemo(() => {
     let filtered = tareas.filter((t) => {
-      const nombreTarea = t.tarea || "";
-      const esKaizen = nombreTarea.trim().toUpperCase().startsWith("KAIZEN");
-      return isKaizen ? esKaizen : !esKaizen;
+      const esExterna = esTareaExterna(t);
+      if (filtroExterno) {
+        // Modo filtro externo: solo mostrar las externas
+        return esExterna;
+      }
+      // Modo normal: mostrar internas + las KAIZEN (para que se vean con fondo ámbar)
+      // Las externas que NO son de Calidad se excluyen
+      if (!esExterna) return true;
+      // Es externa: solo incluir si es KAIZEN (de Calidad)
+      const deptoNombre = (t.asignador?.departamento?.nombre || "").toUpperCase();
+      return deptoNombre.includes("CALIDAD");
     });
+
+    if (filtroDepartamento !== "Todos") {
+      filtered = filtered.filter(t => t.departamentoId === filtroDepartamento);
+    }
 
     // 1. Papelera
     if (verCanceladas) {
@@ -276,7 +332,6 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     }
 
     // 4. Filtros Extras (Lógica Específica)
-    // ✅ Obtenemos la hora EXACTA de este milisegundo. NO TRUNCAR.
     const ahoraExacto = new Date();
 
     // -- PENDIENTES --
@@ -288,7 +343,6 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
           ? new Date(t.historialFechas[t.historialFechas.length - 1].nuevaFecha!)
           : new Date(t.fechaLimite);
 
-        // ✅ CORRECCIÓN: Comparamos contra la hora exacta
         return fechaLimiteObj.getTime() < ahoraExacto.getTime();
       });
     }
@@ -315,8 +369,6 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
         // Caso B: Está CONCLUIDA (Tu regla de negocio)
         if (t.estatus === "CONCLUIDA") {
-          // Si tiene fechaEntrega (pasó por revisión), la usamos.
-          // Si no (la cerró directo el admin), usamos fechaConclusion.
           const fechaReferencia = t.fechaEntrega
             ? new Date(t.fechaEntrega)
             : (t.fechaConclusion ? new Date(t.fechaConclusion) : null);
@@ -330,14 +382,11 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     }
 
     if (filtroExtra === "AUTOCOMPLETAR") {
-      // Llevan 4 días o más en revisión
       filtered = filtered.filter(t => {
         if (t.estatus !== "EN_REVISION") return false;
-        if (!t.fechaEntrega) return false; // Usamos fechaEntrega como inicio de la revisión
+        if (!t.fechaEntrega) return false; 
 
         const fechaEntrega = new Date(t.fechaEntrega);
-        // Calculamos diferencia en días
-        // ✅ CORRECCIÓN: Usamos ahoraExacto
         const diferenciaTiempo = ahoraExacto.getTime() - fechaEntrega.getTime();
         const diasEnRevision = diferenciaTiempo / (1000 * 3600 * 24);
 
@@ -349,29 +398,16 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     if (filtroFechaRegistro.tipo !== "TODAS" && filtroFechaRegistro.inicio) {
       filtered = filtered.filter(t => {
         if (!t.fechaRegistro) return false;
-
-        // ✅ Envolvemos t.fechaRegistro en new Date() para evitar el error de TypeScript
-        const fr = new Date(t.fechaRegistro).getTime();
-
-        const finEfectivo = filtroFechaRegistro.fin ? filtroFechaRegistro.fin.getTime() : filtroFechaRegistro.inicio!.getTime();
-        return fr >= filtroFechaRegistro.inicio!.getTime() && fr <= finEfectivo;
+        const reg = new Date(t.fechaRegistro).getTime();
+        return reg >= filtroFechaRegistro.inicio!.getTime() && reg <= filtroFechaRegistro.fin!.getTime();
       });
     }
 
     // 6. Filtro de Fecha Límite
     if (filtroFechaLimite.tipo !== "TODAS" && filtroFechaLimite.inicio) {
       filtered = filtered.filter(t => {
-        // Obtenemos la fecha límite actual considerando el historial
-        const fechaLimiteObj = t.historialFechas && t.historialFechas.length > 0
-          ? new Date(t.historialFechas[t.historialFechas.length - 1].nuevaFecha!)
-          : (t.fechaLimite ? new Date(t.fechaLimite) : null);
-
-        if (!fechaLimiteObj) return false;
-
-        const fl = fechaLimiteObj.getTime();
-        const finEfectivo = filtroFechaLimite.fin ? filtroFechaLimite.fin.getTime() : filtroFechaLimite.inicio!.getTime();
-
-        return fl >= filtroFechaLimite.inicio!.getTime() && fl <= finEfectivo;
+        const lim = getFechaLimiteEfectiva(t);
+        return lim >= filtroFechaLimite.inicio!.getTime() && lim <= filtroFechaLimite.fin!.getTime();
       });
     }
 
@@ -382,7 +418,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
         const esAMi = t.responsables.some(r => r.id === user?.id);
 
         if (filtroMisTareas.asignadasPorMi && filtroMisTareas.asignadasAMi) {
-          return esPorMi || esAMi; // Muestra ambas si las dos están seleccionadas
+          return esPorMi || esAMi; 
         }
         if (filtroMisTareas.asignadasPorMi) return esPorMi;
         if (filtroMisTareas.asignadasAMi) return esAMi;
@@ -391,7 +427,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     }
 
     return filtered;
-  }, [tareas, isKaizen, filtro, verCanceladas, filtroUrgencia, filtroExtra, filtroFechaRegistro, filtroFechaLimite, filtroMisTareas, user]);
+  }, [tareas, filtroExterno, filtroDepartamento, filtro, verCanceladas, filtroUrgencia, filtroExtra, filtroFechaRegistro, filtroFechaLimite, filtroMisTareas, user]);
 
 
   // ✅ NUEVA LÓGICA DE ORDENAMIENTO GLOBAL
@@ -635,6 +671,8 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                     setFiltroFechaRegistro(defaultRango);
                     setFiltroFechaLimite(defaultRango);
                     setFiltroMisTareas({ asignadasPorMi: false, asignadasAMi: false });
+                    setFiltroExterno(false);
+                    setFiltroDepartamento("Todos");
                   } else {
                     const fechaActual = new Date();
                     setYear(fechaActual.getFullYear());
@@ -655,6 +693,21 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                 filtroMisTareas={filtroMisTareas}
                 onFiltroMisTareasChange={setFiltroMisTareas}
                 conteoMisTareas={conteoMisTareas}
+                filtroExterno={filtroExterno}
+                onFiltroExternoChange={(v) => {
+                  setFiltroExterno(v);
+                  setFiltroDepartamento("Todos");
+                  setResponsable("Todos");
+                }}
+                departamentos={departamentos}
+                filtroDepartamento={filtroDepartamento}
+                onDepartamentoChange={(deptoId) => {
+                  setFiltroDepartamento(deptoId);
+                  setResponsable("Todos");
+                }}
+                conteoTareasExternas={conteoTareasExternas}
+                esDeptoConExternasHabilitadas={esDeptoConExternasHabilitadas}
+                esDesdeCalidad={esDesdeCalidad}
               />
             </div>
 
@@ -675,6 +728,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
                   setSortConfig({ key, direction });
                   setPage(1);
                 }}
+                filtroExterno={filtroExterno}
               />
             </div>
           </div>
@@ -706,6 +760,8 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
           onClose={() => setOpenModal(false)}
           onTareaAgregada={fetchTareas}
           user={user}
+          departamentos={departamentos}
+          puedeAsignarExternas={puedeAsignarExternas}
         />
       )}
 

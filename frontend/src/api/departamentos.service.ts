@@ -3,7 +3,8 @@ import api from "./01_axiosInstance";
 export interface Departamento {
   id: number;
   nombre: string;
-  // tipo: string;  <-- ELIMINADO
+  tipo?: string;
+  tareasExternasHabilitadas?: boolean;  // ✅ NUEVO
   
   // Agregamos esto para poder buscar al jefe en la tabla
   usuarios: {
@@ -31,6 +32,14 @@ export const departamentosService = {
 
   update: async (id: number, nombre: string) => {
     const { data } = await api.put(`/departamentos/${id}`, { nombre });
+    return data;
+  },
+
+  // ✅ NUEVO
+  toggleTareasExternas: async (id: number, habilitadas: boolean) => {
+    const { data } = await api.put<Departamento>(`/departamentos/${id}`, {
+      tareasExternasHabilitadas: habilitadas,
+    });
     return data;
   },
 };

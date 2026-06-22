@@ -53,6 +53,7 @@ export interface Departamento {
   nombre: string;
   fechaCreacion: string; // string ISO
   fechaEdicion: string; // string ISO
+  tareasExternasHabilitadas?: boolean;  // ✅ NUEVO
 }
 
 /**

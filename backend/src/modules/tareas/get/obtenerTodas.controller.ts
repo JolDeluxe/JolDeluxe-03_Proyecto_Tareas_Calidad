@@ -151,8 +151,8 @@ export const obtenerTodas = safeAsync(async (req: Request, res: Response) => {
 
   // --- LÓGICA DE PERMISOS POR ROL Y VIEWTYPE ---
   
-  // A. SUPER ADMIN
-  if (user.rol === "SUPER_ADMIN") {
+  // A. SUPER ADMIN / DEPARTAMENTO DE CALIDAD (Acceso total)
+  if (user.rol === "SUPER_ADMIN" || esDepartamentoCalidad) {
     if (departamentoId) where.departamentoId = departamentoId;
     if (asignadorId) where.asignadorId = asignadorId;
     if (responsableId) {
@@ -172,7 +172,13 @@ export const obtenerTodas = safeAsync(async (req: Request, res: Response) => {
   // B. ADMIN / ENCARGADO
   else if (user.rol === "ADMIN" || user.rol === "ENCARGADO") {
     if (!user.departamentoId) return res.status(403).json({ error: "Sin departamento." });
-    where.departamentoId = user.departamentoId;
+
+    // Verificar si este depto tiene tareas externas habilitadas
+    const deptoUsuario = await prisma.departamento.findUnique({
+      where: { id: user.departamentoId },
+      select: { tareasExternasHabilitadas: true }
+    });
+    const puedeAsignarExternas = deptoUsuario?.tareasExternasHabilitadas || false;
 
     if (asignadorId) where.asignadorId = asignadorId;
     if (responsableId) {
@@ -181,24 +187,39 @@ export const obtenerTodas = safeAsync(async (req: Request, res: Response) => {
 
     switch (viewType) {
       case "MIS_TAREAS":
+        // Solo donde soy responsable, sin importar depto
         andClauses.push({ responsables: { some: { usuarioId: user.id } } });
         break;
+
       case "ASIGNADAS":
+        // Todo lo que YO asigné (incluyendo cross-dept si aplica)
         where.asignadorId = user.id;
+        agruparPor = 'USUARIO';
+        // Sin restricción de departamentoId cuando es ASIGNADAS
         break;
+
       default: // "TODAS"
-        if (user.rol === "ENCARGADO") {
-          // Encargado ve todo MENOS lo de los Admins, 
-          // a MENOS que sea un departamento con jerarquía libre (como Pieles).
-          if (!esAsignacionEspecial) {
-            andClauses.push({ responsables: { none: { usuario: { rol: "ADMIN" } } } });
-          }
+        // 🔹 NUEVA LÓGICA: tareas de mi depto + tareas cross-dept que yo asigné
+        if (puedeAsignarExternas) {
+          andClauses.push({
+            OR: [
+              { departamentoId: user.departamentoId },
+              { asignadorId: user.id }   // Sus propias tareas externas
+            ]
+          });
+        } else {
+          where.departamentoId = user.departamentoId;
+        }
+
+        if (user.rol === "ENCARGADO" && !esAsignacionEspecial) {
+          andClauses.push({ responsables: { none: { usuario: { rol: "ADMIN" } } } });
         }
         break;
     }
 
-    // Si NO es de calidad, ocultamos KAIZEN
+    // Regla Anti-KAIZEN (solo si NO es de calidad)
     if (!esDepartamentoCalidad) {
+      // No mostrar KAIZEN a quienes no son de calidad (a menos que sean responsable)
       const antiKaizenRule: Prisma.TareaWhereInput = {
         OR: [
           { tarea: { not: { startsWith: "KAIZEN" } } },
