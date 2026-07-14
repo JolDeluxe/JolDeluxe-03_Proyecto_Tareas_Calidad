@@ -74,8 +74,8 @@ const Pendientes: React.FC<Props> = ({ user }) => {
   }, [userDepto]);
 
   const puedeAsignarExternas = useMemo(() => {
-    return esDesdeCalidad && (user?.rol === "ADMIN" || user?.rol === "ENCARGADO");
-  }, [esDesdeCalidad, user]);
+    return esDeptoConExternasHabilitadas && (user?.rol === "ADMIN" || user?.rol === "ENCARGADO");
+  }, [esDeptoConExternasHabilitadas, user]);
 
   // --- ESTADOS DE DATOS ---
   const [tareas, setTareas] = useState<Tarea[]>([]);
@@ -95,6 +95,7 @@ const Pendientes: React.FC<Props> = ({ user }) => {
     setFiltroExterno(false);
     setFiltroDepartamento("Todos");
   }, [activeView]);
+
 
   // ✅ Saber si "HOY" está activo
   const isHoyActivo = filtroFechaLimite.tipo === "HOY";
@@ -147,6 +148,15 @@ const Pendientes: React.FC<Props> = ({ user }) => {
 
   useEffect(() => {
     fetchTareasCentralizadas();
+  }, [fetchTareasCentralizadas]);
+
+  useEffect(() => {
+    const handleSyncComplete = () => {
+      console.log("🔄 Sincronización offline exitosa! Recargando tareas en Pendientes...");
+      fetchTareasCentralizadas();
+    };
+    window.addEventListener("tareas-sync-complete", handleSyncComplete);
+    return () => window.removeEventListener("tareas-sync-complete", handleSyncComplete);
   }, [fetchTareasCentralizadas]);
 
   // ✅ CONTEO DINÁMICO: Para que los botones del resumen cuenten solo las de HOY si está activo

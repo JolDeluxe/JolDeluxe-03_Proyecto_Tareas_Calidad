@@ -617,6 +617,7 @@ const TablaPendientes: React.FC<Props> = ({ user, tareas, filtro, loading, onRec
               tarea={tareaParaEntregar}
               onClose={handleCerrarEntrega}
               onSuccess={handleExitoEntrega}
+              user={user}
             />
           )}
           {tareaParaRevisar && (

@@ -209,8 +209,17 @@ const ModalNueva: React.FC<ModalNuevaProps> = ({
           usuariosVisibles = internos;
         }
 
+        // Aseguramos que el propio usuario esté visible para poder auto-asignarse
+        if (user && !usuariosVisibles.some(u => u.id === user.id)) {
+          usuariosVisibles.push(user);
+        }
+
         // ✅ REGLAS DE ORDENAMIENTO (SORTING)
         const sortedUsers = usuariosVisibles.sort((a, b) => {
+          // Poner al usuario logueado al principio de la lista
+          if (user && a.id === user.id) return -1;
+          if (user && b.id === user.id) return 1;
+
           const rolA = a.rol;
           const rolB = b.rol;
 

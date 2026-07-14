@@ -117,6 +117,7 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
     loadDeptos();
   }, []);
 
+
   const userDepto = useMemo(() => {
     if (!user || !user.departamentoId) return null;
     return departamentos.find(d => d.id === user.departamentoId) || null;
@@ -133,8 +134,8 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
   }, [userDepto]);
 
   const puedeAsignarExternas = useMemo(() => {
-    return esDesdeCalidad && (user?.rol === "ADMIN" || user?.rol === "ENCARGADO");
-  }, [esDesdeCalidad, user]);
+    return esDeptoConExternasHabilitadas && (user?.rol === "ADMIN" || user?.rol === "ENCARGADO");
+  }, [esDeptoConExternasHabilitadas, user]);
 
   const conteoTareasExternas = useMemo(() => {
     return tareas.filter(t => {
@@ -284,6 +285,15 @@ const Admin: React.FC<AdminProps> = ({ user }) => {
 
   useEffect(() => {
     fetchTareas();
+  }, [fetchTareas]);
+
+  useEffect(() => {
+    const handleSyncComplete = () => {
+      console.log("🔄 Sincronización offline exitosa! Recargando tareas en Admin...");
+      fetchTareas();
+    };
+    window.addEventListener("tareas-sync-complete", handleSyncComplete);
+    return () => window.removeEventListener("tareas-sync-complete", handleSyncComplete);
   }, [fetchTareas]);
 
   useEffect(() => {

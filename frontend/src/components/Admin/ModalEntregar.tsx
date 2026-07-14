@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useRef } from "react";
 import type { Tarea } from "../../types/tarea";
+import type { Usuario } from "../../types/usuario";
 import { tareasService } from "../../api/tareas.service";
 import { toast } from "react-toastify";
 import { getTareaExternaInfo, getBadgeClasses } from "../../utils/tareasExternas";
@@ -10,18 +11,24 @@ interface ModalEntregaProps {
   tarea: Tarea;
   onClose: () => void;
   onSuccess: () => void;
+  user?: Usuario | null;
 }
 
 const ModalEntrega: React.FC<ModalEntregaProps> = ({
   tarea,
   onClose,
   onSuccess,
+  user,
 }) => {
   const mouseDownInside = useRef(false);
   const [comentario, setComentario] = useState(tarea.comentarioEntrega || "");
   const [archivos, setArchivos] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const esAutoAprobacion = useMemo(() => {
+    return !!(user && tarea.asignadorId === user.id);
+  }, [user, tarea]);
 
   // ✅ LÓGICA PARA DETECTAR SI LA TAREA YA ESTÁ VENCIDA
   const esFueraDeTiempo = useMemo(() => {
@@ -89,7 +96,7 @@ const ModalEntrega: React.FC<ModalEntregaProps> = ({
       await tareasService.entregar(tarea.id, comentario, archivos);
 
       // ✅ Éxito con Toast
-      toast.success("¡Tarea entregada correctamente!");
+      toast.success(esAutoAprobacion ? "¡Tarea completada correctamente!" : "¡Tarea entregada correctamente!");
       onSuccess(); // Cierra el modal y recarga
     } catch (err: any) {
       console.error("Error al entregar tarea:", err);
@@ -136,7 +143,9 @@ const ModalEntrega: React.FC<ModalEntregaProps> = ({
             &times;
           </button>
           <h2 className="text-lg font-bold text-amber-950 text-center uppercase">
-            {tarea.feedbackRevision ? "CORREGIR TAREA" : "ENTREGAR TAREA"} #{tarea.id}
+            {esAutoAprobacion
+              ? "CONCLUIR TAREA"
+              : tarea.feedbackRevision ? "CORREGIR TAREA" : "ENTREGAR TAREA"} #{tarea.id}
           </h2>
         </div>
 
@@ -199,7 +208,7 @@ const ModalEntrega: React.FC<ModalEntregaProps> = ({
               {/* Comentario */}
               <div>
                 <label htmlFor="comentario" className="block text-sm font-semibold mb-1">
-                  Comentario de Entrega <span className="text-red-500">*</span>
+                  {esAutoAprobacion ? "Comentario de Cierre" : "Comentario de Entrega"} <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   id="comentario"
@@ -306,17 +315,20 @@ const ModalEntrega: React.FC<ModalEntregaProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className={`text-white font-semibold px-4 py-2 rounded-md transition-all duration-200 disabled:opacity-70 shadow-sm flex items-center gap-2 cursor-pointer ${tarea.feedbackRevision
-                ? "bg-orange-600 hover:bg-orange-700"
-                : "bg-green-600 hover:bg-green-700"
-                }`}
+              className={`text-white font-semibold px-4 py-2 rounded-md transition-all duration-200 disabled:opacity-70 shadow-sm flex items-center gap-2 cursor-pointer ${
+                esAutoAprobacion
+                  ? "bg-green-600 hover:bg-green-700"
+                  : tarea.feedbackRevision
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-green-600 hover:bg-green-700"
+              }`}
             >
               {loading ? (
                 <span>Enviando...</span>
               ) : (
                 <>
                   <span>
-                    {tarea.feedbackRevision ? "Re-Enviar" : "Entregar"}
+                    {esAutoAprobacion ? "Concluir" : (tarea.feedbackRevision ? "Re-Enviar" : "Entregar")}
                   </span>
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                     <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />

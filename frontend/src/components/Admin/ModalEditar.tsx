@@ -234,7 +234,16 @@ const ModalEditar: React.FC<ModalEditarProps> = ({
           usuariosVisibles = internos;
         }
 
+        // Aseguramos que el propio usuario esté visible para poder auto-asignarse
+        if (user && !usuariosVisibles.some(u => u.id === user.id)) {
+          usuariosVisibles.push(user);
+        }
+
         const sortedUsers = usuariosVisibles.sort((a, b) => {
+          // Poner al usuario logueado al principio de la lista
+          if (user && a.id === user.id) return -1;
+          if (user && b.id === user.id) return 1;
+
           if (tareaEsExterna) {
             const rolesOrder = { [Rol.ADMIN]: 1, [Rol.ENCARGADO]: 2, [Rol.USUARIO]: 3, [Rol.INVITADO]: 4 };
             const orderA = rolesOrder[a.rol] || 99;

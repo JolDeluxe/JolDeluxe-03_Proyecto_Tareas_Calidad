@@ -810,7 +810,7 @@ const TablaAdmin: React.FC<TablaProps> = ({
           {tareaParaRevisar && (<ModalRevision tarea={tareaParaRevisar} onClose={handleCerrarRevision} onSuccess={handleExitoRevision} onVerImagenes={(imagenes) => setModalImagenes(imagenes)} user={user} />)}
 
           {/* ✅ NUEVO: Componente para Modal de Entrega */}
-          {tareaParaEntregar && (<ModalEntrega tarea={tareaParaEntregar} onClose={cerrarModalEntrega} onSuccess={exitoEntrega} />)}
+          {tareaParaEntregar && (<ModalEntrega tarea={tareaParaEntregar} onClose={cerrarModalEntrega} onSuccess={exitoEntrega} user={user} />)}
         </>
       ) : (
         <div className="flex justify-center items-center h-40 text-gray-500 italic text-sm">No hay tareas registradas que coincidan con los filtros.</div>

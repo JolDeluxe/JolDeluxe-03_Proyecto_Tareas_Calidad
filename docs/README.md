@@ -30,9 +30,10 @@ erDiagram
     BITACORA }o--|| USUARIO : "registrado por"
 ```
 
-1.  **`Departamento`**: Almacena el nombre e identificación del departamento y su clasificación (`Tipo`).
+1.  **`Departamento`**: Almacena el nombre e identificación del departamento, su clasificación (`Tipo`), y la bandera `tareasExternasHabilitadas` (que indica si sus administradores/encargados pueden asignar tareas externas).
 2.  **`Usuario`**: Perfil de cada colaborador del sistema, enlazado a un departamento. Tiene índices en `departamentoId` y `estatus` para acelerar el inicio de sesión y filtrados.
 3.  **`Tarea`**: Entidad central que define el trabajo a realizar. Contiene fechas clave (límite, registro, conclusión, entrega, revisión), campos para auto-validación y llaves foráneas a departamento y asignador.
+    *   *Tareas Externas*: Se consideran externas cuando el `departamentoId` de la tarea es diferente al de la cuenta del `asignador` (creador).
     *   *Índices de Rendimiento*: Indexación por `departamentoId`, `asignadorId`, `estatus`, `fechaLimite`, `fechaRegistro` y `urgencia`.
 4.  **`ResponsablesEnTarea`**: Tabla pivote muchos-a-muchos entre `Usuario` y `Tarea`. Tiene un índice compuesto en `[usuarioId, tareaId]` y uno dedicado a `usuarioId` para optimizar la vista de "Mis Tareas".
 5.  **`ImagenTarea`**: Historial de fotos asociadas a una tarea (descripciones visuales iniciales).
@@ -76,10 +77,13 @@ El backend organiza sus endpoints por módulos funcionales. Cada módulo expone 
 3.  **Logs**: Endpoint para extraer el historial de la bitácora del sistema (Acceso exclusivo a `SUPER_ADMIN`).
 4.  **Usuarios**: Administración del personal de la empresa. Soporta creación, edición, desactivación (soft-delete cambiando el estatus a `INACTIVO`) y suscripción a notificaciones push.
 5.  **Tareas**: Flujo de trabajo central del sistema.
-    *   `GET /`: Ruta unificada que recibe queries (`?viewType=MIS_TAREAS|ASIGNADAS|TODAS`) para devolver tareas en base al rol de forma optimizada y filtrada.
-    *   `GET /kpis`: Endpoint dedicado para extraer contadores de eficiencia por departamento o por usuarios (`obtenerKPIs.controller.ts`), aplicando el rango de fecha límite seleccionado.
+    *   `GET /`: Ruta unificada que recibe queries (`?viewType=MIS_TAREAS|ASIGNADAS|TODAS`). Si es `TODAS` y el usuario es `ADMIN` o `ENCARGADO` con `tareasExternasHabilitadas`, se le devuelven las tareas de su propio departamento más las tareas externas que él mismo asignó a otros departamentos.
+    *   `GET /kpis`: Endpoint dedicado para extraer contadores de eficiencia por departamento o por usuarios, aplicando el rango de fecha límite seleccionado.
+    *   `POST /`: Creación de tareas. Valida si la tarea es externa; de ser así, verifica que el departamento del asignador tenga `tareasExternasHabilitadas` (salvo que sea `SUPER_ADMIN`). Permite asignar la tarea a cualquier rol activo del departamento destino.
     *   `POST /:id/entregar`: Permite al usuario subir evidencias a una tarea y cambiar su estatus a `EN_REVISION`.
-    *   `POST /:id/revision`: Flujo de aprobación o rechazo por parte del asignador.
+    *   `POST /:id/revision`: Flujo de aprobación o rechazo. En tareas externas, el permiso de revisión (`puedeRevisarOAutorizarTarea`) se limita al departamento de origen (creador).
+    *   `PUT /:id`: Modificación de la tarea. En tareas externas, el permiso de edición (`puedeEditarTarea`) se reserva únicamente para el departamento de origen de la tarea (el departamento de destino no tiene permisos de edición).
+    *   `PATCH /:id/cancelar` y `PATCH /:id/completar`: Modificación rápida de estado regida por las mismas reglas de permisos.
 
 ### Servicios (`backend/src/services`)
 *   **`logger.service.ts`**: Modela e inserta registros en la tabla `Bitacora`.
@@ -92,6 +96,39 @@ El backend organiza sus endpoints por módulos funcionales. Cada módulo expone 
 *   **`safeAsync.ts`**: Función de orden superior que envuelve controladores asíncronos para capturar promesas rechazadas y canalizarlas al manejador de errores global sin saturar el código de bloques `try-catch`.
 *   **`cloudinaryUtils.ts`**: Administra la integración con Cloudinary. Procesa las imágenes subidas por el usuario optimizándolas al vuelo (compresión WebP con Sharp a calidad 80% y redimensión a un ancho máximo de 1280px) para mitigar el consumo de red y almacenamiento en la nube.
 *   **`holidayUtils.ts`**: Determina si un día dado es inhábil en México (días festivos fijos y periodos dinámicos como Semana Santa o periodos vacacionales de fin de año). Evita el envío invasivo de notificaciones push en días no laborables.
+
+### Reglas de Negocio de Tareas Externas (Cross-Department)
+
+Con el fin de permitir la colaboración interdepartamental, el sistema cuenta con soporte para **Tareas Externas**:
+
+1. **Definición**: Una tarea se considera externa si el departamento asignado (`departamentoId`) es diferente del departamento del usuario que la crea (`asignador.departamentoId`).
+2. **Habilitación de Departamento**: 
+   * Para que un departamento pueda asignar tareas externas, debe tener activada la bandera `tareasExternasHabilitadas` en la base de datos (con excepción del `SUPER_ADMIN`, que puede asignar tareas externas sin restricciones).
+   * El estado de esta bandera se administra a través del panel de Súper Administrador en la gestión de departamentos.
+3. **Asignación de Responsables**: 
+   * Al crear o editar una tarea externa, el creador (`ADMIN` o `ENCARGADO`) puede elegir como responsable a **cualquier usuario activo** del departamento de destino, independientemente de su rol.
+   * Se omiten las restricciones de jerarquía aplicadas en tareas internas (donde no se puede asignar a roles de mayor rango).
+4. **Permisos de Revisión y Edición**:
+   * **Edición (`puedeEditarTarea`)**: Los permisos se restringen al departamento de origen (creador). El departamento destino no puede alterar el texto, responsables o fechas de la tarea.
+   * **Revisión (`puedeRevisarOAutorizarTarea`)**: El flujo de aprobación o rechazo de la evidencia entregada recae exclusivamente en el departamento origen. Puede revisar el creador original, cualquier `ADMIN` o `ENCARGADO` de dicho departamento origen, o el `SUPER_ADMIN`.
+
+### Soporte Offline y Sincronización PWA
+
+El sistema cuenta con capacidades de **Offline-First** y sincronización en segundo plano:
+
+1. **Visualización Sin Conexión (Caché GET)**:
+   * Cada petición `GET` exitosa realizada al backend se almacena en IndexedDB (`TareasCacheDB` -> `get_requests`) indexada por URL y parámetros de búsqueda.
+   * Si ocurre un error de conexión (`Network Error`), el interceptor de Axios intercepta la llamada, lee el último snapshot almacenado de IndexedDB y resuelve la promesa de forma transparente para mantener la interfaz de usuario activa y visualizable.
+2. **Cola de Peticiones Offline (Mutaciones)**:
+   * Si se realiza una acción de modificación (`POST`, `PUT`, `PATCH`, `DELETE`) sin conexión, el interceptor de Axios la captura, serializa el payload (incluyendo campos `FormData` y archivos `File`) y la encola localmente en IndexedDB (`TareasSyncDB` -> `failed_requests`).
+   * Al usuario se le notifica mediante un banner y/o toast que su acción fue guardada y se sincronizará automáticamente.
+3. **Respeto de Tiempos Operativos (Original Timestamp)**:
+   * Al almacenar la mutación offline en IndexedDB, se registra el timestamp original (`Date.now()`).
+   * Al recuperar internet, la sincronización adjunta de manera automática este timestamp en las propiedades correspondientes (`fechaEntrega`, `fechaConclusion`, o `fechaRevision` según la URL del endpoint) en el cuerpo de la petición.
+   * El backend valida y prioriza la fecha de cliente enviada por sobre la fecha de procesamiento del servidor, impidiendo penalizaciones por retraso en el reporte.
+4. **Sincronización y Recarga**:
+   * El frontend monitorea el estado de conexión e inicia automáticamente el procesamiento de la cola al volver online.
+   * Una vez completada la sincronización de manera exitosa, se despacha el evento de ventana `tareas-sync-complete`, forzando la recarga en caliente de los datos en [Admin.tsx](file:///C:/App/Joel/03_Proyecto_Tareas_Calidad/frontend/src/pages/Admin.tsx) y [Pendientes.tsx](file:///C:/App/Joel/03_Proyecto_Tareas_Calidad/frontend/src/pages/Pendientes.tsx).
 
 ---
 
@@ -106,16 +143,24 @@ El consumo del backend se centraliza a través de un cliente HTTP estructurado:
 
 ### Páginas Principales (`frontend/src/pages`)
 1.  **`LoginPage.tsx`**: Pantalla de acceso. Gestiona el almacenamiento del token y redirige a los usuarios según su rol.
-2.  **`Pendientes.tsx`**: Panel principal para el personal operativo. Muestra tareas personales pendientes del día, tareas en curso y un resumen de las concluidas.
-3.  **`Admin.tsx`**: Tablero de gestión de tareas del departamento. Permite crear, modificar, reasignar fechas límite y auditar evidencias enviadas por los trabajadores.
-4.  **`Super_Admin.tsx`**: Panel global de visualización del estado de la empresa. Contiene métricas generales y acceso a la bitácora del sistema.
+2.  **`Pendientes.tsx`**: Panel principal para el personal operativo. Muestra tareas personales pendientes del día, tareas en curso y un resumen de las concluidas. Si el usuario pertenece a un departamento con tareas externas habilitadas, puede crear tareas externas desde este panel.
+3.  **`Admin.tsx`**: Tablero de gestión de tareas del departamento. Permite crear, modificar, reasignar fechas límite y auditar evidencias enviadas por los trabajadores. Si el departamento del usuario tiene tareas externas habilitadas, permite la asignación a otros departamentos y muestra filtros rápidos para ver solo tareas KAIZEN o externas.
+4.  **`Super_Admin.tsx`**: Panel global de visualización del estado de la empresa. Contiene métricas generales, acceso a la bitácora del sistema y la consola de gestión de departamentos (`GestionDeptos.tsx`) donde se puede activar/desactivar la asignación de tareas externas para cada área.
 5.  **`Usuarios.tsx`**: Consola de administración de personal del departamento (creación, edición y suspensión de usuarios).
 
 ### Componentes Clave (`frontend/src/components`)
 *   **`PrivateRoute.tsx` / `PublicRoute.tsx`**: Guardias de navegación que aseguran que rutas sensibles requieran sesión iniciada y que usuarios logueados no regresen a la pantalla de login.
 *   **`layout/Layout.tsx`**: Estructura visual de la aplicación con barra de navegación adaptativa (móvil/escritorio) y perfiles del usuario actual.
-*   **`Pendientes/`**: Carpeta que contiene la tabla de visualización (incluyendo una vista compacta para móviles en `TablaPendientesMobile.tsx`), filtros temporales, y el `ModalEntrega.tsx` para subir evidencias de cumplimiento de tareas.
+*   **`Pendientes/`**: Carpeta que contiene la tabla de visualización (incluyendo una vista compacta para móviles en `TablaPendientesMobile.tsx`), filtros temporales y el `ModalEntrega.tsx` para subir evidencias de cumplimiento de tareas.
+*   **`Admin/`**: Contiene componentes de filtros (`FiltrosAdminDesktop.tsx`, `FiltrosAdminMobile.tsx`) y el modal de creación (`ModalNueva.tsx`), adaptados para soportar asignación cruzada entre departamentos y visualización de badges externos.
 *   **`Principal/`**: Componentes reutilizables para el desglose del Dashboard (gráficas de cumplimiento, resúmenes analíticos y visor de imágenes de evidencia).
+*   **`SuperAdmin/`**: Contiene la tabla de departamentos (`TablaDeptos.tsx`) donde el SUPER_ADMIN controla las políticas de asignación externa (`tareasExternasHabilitadas`).
+
+### Utilidades y Helpers (`frontend/src/utils`)
+*   **`tareasExternas.ts`**: Centraliza la lógica de interfaz para tareas externas:
+    *   Determina si una tarea es externa comparando los departamentos.
+    *   Asigna los estilos de color y etiquetas: `KAIZEN` (si el origen contiene "CALIDAD") o `EXTERNA · [Depto]` (para otros).
+    *   Expone las funciones `puedeRevisarTarea` y `puedeEditarTarea` sincronizadas con las reglas de permisos del backend.
 
 ---
 

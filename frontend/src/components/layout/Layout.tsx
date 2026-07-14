@@ -2,6 +2,7 @@
 import React from "react";
 import Header from "./Header";
 import Footer from "./Footer";
+import OfflineBanner from "../ui/OfflineBanner";
 import type { Usuario } from "../../types/usuario"; // 1. Importa el tipo
 
 // 2. Define la interfaz de Props
@@ -16,6 +17,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
 
   return (
     <div className="flex flex-col min-h-screen">
+      <OfflineBanner />
       <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md">
         {/* 6. Pasa el 'user' (recibido por props) al Header */}
         <Header user={user} />

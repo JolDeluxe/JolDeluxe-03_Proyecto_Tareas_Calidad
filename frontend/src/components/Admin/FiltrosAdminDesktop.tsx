@@ -729,7 +729,7 @@ const FiltrosAdminDesktop: React.FC<DesktopProps> = ({
                   ${filtroExterno
                     ? (esDesdeCalidad 
                       ? "bg-indigo-600 border-indigo-700 text-white shadow-md font-black"
-                      : "bg-amber-50 border-amber-600 text-white shadow-md font-black")
+                      : "bg-amber-600 border-amber-700 text-white shadow-md font-black")
                     : (esDesdeCalidad
                       ? "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 font-bold"
                       : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 font-bold")

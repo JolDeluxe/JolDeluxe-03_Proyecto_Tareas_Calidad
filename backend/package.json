@@ -3,14 +3,17 @@
   "version": "1.0.0",
   "description": "API Gestor de Calidad - Node + Express + Prisma",
   "main": "src/server.ts",
+  "module": "src/server.ts",
   "type": "module",
   "scripts": {
-    "dev": "tsx src/server.ts",
+    "dev": "bun --watch src/server.ts",
+    "start": "bun src/server.ts",
+    "dev:node": "tsx src/server.ts",
     "build": "tsc",
     "test": "echo \"No hay tests configurados aún\" && exit 0"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "bun prisma/seed.ts"
   },
   "keywords": [],
   "author": "Joel Rodríguez",

@@ -1,18 +1,28 @@
 import cors from "cors"; // Importamos la librería que gestiona los headers de seguridad HTTP
+import dotenv from "dotenv";
+dotenv.config();
 
 // ----------------------------------------------------------------------
 // 1. LISTA BLANCA (WHITELIST) - DOMINIOS DE CONFIANZA
 // ----------------------------------------------------------------------
 // Aquí ponemos las direcciones EXACTAS que sabemos que son seguras.
-const allowedOrigins = [
-  "https://tareas-calidad-mbc.mbc-bitacoras.me", // Tu dominio de producción (Real)
-  "http://localhost:5173",      // Frontend local (Vite)
-  "http://127.0.0.1:5173",      // Frontend local (IP Loopback)
-  "http://localhost:3000",      // Backend local (para pruebas API)
-  "http://127.0.0.1:3000",      // Backend local (IP Loopback)
-  "http://200.1.0.72:5173",     // Una IP específica de tu red (quizás tu PC en la red)
-  "http://10.0.2.2:5173"        // 🤖 IP especial del Emulador de Android Studio
+const baseAllowedOrigins = [
+  "https://tareas-mbc.netlify.app",              // 🚀 NUEVO: Tu Frontend real en Netlify (SIN BARRA '/')
+  "https://tareas-calidad-mbc.mbc-bitacoras.me", // (Opcional) Dejamos el monolito viejo un mes por seguridad
+  "http://localhost:5173",                       // Frontend local (Vite)
+  "http://127.0.0.1:5173",                       // Frontend local (IP Loopback)
+  "http://localhost:5000",                       // Frontend local (Vite preview/serve)
+  "http://127.0.0.1:5000",                       // Frontend local (IP Loopback port 5000)
+  "http://localhost:3000",                       // Backend local
+  "http://10.0.2.2:5173"                         // Emulador Android
 ];
+
+// Obtener orígenes adicionales configurados en .env (útil para Netlify en prod)
+const envOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()) 
+  : [];
+
+const allowedOrigins = [...baseAllowedOrigins, ...envOrigins];
 
 // ----------------------------------------------------------------------
 // 2. HELPER DE FECHA
@@ -56,9 +66,10 @@ export const corsConfig = cors({
         
         // 4. REGLA LAXA DE DESARROLLO (VITE)
         // Permite CUALQUIER IP (incluso desconocida) siempre y cuando 
-        // el puerto sea el 5173 (el de Vite). 
+        // el puerto sea el 5173 (el de Vite) o el 5000 (el de Vite preview). 
         // Útil si pruebas desde tu celular conectado a la red local.
-        origin.includes(":5173");
+        origin.includes(":5173") ||
+        origin.includes(":5000");
 
     // DECISIÓN FINAL
     if (isAllowed) {

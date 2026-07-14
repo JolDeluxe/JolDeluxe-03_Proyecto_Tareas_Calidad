@@ -23,11 +23,25 @@ import { subscribeUser } from "./push-subscription";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
+import { processOfflineQueue } from "./utils/offlineQueue";
+
 const AppLayout: React.FC = () => {
   const [user, setUser] = useState<Usuario | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const handleOnline = () => {
+      console.log("🌐 Volvió internet → sincronizando cola offline...");
+      processOfflineQueue();
+    };
+
+    window.addEventListener("online", handleOnline);
+
+    // Si ya cuenta con conexión al iniciar, procesamos cola pendiente
+    if (navigator.onLine) {
+      processOfflineQueue();
+    }
+
     const verifyUser = async () => {
       const token = localStorage.getItem("token");
       if (token) {
@@ -46,6 +60,8 @@ const AppLayout: React.FC = () => {
     };
 
     verifyUser();
+
+    return () => window.removeEventListener("online", handleOnline);
   }, []);
 
   if (loading) {
